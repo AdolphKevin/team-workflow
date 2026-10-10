@@ -1,0 +1,19 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "team-workflow",
+  "version": "0.3.0",
+  "description": "集中分发团队开发流程，直接复用 MATT 方法，通过独立 CS 统一项目知识。",
+  "extensions": {
+    "com.openai": {
+      "interface": {
+        "displayName": "Team Workflow",
+        "shortDescription": "统一开发验收与项目经验沉淀",
+        "longDescription": "直接复用 MATT 技能，连接独立 CS 的原文档与经验检索。记录实际验证、最终工作区审查和跨仓验收。",
+        "category": "Productivity",
+        "logo": "./assets/logo.svg",
+        "composerIcon": "./assets/logo.svg",
+        "defaultPrompt": "使用团队工作流完成当前任务，先读取项目知识，再确定验收方式。"
+      }
+    }
+  }
+}

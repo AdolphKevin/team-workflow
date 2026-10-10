@@ -1,0 +1,45 @@
+{
+  "schema_version": 2,
+  "project": "team-workflow",
+  "context": [
+    "AGENTS.md",
+    "docs/design.md"
+  ],
+  "knowledge": {
+    "provider": "cs",
+    "entry": ".codestable/wiki/INDEX.md"
+  },
+  "checks": {
+    "unit": {
+      "argv": [
+        "python3",
+        "scripts/test.py",
+        "--junitxml",
+        "{output}/results.xml"
+      ],
+      "purpose": "验证运行、过期证据、知识缺失与兼容性",
+      "cwd": ".",
+      "timeout": 600,
+      "format": "junit",
+      "required_cases": [],
+      "required_env": [],
+      "report": "{output}/results.xml",
+      "artifacts": [
+        "{output}/results.evidence.json"
+      ]
+    }
+  },
+  "required_checks": {
+    "code": [
+      "unit"
+    ],
+    "docs": []
+  },
+  "risk_checks": {
+    "public-contract": [
+      "unit"
+    ]
+  },
+  "inputs": [],
+  "environment_versions": {}
+}

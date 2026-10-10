@@ -1,0 +1,37 @@
+{
+  "schema_version": 2,
+  "project": "sample-python",
+  "context": [
+    "AGENTS.md"
+  ],
+  "knowledge": {
+    "provider": "cs",
+    "entry": ".codestable/wiki/INDEX.md"
+  },
+  "checks": {
+    "unit": {
+      "argv": [
+        "python3",
+        "-m",
+        "pytest",
+        "--junitxml={output}/results.xml"
+      ],
+      "purpose": "运行项目行为测试",
+      "cwd": ".",
+      "timeout": 600,
+      "format": "junit",
+      "required_cases": [],
+      "required_env": [],
+      "report": "{output}/results.xml"
+    }
+  },
+  "required_checks": {
+    "code": [
+      "unit"
+    ],
+    "docs": []
+  },
+  "risk_checks": {},
+  "inputs": [],
+  "environment_versions": {}
+}

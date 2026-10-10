@@ -1,0 +1,12 @@
+{
+  "cs": {
+    "repository": "https://github.com/AdolphKevin/codestable-compact",
+    "version": "2.1.0",
+    "source_commit": "3fa0c84861c8fcd349404ec6f5beda5d362b08c6",
+    "files": {
+      "SKILL.md": "a3a0776922f88333a22b33a250154ecb5fe0a7c732bcd81c61240dbd553b3448",
+      "scripts/bootstrap.py": "29745106b7c9fbe4115c984a94014992ec33af7f907fcc2ae12666225ec4c321",
+      "scripts/cs_knowledge.py": "05439126a29672d2f43e4e657bccc80375fe4ee70ea43cf5827f908746a6c9a7"
+    }
+  }
+}
