@@ -1,5 +1,7 @@
 # 第二版工具约定
 
+这里描述第二版本地执行接口。任务接续与第三版交接见[协作约定](collaboration.md)，GitHub Actions 结果与第三版交付见[外部结果](external-results.md)。原配置继续可用，进度记录不参与本地任务内容指纹。
+
 运行环境：Python 3.10+、Git；工具只用标准库，业务检查使用项目自己的环境。统一命令为 `python3 <技能目录>/scripts/workflow.py`，下面用 `$WF` 指代该文件。通过当前技能目录发现 CS 后，将其目录传给 `--cs-skill` 或环境变量 `TEAM_WORKFLOW_CS_SKILL`，不得硬编码作者机器路径。
 
 ## 项目配置

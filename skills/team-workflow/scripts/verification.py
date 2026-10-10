@@ -53,9 +53,19 @@ def verify_layers(root, profile, task, report, cs_skill, layers):
     layers['materials'] = 'checking'
     required = task_valid(task, profile, root)
     current = binding(root, profile, task)
-    obj(report, {'schema_version', 'task_id', 'runs', 'review', 'knowledge'})
-    require(type(report['schema_version']) is int and report['schema_version'] == 2, 'Expected report schema_version 2; v1 is material-only')
+    obj(report, {'schema_version', 'task_id', 'runs', 'review', 'knowledge'}, {'issue'})
+    require(type(report['schema_version']) is int and report['schema_version'] in (2, 3), 'Expected report schema_version 2 or 3; v1 is material-only')
     require(report['task_id'] == task['id'], 'Delivery task mismatch')
+    if report['schema_version'] == 3:
+        import handoffs
+        import github_read
+        require(report.get('issue') == task['id'], 'v3 delivery needs its canonical issue')
+        source = handoffs.task_source(github_read.issue(report['issue']))
+        require(source['task'] == task, 'Task requirements changed on the platform')
+        continuation = handoffs.resume(root, profile, report['issue'], cs_skill)
+        require(continuation['ok'], 'Delivery collaboration gaps: ' + '; '.join(continuation['gaps']))
+        progress = continuation['current']
+        require(not progress['remaining'] and not progress['questions'], 'Delivery still has unfinished work or open questions')
     strings(report['runs'])
     for field in ('review', 'knowledge'):
         require(inside(root, report[field]).is_file(), f'Missing {field} record')
@@ -65,6 +75,13 @@ def verify_layers(root, profile, task, report, cs_skill, layers):
     for name in report['runs']:
         record = read(inside(root, name))
         require(isinstance(record, dict), 'Invalid execution record')
+        if record.get('schema_version') == 3 and report['schema_version'] == 3:
+            import portable
+            row, manifest = portable.validate_import(root, profile, record)
+            require(row['id'] not in results, 'Duplicate result; choose the final run for each check')
+            results[row['id']] = row
+            records.append({**record, 'portable_source': manifest['source_after']})
+            continue
         require(record.get('schema_version') == 2 and record.get('kind') == 'execution', 'Missing execution record')
         require(record.get('project') == profile['project'] and record.get('task_id') == task['id'], 'Execution identity mismatch')
         require(record.get('binding') == current, 'Execution evidence is stale: workspace/profile/task changed')
@@ -208,7 +225,9 @@ def participant_binding(manifest):
     return {p['project']: binding(r, p, t) for r, p, t, _ in participants(manifest)}
 
 
-def aggregate(manifest, cs_skill):
+def aggregate(manifest, cs_skill, repositories=None):
+    if manifest.get('schema_version') == 3:
+        return aggregate_v3(manifest, cs_skill, repositories or {})
     start = participant_binding(manifest)
     output = []
     joint_records = []
@@ -226,3 +245,55 @@ def aggregate(manifest, cs_skill):
                 'Joint evidence is missing, stale, or participants changed during execution')
     require(participant_binding(manifest) == start, 'Participant changed during aggregation')
     return {'ok': True, 'scope': 'joint-local-workflow', 'status': 'complete', 'task_id': manifest['task_id'], 'participants': output}
+
+
+def aggregate_v3(manifest, cs_skill, repositories):
+    """Resolve portable repository identities through caller-local checkouts."""
+    from common import profile_valid, git
+    import github_read
+    import handoffs
+    import portable
+    obj(manifest, {'schema_version', 'task_id', 'joint', 'participants', 'dependencies'})
+    github_read.issue_ref(manifest['task_id'])
+    require(len(manifest['participants']) >= 2, 'Joint delivery needs at least two participants')
+    expected, output, joint_records, starts = {}, [], [], {}
+    for row in manifest['participants'] + manifest['dependencies']:
+        require(isinstance(row, dict), 'Invalid participant or dependency')
+        github_read.repository(row['repository'])
+        require(row['repository'] not in expected, 'Duplicate participant/dependency')
+        expected[row['repository']] = text(row['commit'])
+        root = repositories.get(row['repository'])
+        require(root is not None, 'Missing local checkout mapping: ' + row['repository'])
+        require(portable.repository_id(root) == row['repository'] and git(root, 'rev-parse', 'HEAD').decode().strip() == row['commit'],
+                'Participant or dependency commit differs: ' + row['repository'])
+        github_read.commit(row['repository'], row['commit'])
+        starts[row['repository']] = portable.source_state(root, {'inputs': []})
+        require(all(s['clean'] for s in starts[row['repository']]['repositories'].values()), 'Joint participant has unshared changes')
+    for row in manifest['dependencies']:
+        obj(row, {'repository', 'commit'})
+    for row in manifest['participants']:
+        obj(row, {'repository', 'commit', 'profile', 'task', 'report'})
+        root = repositories[row['repository']]
+        profile = profile_valid(read(inside(root, row['profile'])), root)
+        task = read(inside(root, row['task']))
+        source = handoffs.task_source(github_read.issue(task['id']))
+        require((source['parent'] or task['id']) == manifest['task_id'], 'Participant belongs to another parent task')
+        report = read(inside(root, row['report']))
+        require(report.get('schema_version') == 3, 'Portable aggregation requires v3 delivery records')
+        result = verify(root, profile, task, report, cs_skill)
+        if row['repository'] == manifest['joint']:
+            require('cross-service' in task['risks'], 'Joint owner must declare cross-service risk')
+            needed = set(profile['risk_checks']['cross-service'])
+            joint_records = [r for r in result['records'] if r.get('result', {}).get('id') in needed]
+            require({r['result']['id'] for r in joint_records} == needed, 'Portable joint check evidence is missing')
+        result.pop('records')
+        output.append(result)
+    require(bool(joint_records), 'Joint owner or execution is missing')
+    for record in joint_records:
+        actual = {repo: s['commit'] for repo, s in record['portable_source']['repositories'].items()}
+        require(actual == expected, 'Joint evidence omits or mismatches a participant/shared dependency')
+        require(not record['portable_source']['files'], 'Joint external file inputs need versioned repositories')
+    for repo in expected:
+        require(portable.source_state(repositories[repo], {'inputs': []}) == starts[repo], 'Sources changed during aggregation')
+    return {'schema_version': 3, 'ok': True, 'scope': 'joint-portable-workflow', 'status': 'complete',
+            'task_id': manifest['task_id'], 'versions': expected, 'participants': output}
