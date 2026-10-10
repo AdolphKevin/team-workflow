@@ -64,6 +64,7 @@ def verify_layers(root, profile, task, report, cs_skill, layers):
         require(source['task'] == task, 'Task requirements changed on the platform')
         continuation = handoffs.resume(root, profile, report['issue'], cs_skill)
         require(continuation['ok'], 'Delivery collaboration gaps: ' + '; '.join(continuation['gaps']))
+        require(continuation['requirements'] == digest(source), 'Platform requirements changed during verification; reload and review')
         progress = continuation['current']
         require(not progress['remaining'] and not progress['questions'], 'Delivery still has unfinished work or open questions')
     strings(report['runs'])
@@ -125,6 +126,8 @@ def verify_layers(root, profile, task, report, cs_skill, layers):
     require(isinstance(review, dict), 'Invalid review record')
     require(review.get('schema_version') == 2 and review.get('kind') == 'review', 'Expected v2 review')
     require(review.get('task_id') == task['id'] and review.get('binding') == current, 'Review does not cover current task/workspace')
+    if report['schema_version'] == 3:
+        require(review.get('requirements') == digest(source), 'Review does not cover current platform requirements; review the updated specification')
     text(review.get('reviewer'))
     for axis in ('standards', 'spec'):
         passed(review.get(axis), axis)
@@ -186,15 +189,23 @@ def verify_layers(root, profile, task, report, cs_skill, layers):
             'records': records}
 
 
-def review_template(root, profile, task, brief_path, completion_path):
+def review_template(root, profile, task, brief_path, completion_path, issue=None):
     require(brief_path and completion_path, 'Review needs knowledge brief and completion paths')
     from common import artifact
     draft = {'status': 'pending', 'summary': '', 'evidence': []}
-    return {'schema_version': 2, 'kind': 'review', 'task_id': task['id'], 'binding': binding(root, profile, task),
+    result = {'schema_version': 2, 'kind': 'review', 'task_id': task['id'], 'binding': binding(root, profile, task),
             'reviewer': '', 'standards': dict(draft), 'spec': dict(draft), 'risks': task['risks'],
             'knowledge_conflicts_resolved': False,
             'knowledge': {'brief': artifact(root, brief_path), 'completion': artifact(root, completion_path)},
             'acceptance': [{'id': row['id'], **draft} for row in task['acceptance']], 'findings': []}
+    if issue:
+        import github_read
+        import handoffs
+        require(issue == task['id'], 'Review issue must match the canonical task ID')
+        source = handoffs.task_source(github_read.issue(issue))
+        require(source['task'] == task, 'Task requirements changed on the platform')
+        result['requirements'] = digest(source)
+    return result
 
 
 def participants(manifest):

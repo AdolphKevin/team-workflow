@@ -202,11 +202,43 @@ class ContinuationCases(unittest.TestCase):
             path, imported = portable.import_result(self.root, self.profile, self.locator)
             self.assertEqual(imported['result']['status'], 'passed')
             report.update(schema_version=3, issue=self.url, runs=[path.relative_to(self.root).as_posix()])
+            review = read(self.root / report['review'])
+            template = verification.review_template(self.root, self.profile, self.task,
+                self.root / '.team-workflow/brief.json', self.root / '.team-workflow/knowledge.json', self.url)
+            review['requirements'] = template['requirements']
+            write(self.root / report['review'], review)
             result = verification.verify(self.root, self.profile, self.task, report, skill)
             self.issue['comments_data'] = []
             with self.assertRaisesRegex(Invalid, 'collaboration gaps'):
                 verification.verify(self.root, self.profile, self.task, report, skill)
         self.assertTrue(result['ok'])
+
+    def test_new_handoff_cannot_reuse_review_of_old_prose(self):
+        self.prepare()
+        skill, report, _ = self.complete()
+        self.issue['body'] = self.body()
+        report.update(schema_version=3, issue=self.url)
+        with patch.object(github_read, 'api', side_effect=self.github):
+            progress = self.progress()
+            progress['remaining'] = []
+            self.issue['comments_data'] = [self.comment(handoffs.draft(self.root, self.profile, self.url, progress, skill))]
+            with self.assertRaisesRegex(Invalid, 'current platform requirements'):
+                verification.verify(self.root, self.profile, self.task, report, skill)
+            review = read(self.root / report['review'])
+            template = verification.review_template(self.root, self.profile, self.task,
+                self.root / '.team-workflow/brief.json', self.root / '.team-workflow/knowledge.json', self.url)
+            review['requirements'] = template['requirements']
+            write(self.root / report['review'], review)
+            self.assertTrue(verification.verify(self.root, self.profile, self.task, report, skill)['ok'])
+            self.issue['assignees'] = [{'login': 'bob'}]
+            progress['owner'] = 'bob'
+            self.issue['comments_data'].append(self.comment(handoffs.draft(self.root, self.profile, self.url, progress, skill), 2))
+            self.assertTrue(verification.verify(self.root, self.profile, self.task, report, skill)['ok'])
+            self.issue['body'] += '\nAdditional required behavior: reject invalid inputs.\n'
+            self.issue['comments_data'].append(self.comment(handoffs.draft(self.root, self.profile, self.url, progress, skill), 3))
+            self.assertTrue(handoffs.resume(self.root, self.profile, self.url, skill)['ok'])
+            with self.assertRaisesRegex(Invalid, 'current platform requirements'):
+                verification.verify(self.root, self.profile, self.task, report, skill)
 
     def test_new_attempt_missing_context_changed_source_and_job_rejected(self):
         self.prepare()

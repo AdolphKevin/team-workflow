@@ -20,6 +20,11 @@ def check(root=ROOT):
     version = (root / 'VERSION').read_text().strip()
     assert manifest['name'] == 'team-workflow' and manifest['version'] == version
     assert f"VERSION = '{version}'" in (root / 'skills/team-workflow/scripts/common.py').read_text()
+    catalog = json.loads((root / '.agents/plugins/marketplace.json').read_text())
+    assert catalog['name'] == 'team-workflow'
+    assert len(catalog['plugins']) == 1
+    assert catalog['plugins'][0]['name'] == manifest['name']
+    assert catalog['plugins'][0]['source'] == {'source': 'local', 'path': './'}
     for required in ('LICENSE', 'licenses/MATT-MIT.txt', 'dependencies.json', 'README.md'):
         assert (root / required).is_file(), required
     dependency = json.loads((root / 'dependencies.json').read_text())['cs']

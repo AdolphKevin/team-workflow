@@ -145,7 +145,7 @@ def main(argv=None):
                                        args.cs_task_id, local(root, args.brief), args.disposition, args.reason))
                 elif args.command == 'review-template':
                     result = emit_file(root, args.out, verification.review_template(root, profile, task,
-                                       local(root, args.brief), local(root, args.knowledge)))
+                                       local(root, args.brief), local(root, args.knowledge), args.issue))
                 elif args.command == 'verify':
                     result = verification.verify(root, profile, task, read(local(root, args.report)), args.cs_skill)
                     result.pop('records')

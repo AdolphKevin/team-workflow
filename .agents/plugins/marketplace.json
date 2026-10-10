@@ -1,0 +1,14 @@
+{
+  "name": "team-workflow",
+  "interface": {
+    "displayName": "Team Workflow"
+  },
+  "plugins": [
+    {
+      "name": "team-workflow",
+      "source": {"source": "local", "path": "./"},
+      "policy": {"installation": "AVAILABLE", "authentication": "ON_INSTALL"},
+      "category": "Productivity"
+    }
+  ]
+}

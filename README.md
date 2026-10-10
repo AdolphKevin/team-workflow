@@ -14,7 +14,7 @@
 | 任务结果、引用和新增经验 | 业务仓 `.codestable`，不复制原文正文 |
 | 实际业务验证 | 业务仓的命令、测试和必要环境 |
 
-安装本仓插件后使用 `$team-workflow`。可在支持 GitHub 插件来源的客户端选择本仓，或将发行 ZIP 作为本地插件导入。`plugin.json` 是插件入口，`skills/` 是完整技能集合；也可将这些技能作为一组安装，保留同级目录关系。不要只复制主技能，否则 MATT 配套方法无法定位。
+按[安装与升级](docs/install.md)将同一插件安装到 Codex 或 Cursor，在新会话中使用 `$team-workflow` 或 `/team-workflow`。`plugin.json` 是插件入口，`skills/` 是完整技能集合；也可将这些技能作为一组安装，保留同级目录关系。不要只复制主技能，否则 MATT 配套方法无法定位。
 
 CS 独立安装，测试版本及源码身份见 [依赖锁定](dependencies.json)。通过已安装技能发现 CS 路径，再传给 `--cs-skill` 或 `TEAM_WORKFLOW_CS_SKILL`。本仓不携带 CS 副本，不修改全局技能目录。
 

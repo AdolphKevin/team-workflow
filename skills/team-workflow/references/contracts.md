@@ -70,6 +70,8 @@ python3 "$WF" evidence --root "$PROJECT" --path src/example.py
 
 评审模板默认未通过。实际阅读代码、需求及输出后填写：`reviewer`、`standards`、`spec`、每个 `acceptance` 的 `status: passed`、具体 `summary` 与非空 `evidence`。证据使用 `evidence` 命令生成的 `{path,sha256}`；不能只填写测试文件来证明测试通过，应引用运行记录。`knowledge_conflicts_resolved` 在复核实际知识冲突后填写；阻断 finding 必须解决。模板的绑定和知识引用不要手工刷新以掩盖过期。
 
+第三版平台任务生成 `review-template` 时还须传 `--issue <同一Issue-URL>`。模板自动记录完整需求正文的指纹；改了规格正文后，即使交接已更新，旧审查也不能通过。负责人和进度评论的变化不改变该指纹。第二版本地审查保持原有行为。
+
 后续业务代码、测试、任务或配置变化：重跑必要检查并重新评审。只有知识变化：完成相应 CS 处置、重新捕获并评审知识，不自动重复业务测试。
 
 ## 最终核查
