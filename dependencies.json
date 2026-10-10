@@ -2,7 +2,7 @@
   "cs": {
     "repository": "https://github.com/AdolphKevin/codestable-compact",
     "version": "2.1.0",
-    "source_commit": "3fa0c84861c8fcd349404ec6f5beda5d362b08c6",
+    "source_commit": "b7566958c8abfd34a325385af37c10db6112a091",
     "files": {
       "SKILL.md": "a3a0776922f88333a22b33a250154ecb5fe0a7c732bcd81c61240dbd553b3448",
       "scripts/bootstrap.py": "29745106b7c9fbe4115c984a94014992ec33af7f907fcc2ae12666225ec4c321",
