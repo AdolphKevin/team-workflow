@@ -7,7 +7,7 @@ import re
 import subprocess
 from datetime import datetime, timezone
 
-VERSION = '0.3.0'
+VERSION = '0.4.0-rc.1'
 RISKS = {'authorization', 'persistence', 'concurrency', 'messaging', 'public-contract', 'cross-service'}
 KINDS = {'code', 'docs'}
 

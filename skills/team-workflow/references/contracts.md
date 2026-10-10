@@ -1,5 +1,7 @@
 # 第二版工具约定
 
+这里描述第二版本地执行接口。任务接续与第三版交接见[协作约定](collaboration.md)，GitHub Actions 结果与第三版交付见[外部结果](external-results.md)。原配置继续可用，进度记录不参与本地任务内容指纹。
+
 运行环境：Python 3.10+、Git；工具只用标准库，业务检查使用项目自己的环境。统一命令为 `python3 <技能目录>/scripts/workflow.py`，下面用 `$WF` 指代该文件。通过当前技能目录发现 CS 后，将其目录传给 `--cs-skill` 或环境变量 `TEAM_WORKFLOW_CS_SKILL`，不得硬编码作者机器路径。
 
 ## 项目配置
@@ -67,6 +69,8 @@ python3 "$WF" evidence --root "$PROJECT" --path src/example.py
 `knowledge` 不替代 `learn`，只调用 CS 的只读检查。`none/reused/updated/added` 表示实际知识处置，不要求每次新增卡片。CS 完成记录核对同一任务的已完成状态、版本、文件与 Wiki 内容。CS 当前公开命令不提供历史写入时刻的密码学证明；完整本地闭环仍依赖实际执行 CS 写回与代理评审。
 
 评审模板默认未通过。实际阅读代码、需求及输出后填写：`reviewer`、`standards`、`spec`、每个 `acceptance` 的 `status: passed`、具体 `summary` 与非空 `evidence`。证据使用 `evidence` 命令生成的 `{path,sha256}`；不能只填写测试文件来证明测试通过，应引用运行记录。`knowledge_conflicts_resolved` 在复核实际知识冲突后填写；阻断 finding 必须解决。模板的绑定和知识引用不要手工刷新以掩盖过期。
+
+第三版平台任务生成 `review-template` 时还须传 `--issue <同一Issue-URL>`。模板自动记录完整需求正文的指纹；改了规格正文后，即使交接已更新，旧审查也不能通过。负责人和进度评论的变化不改变该指纹。第二版本地审查保持原有行为。
 
 后续业务代码、测试、任务或配置变化：重跑必要检查并重新评审。只有知识变化：完成相应 CS 处置、重新捕获并评审知识，不自动重复业务测试。
 

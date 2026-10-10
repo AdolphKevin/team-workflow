@@ -15,7 +15,8 @@ import verification
 def parser():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument('command', choices=['project', 'snapshot', 'run', 'brief', 'knowledge', 'review-template',
-                                      'verify', 'aggregate', 'migrate', 'evidence', 'version'])
+                                      'verify', 'aggregate', 'migrate', 'evidence', 'version',
+                                      'resume', 'handoff', 'import-result'])
     p.add_argument('--root', type=Path, default=Path.cwd())
     p.add_argument('--profile', type=Path, default=Path('.team-workflow.json'))
     p.add_argument('--task', type=Path)
@@ -31,6 +32,11 @@ def parser():
     p.add_argument('--symbol', action='append', default=[])
     p.add_argument('--report', type=Path)
     p.add_argument('--joint', type=Path)
+    p.add_argument('--issue', help='Canonical GitHub issue URL')
+    p.add_argument('--progress', type=Path, help='Handoff input draft; never a second task store')
+    p.add_argument('--result', type=Path, help='GitHub Actions result locator')
+    p.add_argument('--portable', action='store_true', help='Capture result.json for a portable CI artifact')
+    p.add_argument('--repository', action='append', default=[], help='Local checkout mapping owner/repo=/path; not shared task data')
     return p
 
 
@@ -58,7 +64,12 @@ def main(argv=None):
         if args.command == 'version':
             result = tool_identity()
         elif args.command == 'aggregate':
-            result = verification.aggregate(read(local(root, args.joint)), args.cs_skill)
+            mapping = {}
+            for value in args.repository:
+                key, path = value.split('=', 1)
+                require(key not in mapping, 'Duplicate local repository mapping')
+                mapping[key] = Path(path).expanduser().resolve()
+            result = verification.aggregate(read(local(root, args.joint)), args.cs_skill, mapping)
         elif args.command == 'evidence':
             result = {'artifacts': [artifact(root, local(root, Path(name))) for name in args.path]}
         elif args.command == 'migrate':
@@ -80,7 +91,19 @@ def main(argv=None):
                 result = emit_file(root, args.out, result)
         else:
             profile = profile_valid(read(local(root, args.profile)), root)
-            if args.command == 'project':
+            if args.command in ('resume', 'handoff'):
+                import handoffs
+                skill = knowledge.skill_path(args.cs_skill)
+                result = (handoffs.resume(root, profile, args.issue, skill) if args.command == 'resume' else
+                          handoffs.draft(root, profile, args.issue, read(local(root, args.progress)), skill))
+                if args.out:
+                    status = result['ok']
+                    result = {**emit_file(root, args.out, result), 'ok': status, 'scope': 'continuation-only'}
+            elif args.command == 'import-result':
+                import portable
+                path, record = portable.import_result(root, profile, read(local(root, args.result)))
+                result = {'ok': True, 'scope': 'execution-only', 'artifact': artifact(root, path), 'result': record['result']}
+            elif args.command == 'project':
                 result = {'ok': True, 'scope': 'project-configuration', 'workflow_version': VERSION,
                           'project': profile['project'], 'snapshot': binding(root, profile, {})['workspace']['digest']}
                 try:
@@ -103,7 +126,7 @@ def main(argv=None):
                     before = verification.participant_binding(manifest) if manifest else None
                     if manifest:
                         require(manifest['task_id'] == task['id'] and manifest['joint'] == profile['project'], 'Joint owner/task mismatch')
-                    path, record = execution.run(root, profile, task, args.check)
+                    path, record = execution.run(root, profile, task, args.check, args.portable)
                     if manifest:
                         record['participants'] = before
                         record['participants_unchanged'] = before == verification.participant_binding(manifest)
@@ -122,7 +145,7 @@ def main(argv=None):
                                        args.cs_task_id, local(root, args.brief), args.disposition, args.reason))
                 elif args.command == 'review-template':
                     result = emit_file(root, args.out, verification.review_template(root, profile, task,
-                                       local(root, args.brief), local(root, args.knowledge)))
+                                       local(root, args.brief), local(root, args.knowledge), args.issue))
                 elif args.command == 'verify':
                     result = verification.verify(root, profile, task, read(local(root, args.report)), args.cs_skill)
                     result.pop('records')
