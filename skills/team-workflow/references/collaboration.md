@@ -1,6 +1,6 @@
 # 协作与交接
 
-GitHub Issues 是首个任务平台适配器。沿用项目 MATT 规格，在原 Issue 正文增加一个 `team-workflow-task` 代码块；规格仍可用自然语言表达，结构化验收应与正文一致，由实际审查核对。本地 task.json 由该块中的 task 导出，不另外维护。原文知识仍通过 CS 读取。
+GitHub Issues 是首个任务平台适配器。沿用项目 MATT 规格，在原 Issue 正文增加一个 `team-workflow-task` 代码块；规格仍可用自然语言表达，结构化验收应与正文一致，由实际审查核对。用 `task-export --issue` 导出该块中的 task，后续使用返回路径，不维护公共任务文件。原文知识仍通过 CS 读取。
 
 ```team-workflow-task
 {
@@ -22,15 +22,16 @@ GitHub Issues 是首个任务平台适配器。沿用项目 MATT 规格，在原
 `base` 必须是本仓真实基准提交。子任务的 `parent` 为总任务 Issue URL；总任务为 null。Issue assignee 是当前负责人。改变验收需要更新此块及规格正文，进度评论不改变要求版本。
 
 ```bash
-python3 <技能目录>/scripts/workflow.py resume --root <项目> --issue <Issue-URL> --cs-skill <CS目录> --out .team-workflow/resume.json
-python3 <技能目录>/scripts/workflow.py handoff --root <项目> --issue <Issue-URL> --progress .team-workflow/progress.json --cs-skill <CS目录> --out .team-workflow/handoff.json
+python3 <技能目录>/scripts/workflow.py resume --root <项目> --issue <Issue-URL> --cs-skill <CS目录>
+python3 <技能目录>/scripts/workflow.py handoff --root <项目> --issue <Issue-URL> --progress <本次交接输入> --cs-skill <CS目录>
 ```
 
-`progress.json` 是草稿输入，包含下列信息；省略业务不需要的集合时填空数组，单仓 `joint_owner` 为空字符串：
+交接输入是负责人确认的状态草稿，包含下列信息；省略业务不需要的集合时填空数组，单仓 `joint_owner` 为空字符串：
 
 ```json
 {
   "owner": "alice",
+  "included_progress": [],
   "done": ["完成需求对应的实现"],
   "verified": ["https://github.com/example/project/actions/runs/100/attempts/1"],
   "remaining": ["仍需真实跨服务验证"],
@@ -49,6 +50,17 @@ python3 <技能目录>/scripts/workflow.py handoff --root <项目> --issue <Issu
 
 解决历史冲突时，先阅读所有相关评论，将合并后的状态写入草稿，并增加 `resolution: {"history_digest": "<resume 返回的历史指纹>", "reason": "各分支如何合并、保留哪些缺口"}`。工具只在历史仍一致时生成新的明确起点，原评论继续保留。后续若有人修改旧评论，该起点也会失效，必须重新核对。
 
+普通进度使用 `progress --issue <URL> --progress <本次输入> --request-id <唯一编号>`。
+输入为 `{"author":"alice","done":[],"verified":[],"remaining":[],"questions":[]}`；
+`verified` 填实际验证引用。各协作者独立追加，工具只生成草稿，不向平台发布。
+相同请求编号且内容相同的重复评论只计算一次，编号相同但内容不同则报告冲突。
+
+`resume` 同时返回已确认交接、全部进度和 `pending_progress`，保留所有协作者贡献，
+不按评论更新时间选择最后一人。普通进度不进入交接的前序链。已发布交接的评论作者须与记录负责人一致。负责人核对进度后，在
+交接输入的 `included_progress` 中填写 `resume` 返回的 `{id,digest}`；后续交接自动
+保留已确认引用。删改已纳入的进度会报告缺口，新进度仍待确认，最终 `verify` 不得忽略。
+负责人变化、需求变化和矛盾交接仍需要明确整理，不能通过普通进度代替确认。
+
 跨服务额外填写：
 
 - `participants`: 每项 `{issue, repository, owner, role}`。公共依赖也有负责方；可由同一仓任务承担，owner 必须是该任务 assignee。
@@ -58,6 +70,6 @@ python3 <技能目录>/scripts/workflow.py handoff --root <项目> --issue <Issu
 
 `resume` 原样提供 CS 简报和问题清单。`verified` 中的链接只能证明可访问，实际通过仍由 verify 核对报告。阻塞问题可交给下一位处理，因此有明确负责人和下一步的未完成任务也可以交接；不可访问材料、冲突、旧要求或缺少协作责任则无法完整交接。
 
-第三版交付核查还会重新读取平台交接：交接必须完整，且没有剩余工作或未决问题。第二版材料仍按原有本机范围解释。
+第三版交付核查还会重新读取平台交接：交接必须完整，且没有剩余工作、未决问题或尚未纳入确认的新进度。第二版材料仍按原有本机范围解释。
 
 跨机器交接要求已共享的提交。未提交修改留在原工作区，工具准确报告缺口，不替用户提交、丢弃或搬运代码。暂存布局和机器目录不作为可移植源码身份；实际文件内容、可执行位、提交及显式外部输入参与核对。

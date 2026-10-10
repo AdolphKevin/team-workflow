@@ -23,9 +23,9 @@ codex plugin add team-workflow@team-workflow
 
 使用本包任何开发技能前，先独立安装 CS，并按 CS 自身要求完成项目知识初始化。仅建立空目录不算完成。缺少前提时，本包报告缺口，不代为安装、初始化或重建。
 
-工具接口测试的版本和源码提交固定在 [dependencies.json](../dependencies.json)，当前为 CS 2.1.0、知识格式 4。当前源码已锁定包含“开发方法与知识归属”说明的可获取提交，并与方法包联合验证。安装已发布版本时使用该版本自己的依赖锁定；源码提交不代表已生成新的发行标签或安装包。
+CS 独立安装并完成项目知识初始化。工具通过公开命令与返回字段校验能力，缺失时明确报告，不自动安装或重建。不锁定 CS 版本、提交或源码哈希。CI 获取默认分支做真实接口验证，实际提交只记录在验证材料中。源码更新不代表已创建发行标签、插件包或修改全局安装。
 
-普通 MATT 调用无需 `.team-workflow.json`。项目明确采用团队工具时，再按[接入指南](../skills/team-workflow/references/onboarding.md)配置，将发现的 CS 目录传给 `--cs-skill` 或 `TEAM_WORKFLOW_CS_SKILL`，用 `project` 检查配置。已有第二版配置和材料保持原语义，新协作记录及可移植结果使用第三版；具体命令见[工具约定](../skills/team-workflow/references/contracts.md)。
+普通 MATT 调用无需 `.team-workflow.json`。项目明确采用团队工具时，再按[接入指南](../skills/team-workflow/references/onboarding.md)配置，将发现的 CS 目录传给 `--cs-skill` 或 `TEAM_WORKFLOW_CS_SKILL`，用 `project` 检查配置。共享项目配置使用格式 3，旧配置明确拒绝；协作记录及可移植结果也使用第三版；具体命令见[工具约定](../skills/team-workflow/references/contracts.md)。
 
 ## 版本切换
 

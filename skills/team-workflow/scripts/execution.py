@@ -132,7 +132,7 @@ def output_path(root, directory, value):
     return path
 
 
-def run(root, profile, task, selected=None, portable=False):
+def run(root, profile, task, selected=None, portable=False, directory=None, publish=True):
     required = task_valid(task, profile, root)
     selected = selected if selected is not None else required
     require(set(selected) <= profile['checks'].keys(), 'Unknown selected check')
@@ -142,7 +142,9 @@ def run(root, profile, task, selected=None, portable=False):
         from portable import source_state, capture_result
         portable_before = source_state(root, profile)
     run_id = uuid.uuid4().hex
-    directory = inside(root, '.team-workflow/runs/' + run_id, exists=False)
+    if directory is None:
+        from artifacts import directory as request_directory
+        directory = request_directory(root, task['id']) / 'execution'
     directory.mkdir(parents=True, exist_ok=False)
     started = now()
     versions = {'python': sys.version.split()[0]}
@@ -196,5 +198,7 @@ def run(root, profile, task, selected=None, portable=False):
               'task_id': task['id'], 'started_at': started, 'finished_at': finished, 'tools': tools_before,
               'binding': before, 'source_unchanged': before == after and tools_before == tools_after, 'environment_versions': versions,
               'required_checks': required, 'results': results}
-    write(directory / 'run.json', record)
+    if publish:
+        from common import create
+        create(directory / 'run.json', record)
     return directory / 'run.json', record

@@ -5,11 +5,14 @@ import os
 from pathlib import Path
 import re
 import subprocess
+import tempfile
+from contextvars import ContextVar
 from datetime import datetime, timezone
 
 VERSION = '0.4.0-rc.1'
 RISKS = {'authorization', 'persistence', 'concurrency', 'messaging', 'public-contract', 'cross-service'}
 KINDS = {'code', 'docs'}
+LOCATIONS = ContextVar('workflow_locations', default={'repositories': {}, 'inputs': {}})
 
 
 class Invalid(ValueError):
@@ -65,7 +68,60 @@ def read(path):
 def write(path, value):
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(value, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+    descriptor, temporary = tempfile.mkstemp(prefix='.writing-', dir=path.parent)
+    try:
+        with os.fdopen(descriptor, 'w', encoding='utf-8') as stream:
+            stream.write(json.dumps(value, ensure_ascii=False, indent=2) + '\n')
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary, path)
+    finally:
+        if os.path.exists(temporary):
+            os.unlink(temporary)
+
+
+def create(path, value):
+    """Publish a complete file without replacing any concurrently created file."""
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    descriptor, temporary = tempfile.mkstemp(prefix='.publishing-', dir=path.parent)
+    try:
+        with os.fdopen(descriptor, 'w', encoding='utf-8') as stream:
+            stream.write(json.dumps(value, ensure_ascii=False, indent=2) + '\n')
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.link(temporary, path)
+    finally:
+        os.unlink(temporary)
+
+
+def location_settings(root):
+    path = root / '.team-workflow/local.json'
+    settings = read(path) if path.exists() else {}
+    obj(settings, (), {'repositories', 'inputs'})
+    result = {}
+    for kind in ('repositories', 'inputs'):
+        values = settings.get(kind, {})
+        require(isinstance(values, dict), f'Local {kind} must be an object')
+        result[kind] = {**values, **LOCATIONS.get()[kind]}
+        for name, value in result[kind].items():
+            text(name)
+            text(value)
+    return result
+
+
+def external_path(root, name, item):
+    settings = location_settings(root)
+    kind = 'repositories' if item['kind'] == 'repository' else 'inputs'
+    key = item['repository'] if kind == 'repositories' else name
+    require(key in settings[kind], f'Missing local {kind} mapping: {key}')
+    value = Path(settings[kind][key]).expanduser()
+    path = (root / value).resolve()
+    require(path != root.resolve(), 'External input cannot refer to this project itself')
+    if kind == 'repositories':
+        from portable import repository_id
+        require(repository_id(path) == key, f'Local checkout identity differs from {key}')
+    return path
 
 
 def now():
@@ -138,7 +194,7 @@ def snapshot(root, profile):
     data = {'head': head, 'index': staged, 'files': files}
     external = {}
     for key, item in profile.get('external_inputs', {}).items():
-        path = (root / item['path']).resolve()
+        path = external_path(root, key, item)
         require(path != root, 'External input cannot refer to this project itself')
         if item['kind'] == 'file':
             require(path.is_file(), f'Missing external input: {key}')
@@ -152,7 +208,9 @@ def snapshot(root, profile):
 
 def profile_valid(profile, root, check_context=True):
     obj(profile, {'schema_version', 'project', 'context', 'knowledge', 'checks', 'required_checks', 'risk_checks', 'inputs', 'environment_versions'}, {'external_inputs'})
-    require(type(profile['schema_version']) is int and profile['schema_version'] == 2, 'Expected profile schema_version 2; v1 uses check.py')
+    require(type(profile['schema_version']) is int and profile['schema_version'] == 3,
+            'Unsupported project configuration; expected schema_version 3. Adjust configuration explicitly; no migration is performed')
+    location_settings(root)
     text(profile['project'])
     for name in strings(profile['context'], True):
         if check_context:
@@ -164,9 +222,12 @@ def profile_valid(profile, root, check_context=True):
     require(isinstance(profile.get('external_inputs', {}), dict), 'external_inputs must be an object')
     for name, item in profile.get('external_inputs', {}).items():
         text(name)
-        obj(item, {'kind', 'path'})
+        obj(item, {'kind'}, {'repository'})
         require(item['kind'] in ('file', 'repository'), 'External input must be a file or Git repository')
-        text(item['path'])
+        if item['kind'] == 'repository':
+            require(bool(re.fullmatch(r'[^/\s]+/[^/\s]+', text(item.get('repository')))), 'Expected owner/repository identity')
+        else:
+            require('repository' not in item, 'File locations belong in local inputs')
     require(isinstance(profile['checks'], dict), 'checks must be an object')
     for key, check in profile['checks'].items():
         require(re.fullmatch('[a-z][a-z0-9-]*', key), f'Invalid check ID: {key}')

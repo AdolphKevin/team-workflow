@@ -34,8 +34,61 @@ def task_source(issue):
 
 
 def history(issue):
-    return [{'url': c['html_url'], 'body': c.get('body', '')} for c in issue['comments_data']
+    return [{'url': c['html_url'], 'body': c.get('body', ''), **({'author': c['user']['login']} if c.get('user', {}).get('login') else {})} for c in issue['comments_data']
             if '```team-workflow-handoff' in c.get('body', '')]
+
+
+def progress_history(issue):
+    records, gaps = {}, []
+    for comment in issue['comments_data']:
+        try:
+            row = block(comment.get('body'), 'progress', required=False)
+            if row is None:
+                continue
+            validate_progress(row)
+            require(row['task'] == issue['html_url'], 'Progress belongs to another task')
+            author = comment.get('user', {}).get('login')
+            require(not author or author == row['author'], 'Progress author differs from comment author')
+            identifier = row['request_id']
+            fingerprint = digest(row)
+            require(identifier not in records or records[identifier]['digest'] == fingerprint,
+                    'Progress request ID reused with different content')
+            records.setdefault(identifier, {'id': identifier, 'digest': fingerprint,
+                                            'url': comment['html_url'], 'record': row})
+        except (Invalid, ValueError, KeyError, TypeError) as exc:
+            gaps.append('Invalid progress ' + comment['html_url'] + ': ' + str(exc))
+    return records, gaps
+
+
+def validate_progress(row):
+    obj(row, {'schema_version', 'kind', 'task', 'request_id', 'requirements', 'author',
+              'done', 'verified', 'remaining', 'questions'})
+    require(row['schema_version'] == 1 and row['kind'] == 'progress', 'Expected progress record version 1')
+    github.issue_ref(row['task'])
+    for name in ('request_id', 'requirements', 'author'):
+        text(row[name])
+    for name in ('done', 'verified', 'remaining'):
+        strings(row[name])
+    require(isinstance(row['questions'], list), 'Questions must be a list')
+    for item in row['questions']:
+        obj(item, {'question', 'owner'})
+        text(item['question'])
+        text(item['owner'])
+
+
+def progress_draft(root, profile, url, progress, request_id):
+    issue = github.issue(url)
+    source = task_source(issue)
+    task_valid(source['task'], profile, root)
+    row = {**progress, 'schema_version': 1, 'kind': 'progress', 'task': url,
+           'request_id': request_id, 'requirements': digest(source)}
+    validate_progress(row)
+    records, gaps = progress_history(issue)
+    if request_id in records:
+        require(records[request_id]['digest'] == digest(row), 'Progress request ID already has different content')
+    body = '## 工作进度\n\n```team-workflow-progress\n' + json.dumps(row, ensure_ascii=False, indent=2) + '\n```\n'
+    return {'ok': not gaps, 'kind': 'progress-draft', 'record': row, 'markdown': body,
+            'gaps': gaps, 'publication': 'draft-only; append using existing authorization; identical request IDs are counted once'}
 
 
 def chain(issue):
@@ -48,6 +101,7 @@ def chain(issue):
                 continue
             validate(row)
             require(row['task'] == issue['html_url'], 'Handoff belongs to another task')
+            require(not comment.get('author') or comment['author'] == row['owner'], 'Handoff must be confirmed by its owner')
             if row.get('resolution'):
                 require(row['resolution']['history_digest'] == digest(seen), 'Resolution no longer covers the preceding history')
                 # An explicit, reviewed checkpoint retains all earlier comments on the platform.
@@ -84,7 +138,7 @@ def chain(issue):
 def validate(row):
     obj(row, {'schema_version', 'kind', 'task', 'requirements', 'previous', 'owner', 'done', 'verified',
               'remaining', 'questions', 'next', 'versions', 'references', 'participants', 'contracts',
-              'dependencies', 'joint_owner', 'workflow_version'}, {'resolution'})
+              'dependencies', 'joint_owner', 'workflow_version'}, {'resolution', 'included_progress'})
     require(row['schema_version'] == 3 and row['kind'] == 'handoff', 'Expected v3 handoff')
     github.issue_ref(row['task'])
     for name in ('requirements', 'owner', 'next', 'workflow_version'):
@@ -131,6 +185,25 @@ def validate(row):
         text(item['commit'])
         require(isinstance(item['evidence'], str), 'Expected dependency evidence link')
     require(isinstance(row['joint_owner'], str), 'Expected joint owner or empty text')
+    require(isinstance(row.get('included_progress', []), list), 'Included progress must be a list')
+    seen_progress = set()
+    for item in row.get('included_progress', []):
+        obj(item, {'id', 'digest'})
+        text(item['id'])
+        text(item['digest'])
+        require(item['id'] not in seen_progress, 'Duplicate included progress')
+        seen_progress.add(item['id'])
+
+
+def pending_progress(issue, row):
+    records, gaps = progress_history(issue)
+    incorporated = {}
+    for item in (row or {}).get('included_progress', []):
+        require(item['id'] not in incorporated, 'Duplicate included progress')
+        incorporated[item['id']] = item['digest']
+        if item['id'] not in records or records[item['id']]['digest'] != item['digest']:
+            gaps.append('Included progress missing or changed: ' + item['id'])
+    return records, [value for key, value in records.items() if key not in incorporated], gaps
 
 
 def gaps_for(root, profile, source, row, documents):
@@ -220,12 +293,14 @@ def resume(root, profile, url, cs_skill):
             gaps.append('Handoff owner differs from current assignees')
     else:
         gaps.append('No unambiguous handoff; establish current progress before continuing')
+    progress, pending, progress_gaps = pending_progress(issue, latest['record'] if latest else None)
+    gaps += progress_gaps
     return {'schema_version': 3, 'kind': 'continuation', 'ok': not gaps, 'scope': 'continuation-only',
             'delivery': 'not-evaluated', 'issue': url, 'issue_updated_at': issue['updated_at'],
             'requirements': digest(source), 'source': source, 'owners': owners,
             'history_digest': digest(history(issue)),
             'current': latest['record'] if latest else None, 'previous': {'url': tip, 'digest': latest['digest']} if latest else None,
-            'knowledge': brief, 'gaps': sorted(set(gaps))}
+            'knowledge': brief, 'progress': list(progress.values()), 'pending_progress': pending, 'gaps': sorted(set(gaps))}
 
 
 def draft(root, profile, url, progress, cs_skill):
@@ -242,6 +317,12 @@ def draft(root, profile, url, progress, cs_skill):
            'requirements': digest(source), 'previous': {'url': tip, 'digest': latest['digest']} if latest and not resolution else None,
            'workflow_version': VERSION}
     validate(row)
+    if latest and not resolution:
+        included = {item['id']: item for item in latest['record'].get('included_progress', [])}
+        included.update({item['id']: item for item in row.get('included_progress', [])})
+        row['included_progress'] = list(included.values())
+    _, _, progress_gaps = pending_progress(issue, row)
+    require(not progress_gaps, '; '.join(progress_gaps))
     brief = knowledge.brief(root, source['task'], cs_skill, [], [])
     documents = knowledge.call(cs_skill, root, ['documents', 'list'])
     gaps = gaps_for(root, profile, source, row, documents)

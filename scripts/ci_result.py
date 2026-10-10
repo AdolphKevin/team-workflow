@@ -14,7 +14,7 @@ import portable
 
 
 def profile():
-    return {'schema_version': 2, 'project': 'team-workflow', 'context': ['AGENTS.md'],
+    return {'schema_version': 3, 'project': 'team-workflow', 'context': ['AGENTS.md'],
             'knowledge': {'provider': 'cs', 'entry': '.codestable/wiki/INDEX.md'},
             'checks': {'regression': {'argv': ['python3', 'scripts/test.py', '--junitxml', '{output}/tests.xml'],
                 'cwd': '.', 'timeout': 300, 'purpose': 'Workflow contract regressions; excludes real member acceptance',

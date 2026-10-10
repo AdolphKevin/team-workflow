@@ -49,7 +49,8 @@ def source_state(root, profile):
 
     capture(root, profile['inputs'])
     for name, item in profile.get('external_inputs', {}).items():
-        path = (root / item['path']).resolve()
+        from common import external_path
+        path = external_path(root, name, item)
         if item['kind'] == 'repository':
             capture(path, [])
         else:
@@ -181,13 +182,15 @@ def unpack(data, directory):
         raise Invalid('Invalid artifact ZIP') from exc
 
 
-def import_result(root, profile, locator):
+def import_result(root, profile, locator, directory=None):
     receipt = provider(locator)
     repo = locator['repository']
     data = github.api(f'repos/{repo}/actions/artifacts/{locator["artifact_id"]}/zip', binary=True)
     import hashlib
     require('sha256:' + hashlib.sha256(data).hexdigest() == receipt['artifact']['digest'], 'Downloaded archive differs from provider digest')
-    directory = root / '.team-workflow/imports' / uuid.uuid4().hex
+    if directory is None:
+        from artifacts import directory as request_directory
+        directory = request_directory(root, locator['repository'] + '/actions/' + str(locator['run_id'])) / 'import'
     directory.mkdir(parents=True)
     (directory / 'archive.zip').write_bytes(data)
     unpack(data, directory / 'content')

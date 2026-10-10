@@ -11,7 +11,7 @@ from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'skills/team-workflow/scripts'))
-from common import Invalid, artifact, read, write
+from common import Invalid, artifact, read, write, sha
 import knowledge
 import verification
 import handoffs
@@ -19,8 +19,6 @@ import github_read
 
 
 def run(skill):
-    locked = read(ROOT / 'dependencies.json')['cs']
-    assert knowledge.identity(skill) == locked['files'], 'CS source differs from dependencies.json; review the dependency update first'
     with tempfile.TemporaryDirectory(prefix='team-cs-integration-') as directory:
         root = Path(directory) / 'service'
         external = Path(directory) / 'contracts'
@@ -41,16 +39,15 @@ def run(skill):
         git('remote', 'add', 'origin', 'https://github.com/example/cs-integration.git')
         knowledge.call(skill, root, [], bootstrap=True)
         config = read(root / '.codestable/config.json')
-        config['wiki']['repositories'] = {'contracts': {'root': '../contracts'}}
-        config['wiki']['documents'] = {'terms': {'repository': 'contracts', 'path': 'GLOSSARY.md',
-            'title': 'Owner terminology', 'category': 'requirements', 'always': True}}
-        write(root / '.codestable/config.json', config)
+        write(root / '.codestable/local.json', {'repositories': {'contracts': str(external)}})
+        write(root / '.codestable/documents/terms.json', {'repository': 'contracts', 'path': 'GLOSSARY.md',
+            'title': 'Owner terminology', 'category': 'requirements', 'always': True})
         git('add', '.')
         git('commit', '-qm', 'isolated baseline')
         task = {'schema_version': 2, 'id': 'https://github.com/example/cs-integration/issues/1', 'base': git('rev-parse', 'HEAD'),
                 'goal': 'Document the public owner terminology', 'non_goals': [], 'kind': 'docs', 'risks': [],
                 'acceptance': [{'id': 'A1', 'expectation': 'README identifies the single owning source', 'checks': []}]}
-        profile = {'schema_version': 2, 'project': 'fixture-service', 'context': ['AGENTS.md'],
+        profile = {'schema_version': 3, 'project': 'fixture-service', 'context': ['AGENTS.md'],
                    'knowledge': {'provider': 'cs', 'entry': '.codestable/wiki/INDEX.md'},
                    'checks': {}, 'required_checks': {'docs': [], 'code': []}, 'risk_checks': {},
                    'inputs': [], 'environment_versions': {}}
@@ -97,7 +94,7 @@ def run(skill):
         progress = {'owner': 'reader', 'done': ['Linked the owning source'], 'verified': [], 'remaining': [],
                     'questions': [], 'next': 'Review the documented source', 'versions': [{'repository': 'example/cs-integration', 'commit': git('rev-parse', 'HEAD')}],
                     'references': [], 'participants': [], 'contracts': [], 'dependencies': [], 'joint_owner': ''}
-        # Only transport is a local fixture; all CS calls execute the locked dependency.
+        # Only transport is a local fixture; all CS calls execute the independently supplied CS.
         with patch.object(github_read, 'issue', return_value=issue), patch.object(github_read, 'commit'):
             draft = handoffs.draft(root, profile, task['id'], progress, skill)
             assert draft['ok'], draft['gaps']
@@ -108,7 +105,7 @@ def run(skill):
         try:
             knowledge.finish(root, task, skill, applied['task_id'], brief_path, 'none', 'Original owns the definition')
         except Invalid as exc:
-            assert 'Source documents changed' in str(exc), str(exc)
+            assert 'receipt-check' in str(exc), str(exc)
         else:
             raise AssertionError('External document change accepted stale completion')
         doc.unlink()
@@ -118,7 +115,7 @@ def run(skill):
             pass
         else:
             raise AssertionError('Missing authoritative document accepted')
-        return {'ok': True, 'cs_version': brief['cs_version'], 'checks': [
+        return {'ok': True, 'cs_version': brief['cs_version'], 'cs_runtime_sha256': sha(skill / 'scripts/cs_knowledge.py'), 'checks': [
             'unified-cross-repository-brief', 'real-learn-preview-apply-doctor', 'task-only-completion',
             'complete-document-delivery', 'same-task-update-and-later-retrieval', 'v3-handoff-resume-real-cs',
             'changed-external-document-rejected', 'missing-source-rejected']}

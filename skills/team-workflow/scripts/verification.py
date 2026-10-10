@@ -63,6 +63,7 @@ def verify_layers(root, profile, task, report, cs_skill, layers):
         source = handoffs.task_source(github_read.issue(report['issue']))
         require(source['task'] == task, 'Task requirements changed on the platform')
         continuation = handoffs.resume(root, profile, report['issue'], cs_skill)
+        require(not continuation.get('pending_progress'), 'New progress must be reviewed and included in a handoff before delivery')
         require(continuation['ok'], 'Delivery collaboration gaps: ' + '; '.join(continuation['gaps']))
         require(continuation['requirements'] == digest(source), 'Platform requirements changed during verification; reload and review')
         progress = continuation['current']
@@ -160,7 +161,6 @@ def verify_layers(root, profile, task, report, cs_skill, layers):
     require(isinstance(completion, dict), 'Invalid knowledge completion')
     require(completion.get('schema_version') == 2 and completion.get('kind') == 'knowledge-completion', 'Missing CS completion record')
     require(completion.get('task_id') == task['id'] and completion.get('task_digest') == digest(task), 'Knowledge task mismatch')
-    require(completion.get('wiki_digest') == knowledge.wiki_state(root), 'Knowledge changed after completion; recapture and review')
     brief_path = artifact_valid(root, completion['brief'])
     brief = read(brief_path)
     require(isinstance(brief, dict), 'Invalid knowledge brief')
@@ -175,11 +175,22 @@ def verify_layers(root, profile, task, report, cs_skill, layers):
             {'path': report['knowledge'], 'sha256': sha(inside(root, report['knowledge']))}},
             'Review must bind both knowledge brief and completed writeback')
     skill = knowledge.skill_path(cs_skill)
-    require(completion.get('cs_identity') == knowledge.identity(skill), 'CS runtime changed; recapture completion')
     fresh = knowledge.finish(root, task, skill, completion['cs_task_id'], brief_path,
                              completion['disposition'], completion['reason'])
-    require(fresh['document_state'] == completion.get('document_state'), 'Source documents changed after completion')
+    require(fresh['query_state'] == completion.get('query_state'), 'Relevant sources changed after completion')
     require(fresh['cs_task_revision'] == completion['cs_task_revision'], 'CS task revision changed')
+    if report['schema_version'] == 3:
+        # Platform collaborators can append while execution/knowledge is checked.
+        # Confirm the observed state at the end as well, without writing it.
+        latest_issue = github_read.issue(report['issue'])
+        latest, _, gaps = handoffs.chain(latest_issue)
+        _, pending, progress_gaps = handoffs.pending_progress(latest_issue, latest['record'] if latest else None)
+        require(not pending, 'New progress arrived during verification; confirm it in a handoff')
+        require(not gaps and not progress_gaps, 'Platform collaboration changed during verification')
+        require(digest(handoffs.task_source(latest_issue)) == continuation['requirements']
+                and digest(handoffs.history(latest_issue)) == continuation['history_digest']
+                and {owner['login'] for owner in latest_issue.get('assignees', [])} == set(continuation['owners']),
+                'Platform requirements, owner or handoff changed during verification; check again')
     require(binding(root, profile, task) == current, 'Workspace changed while verifying')
     layers['knowledge'] = 'passed'
     return {'ok': True, 'scope': 'local-workflow', 'status': 'complete', 'project': profile['project'],

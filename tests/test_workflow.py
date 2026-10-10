@@ -34,7 +34,7 @@ class WorkflowCases(unittest.TestCase):
         (self.root / 'app.py').write_text('def add(a, b):\n    return a+b\n')
         self.git('add', '.')
         self.git('commit', '-qm', 'fixture')
-        self.profile = {'schema_version': 2, 'project': 'sample', 'context': ['AGENTS.md'],
+        self.profile = {'schema_version': 3, 'project': 'sample', 'context': ['AGENTS.md'],
                         'knowledge': {'provider': 'cs', 'entry': '.codestable/wiki/INDEX.md'},
                         'checks': {}, 'required_checks': {'code': [], 'docs': []},
                         'risk_checks': {}, 'inputs': [], 'environment_versions': {}}
@@ -67,8 +67,8 @@ class WorkflowCases(unittest.TestCase):
         (wiki / 'INDEX.md').write_text('Project knowledge')
         (wiki / 'task.md').write_text(self.task['id'] + '\ncompleted')
         write(self.root / '.codestable/config.json', {'version': '2.1.0'})
-        (skill / 'scripts/bootstrap.py').write_text('import json\nprint(json.dumps({"ok":True,"skill_version":"2.1.0"}))')
-        reply = {'ok': True, 'state': '0'*64, 'receipt': {'document_state': '0'*64}, 'task_status': 'completed', 'canonical_task_id': 'CS-T', 'task_revision': 1,
+        (skill / 'scripts/bootstrap.py').write_text('import json\nprint(json.dumps({"ok":True,"skill_version":"2.1.0","capabilities":["documents","receipt-check","task-files"]}))')
+        reply = {'ok': True, 'state': '0'*64, 'kind': 'receipt-check', 'read_only': True, 'query_state': {}, 'changed': [], 'receipt': {'query_state': {}}, 'task_status': 'completed', 'canonical_task_id': 'CS-T', 'task_revision': 1,
                  'files': ['.codestable/wiki/task.md'],
                  'records': [{'id': 'CS-T', 'path': '.codestable/wiki/task.md', 'relations': ['task-note']} ]}
         (skill / 'scripts/cs_knowledge.py').write_text('import json\nprint(' + repr(json.dumps(reply)) + ')')
@@ -116,7 +116,7 @@ class WorkflowCases(unittest.TestCase):
         self.assertEqual(status, 1)
         self.assertFalse(result['ok'])
         self.assertEqual(result['cs']['status'], 'incomplete')
-        self.assertIn('2.1.0', result['cs']['reason'])
+        self.assertIn('receipt-check', result['cs']['reason'])
 
     def test_source_change_invalidates_execution(self):
         skill, report, _ = self.complete()
@@ -242,7 +242,7 @@ class WorkflowCases(unittest.TestCase):
         with self.assertRaises(Invalid):
             self.verify(self.root / 'missing', report)
         (self.root / '.codestable/wiki/task.md').write_text('changed')
-        with self.assertRaisesRegex(Invalid, 'Knowledge changed'):
+        with self.assertRaisesRegex(Invalid, 'Artifact changed'):
             self.verify(skill, report)
 
     def test_cs_note_must_reference_the_same_task(self):
@@ -439,7 +439,8 @@ class WorkflowCases(unittest.TestCase):
         self.addCleanup(outside.cleanup)
         path = Path(outside.name) / 'go.work'
         path.write_text('workspace A')
-        self.profile['external_inputs'] = {'workspace': {'kind': 'file', 'path': str(path)}}
+        self.profile['external_inputs'] = {'workspace': {'kind': 'file'}}
+        write(self.root / '.team-workflow/local.json', {'inputs': {'workspace': str(path)}})
         profile_valid(self.profile, self.root)
         before = snapshot(self.root, self.profile)
         path.write_text('workspace B')

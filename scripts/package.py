@@ -18,7 +18,7 @@ def main():
     if output.exists():
         parser.error('Archive exists; choose a new path')
     manifest = json.loads((root / 'plugin.json').read_text())
-    files = [root / name for name in ('plugin.json', 'README.md', 'LICENSE', 'VERSION', 'dependencies.json')]
+    files = [root / name for name in ('plugin.json', 'README.md', 'LICENSE', 'VERSION')]
     for name in ('skills', 'assets', 'licenses', 'examples', 'docs', 'upstream'):
         files.extend(p for p in (root / name).rglob('*') if p.is_file() and '__pycache__' not in p.parts and p.suffix != '.pyc')
     if any(p.is_symlink() for p in files):

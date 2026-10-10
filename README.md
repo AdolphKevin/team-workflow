@@ -16,9 +16,13 @@
 
 按[安装与升级](docs/install.md)将同一插件安装到 Codex 或 Cursor，在新会话中使用 `$team-workflow` 或 `/team-workflow`。`plugin.json` 是插件入口，`skills/` 是完整技能集合；也可将这些技能作为一组安装，保留同级目录关系。不要只复制主技能，否则 MATT 配套方法无法定位。
 
-CS 独立安装，测试版本及源码身份见 [依赖锁定](dependencies.json)。各方法遵循[CS 接入约定](skills/team-workflow/references/matt-integration.md)。使用可选工具时，通过已安装技能发现 CS 路径，再传给 `--cs-skill` 或 `TEAM_WORKFLOW_CS_SKILL`。本仓不携带 CS 副本，不修改全局技能目录。
+CS 独立安装，运行时通过公开命令和返回字段核对能力，不锁定版本或提交。各方法遵循[CS 接入约定](skills/team-workflow/references/matt-integration.md)。使用可选工具时，通过已安装技能发现 CS 路径，再传给 `--cs-skill` 或 `TEAM_WORKFLOW_CS_SKILL`。本仓不携带 CS 副本，不修改全局技能目录。
 
-当前源码锁定包含方法组合约定的 CS 2.1.0 已公开提交。远端获取的 CS 技能与本地联合试用副本逐文件一致；依赖获取、接口复验和实际范围见[验证记录](docs/validation.md)。
+CI 获取 CS 默认分支验证真实接口，实际使用的提交只记入[验证记录](docs/validation.md)。MATT 来源锁定及补丁核验继续保留。
+
+可选工具使用只读共享配置（格式 3）；本机位置与按任务分开的运行材料均被忽略。
+多人进度独立追加，负责人确认交接。原文正文保持唯一，CS 的登记、任务记录和独立
+经验分别存放，普通任务不改写共享目录或统计。
 
 项目需要团队工具时，运行配置检查：
 
@@ -36,6 +40,7 @@ MATT 基于 [mattpocock/skills](https://github.com/mattpocock/skills)，固定�
 python3 -m unittest discover -s tests -v
 python3 scripts/check_release.py
 python3 scripts/check_cs.py --cs-skill <独立CS源码或安装目录>/skills/cs
+python3 scripts/check_parallel.py --cs-skill <独立CS源码或安装目录>/skills/cs
 python3 scripts/package.py --output <仓库外目录>/team-workflow-0.4.0-rc.1.zip
 ```
 

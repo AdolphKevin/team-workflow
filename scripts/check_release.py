@@ -25,12 +25,8 @@ def check(root=ROOT):
     assert len(catalog['plugins']) == 1
     assert catalog['plugins'][0]['name'] == manifest['name']
     assert catalog['plugins'][0]['source'] == {'source': 'local', 'path': './'}
-    for required in ('LICENSE', 'licenses/MATT-MIT.txt', 'dependencies.json', 'README.md'):
+    for required in ('LICENSE', 'licenses/MATT-MIT.txt', 'README.md'):
         assert (root / required).is_file(), required
-    dependency = json.loads((root / 'dependencies.json').read_text())['cs']
-    assert dependency['version'] == '2.1.0'
-    assert re.fullmatch(r'[a-f0-9]{40}', dependency['source_commit']), 'Pin a published CS commit'
-    assert all(re.fullmatch(r'[a-f0-9]{64}', value) for value in dependency['files'].values())
     lock = json.loads((root / 'upstream/matt.lock.json').read_text())
     assert len(lock['files']) == 41 and len({Path(row['path']).parts[1] for row in lock['files']}) == 15
     with tempfile.TemporaryDirectory(prefix='upstream-check-') as directory:
