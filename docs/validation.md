@@ -53,11 +53,15 @@ CS 的独立改动已经提交为[草稿 PR](https://github.com/AdolphKevin/code
 
 ### 已登录工具试用
 
-Codex CLI 0.162.0 与 Cursor 3.24.9 使用通用插件。Cursor 保留本机原有 Grok 4.7 High Fast 模型设置；Codex 使用其本机默认设置。两个安装目录与试用 ZIP 的 73 个文件逐字节相同，ZIP SHA-256 为 `eaa1d47c1e8941852ac11dc4d24edb85ec6831f61d202cda75695169b0396079`。该包对应运行时代码 `d3bd3ee`，发行版随后仅补充安装目录、校验和验收说明；最终 ZIP 校验值随 Release 发布。
+Codex CLI 0.162.0 与 Cursor 3.24.9 使用通用插件。Cursor 保留本机原有 Grok 4.7 High Fast 模型设置；Codex 使用其本机默认设置。两个安装目录与试用 ZIP 的 73 个文件逐字节相同，ZIP SHA-256 为 `eaa1d47c1e8941852ac11dc4d24edb85ec6831f61d202cda75695169b0396079`。该包对应运行时代码 `d3bd3ee`。最终发行 `fcf2c90` 还增加了完整需求正文与审查的绑定；最终 ZIP 校验值和各轮实际范围见 Release 随附验收报告。
 
 [正向试用 Issue 1](https://github.com/AdolphKevin/team-workflow/issues/1)：Codex 完成整数示例，Cursor 在新的检出目录与新会话中从平台交接、CS 和原文补齐负整数示例。Cursor 正确说明目标、负责人、版本、验证范围和下一步，重跑两个文档命令，延续同一 CS 编号至 revision 2，未新增卡片。首次核查因未共享改动拒绝完成；协调者审查、提交后重新生成交接，并在新提交 `63b71b2bddbd1a4a853167d816c02a117e115b92` 上重做审查，第三版交付四层均通过。
 
-Codex 首段使用候选版较早的包，随后两端统一到上述包；反向试用使用统一后的包。最终检查又补充了审查的完整需求版本绑定：更新交接不能使旧规格的审查重新生效；已新增对应回归，第二版材料不改变语义。Codex 隔离会话未获 Git 写入能力，提交与发布由已获授权的协调者完成，这一边界在平台证据中明确记录。工具之间没有转交聊天内容。
+Codex 首段使用候选版较早的包，随后两端统一到上述包。反向试用在明确的交接边界固定到已发布版本，新 Codex 会话采用 `fcf2c90`；没有自动切换正在执行的会话。更新交接不能使旧规格的审查重新生效，第二版材料不改变语义。Codex 隔离会话未获 Git 写入能力，提交与发布由已获授权的协调者完成，这一边界在平台证据中明确记录。工具之间没有转交聊天内容。
+
+[反向试用 Issue 2](https://github.com/AdolphKevin/team-workflow/issues/2)也已完成：Cursor 写零加法示例，Codex 从新检出接续并实际观察到布尔参数 TypeError，同一 CS 编号最终为 revision 3，无新增卡片。Codex 的命令行联网受限时使用现有 GitHub 连接器读取正文与评论，自动核查缺口如实保留；协调者共享提交后完成最终在线核查。两个方向最终核查均使用发布的 `fcf2c90`，四层通过：[正向](https://github.com/AdolphKevin/team-workflow/issues/1#issuecomment-6093460957)、[反向](https://github.com/AdolphKevin/team-workflow/issues/2#issuecomment-6093461126)。
+
+候选标签与安装包固定不变；本节在发布后补充完整试用结果。最终源码在 Python 3.10.22、3.13.16 各 74 项回归通过，两份原始报告均已导入并随 [Release](https://github.com/AdolphKevin/team-workflow/releases/tag/v0.4.0-rc.1) 归档；发行 ZIP 的 74 个文件与两端安装目录一致，未强制重载用户的 Cursor 业务窗口。完整环境与范围见发行随附验收报告。
 
 ### 发布边界
 
