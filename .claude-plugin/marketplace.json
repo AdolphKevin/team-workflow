@@ -1,0 +1,14 @@
+{
+  "name": "team-workflow",
+  "owner": {
+    "name": "AdolphKevin"
+  },
+  "plugins": [
+    {
+      "name": "team-workflow",
+      "description": "基于已初始化的独立 CS 复用 MATT 开发方法，提供按需团队协作与交付工具。",
+      "category": "productivity",
+      "source": "./"
+    }
+  ]
+}

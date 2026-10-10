@@ -25,6 +25,14 @@ def check(root=ROOT):
     assert len(catalog['plugins']) == 1
     assert catalog['plugins'][0]['name'] == manifest['name']
     assert catalog['plugins'][0]['source'] == {'source': 'local', 'path': './'}
+    claude_manifest = json.loads((root / '.claude-plugin/plugin.json').read_text())
+    assert claude_manifest['name'] == manifest['name'] and claude_manifest['version'] == version
+    assert claude_manifest['description'] == manifest['description']
+    claude_catalog = json.loads((root / '.claude-plugin/marketplace.json').read_text())
+    assert claude_catalog['name'] == 'team-workflow'
+    assert len(claude_catalog['plugins']) == 1
+    assert claude_catalog['plugins'][0]['name'] == manifest['name']
+    assert claude_catalog['plugins'][0]['source'] == './'
     for required in ('LICENSE', 'licenses/MATT-MIT.txt', 'README.md'):
         assert (root / required).is_file(), required
     lock = json.loads((root / 'upstream/matt.lock.json').read_text())
@@ -44,7 +52,7 @@ def check(root=ROOT):
         for row in lock['files']:
             assert sha(temp / row['path']) == row['upstream_sha256'], row['source']
     files = [p for p in root.rglob('*') if p.is_file() and not any(
-        name in p.relative_to(root).parts for name in ('.git', '.codestable', '.team-workflow', '__pycache__', 'dist'))]
+        name in p.relative_to(root).parts for name in ('.git', '.claude', '.codestable', '.team-workflow', '__pycache__', 'dist'))]
     for path in files:
         assert not path.is_symlink(), f'symlink in release source: {path.name}'
         if path.suffix == '.py':

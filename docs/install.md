@@ -1,6 +1,6 @@
 # 安装与升级
 
-Codex 与 Cursor 使用同一个 `plugin.json` 和完整 `skills/` 目录。两端不维护独立实现。发行 ZIP 包含方法入口、MATT 方法、可选团队工具、适配补丁、许可和说明；业务配置与知识不放入发行包。
+Codex、Cursor 与 Claude Code 使用同一个完整 `skills/` 目录。Codex 与 Cursor 读取根目录 `plugin.json`，Claude Code 读取 `.claude-plugin/plugin.json`；两份清单只声明入口，名称、版本和描述保持一致，由 `scripts/check_release.py` 核对。各端不维护独立实现。发行 ZIP 包含方法入口、MATT 方法、可选团队工具、适配补丁、许可和说明；业务配置与知识不放入发行包。
 
 ## Codex
 
@@ -12,6 +12,17 @@ codex plugin add team-workflow@team-workflow
 ```
 
 在新会话中使用 `$team-workflow`。如果客户端尚未支持这些命令，先更新客户端；也可以通过客户端的插件来源界面登记同一个 Git 仓库和版本。仓库中的 `.agents/plugins/marketplace.json` 是目录入口，根目录的 `plugin.json` 是插件入口。格式依据 [Codex 官方插件文档](https://developers.openai.com/plugins/build/plugins)。
+
+## Claude Code
+
+在 Claude Code 中登记本仓作为插件目录，再安装插件：
+
+```bash
+claude plugin marketplace add AdolphKevin/team-workflow
+claude plugin install team-workflow@team-workflow
+```
+
+在新会话中使用 `/team-workflow`，或直接调用 `/matt-implement` 等各个 MATT 技能。仓库中的 `.claude-plugin/marketplace.json` 是目录入口，`.claude-plugin/plugin.json` 是插件入口，Claude Code 自动发现插件根目录下的 `skills/`。本地试用可以不登记目录，直接以 `claude --plugin-dir <仓库目录>` 启动。固定版本时在 `marketplace add` 后用 `claude plugin marketplace update` 跟随目录更新；升级插件用 `claude plugin update team-workflow@team-workflow`。格式依据 [Claude Code 插件文档](https://code.claude.com/docs/en/plugins)。
 
 ## Cursor
 
