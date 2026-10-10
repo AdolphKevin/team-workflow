@@ -1,5 +1,5 @@
 interface:
-  display_name: "Retro"
-  short_description: "Conduct a retrospective on a coding session."
+  display_name: "Agent Environment Retro"
+  short_description: "Review agent navigation, instructions, tools and checks."
 policy:
   allow_implicit_invocation: false

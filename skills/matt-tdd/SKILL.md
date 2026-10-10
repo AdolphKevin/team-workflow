@@ -3,7 +3,7 @@ name: matt-tdd
 description: Test-driven development. Use when the user wants to build features or fix bugs test-first, mentions "red-green-refactor", or wants integration tests.
 ---
 
-Before following this method, read the [team integration rules](../team-workflow/references/matt-integration.md). They define the single CS knowledge entry, document ownership, verification and authorization boundaries.
+Before using this method, read the [CS integration rules](../team-workflow/references/matt-integration.md) for prerequisites and the shared knowledge entry.
 
 
 # Test-Driven Development

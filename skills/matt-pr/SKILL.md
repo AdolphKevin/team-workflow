@@ -9,7 +9,7 @@ metadata:
     url: "https://github.com/humanlayer/skills/blob/main/plugins/show-me/skills/show-me/SKILL.md"
 ---
 
-Before following this method, read the [team integration rules](../team-workflow/references/matt-integration.md). They define the single CS knowledge entry, document ownership, verification and authorization boundaries.
+Before using this method, read the [CS integration rules](../team-workflow/references/matt-integration.md) for prerequisites and the shared knowledge entry.
 
 
 Use this template for writing the PR body:

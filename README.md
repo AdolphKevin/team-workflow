@@ -1,30 +1,32 @@
 # Team Workflow
 
-团队共用开发标准，个人按任务选择开发方式。独立的技能仓库集中分发流程和工具，业务项目只保存配置、原文档、测试和经验。
+本仓集中分发直接复用的 MATT 开发方法和可选团队工具。使用技能前，CS 已安装且项目已完成 CS 知识初始化；MATT 负责开发方法，CS 统一负责项目知识的读取与沉淀。
 
-任务开始通过 CS 读取项目知识，需求和协作信息沿用项目任务平台。按需要选择 MATT 方法，在交接时保留下一步和验证范围，交付时核对本地或持续集成证据并完成知识回写。成员可以使用不同模型、工具和开发方法。
+`team-workflow` 主技能按当前目标选择方法，也可以直接调用各个 MATT 技能。普通任务结束由 CS 完成知识记录。环境复盘和 CS 使用分析按需调用，不进入固定收尾流程。项目明确采用时，再启用交接、验证结果核对和跨仓交付工具。
 
 | 职责 | 唯一维护位置 |
 | --- | --- |
 | 开发方法 | 本仓直接复用的 15 个 MATT 技能及原配套文件 |
-| 工作流与检查工具 | 本仓 `skills/team-workflow` |
+| 方法选择与可选团队工具 | 本仓 `skills/team-workflow` |
 | 术语、架构决策、项目规则 | 业务仓已有 GLOSSARY、ADR、AGENTS 等原文 |
-| 知识检索入口 | 独立 CS 的 `brief` 与 `documents read` |
+| 知识读取与沉淀规则 | 独立 CS 及其开发方法组合约定 |
 | 进行中的需求、职责、依赖和交接 | 项目任务平台，首批支持 GitHub Issues |
 | 任务结果、引用和新增经验 | 业务仓 `.codestable`，不复制原文正文 |
 | 实际业务验证 | 业务仓的命令、测试和必要环境 |
 
 按[安装与升级](docs/install.md)将同一插件安装到 Codex 或 Cursor，在新会话中使用 `$team-workflow` 或 `/team-workflow`。`plugin.json` 是插件入口，`skills/` 是完整技能集合；也可将这些技能作为一组安装，保留同级目录关系。不要只复制主技能，否则 MATT 配套方法无法定位。
 
-CS 独立安装，测试版本及源码身份见 [依赖锁定](dependencies.json)。通过已安装技能发现 CS 路径，再传给 `--cs-skill` 或 `TEAM_WORKFLOW_CS_SKILL`。本仓不携带 CS 副本，不修改全局技能目录。
+CS 独立安装，测试版本及源码身份见 [依赖锁定](dependencies.json)。各方法遵循[CS 接入约定](skills/team-workflow/references/matt-integration.md)。使用可选工具时，通过已安装技能发现 CS 路径，再传给 `--cs-skill` 或 `TEAM_WORKFLOW_CS_SKILL`。本仓不携带 CS 副本，不修改全局技能目录。
 
-当前锁定 CS 2.1.0 的已公开提交；其主分支合并仍在[独立变更](https://github.com/AdolphKevin/codestable-compact/pull/1)中审查。使用锁定提交安装，不以 CS 主分支的旧版代替。
+当前源码锁定包含方法组合约定的 CS 2.1.0 已公开提交。远端获取的 CS 技能与本地联合试用副本逐文件一致；依赖获取、接口复验和实际范围见[验证记录](docs/validation.md)。
+
+项目需要团队工具时，运行配置检查：
 
 ```bash
 python3 <team-workflow技能目录>/scripts/workflow.py project --root <项目目录> --cs-skill <CS技能目录>
 ```
 
-项目接入见[接入与升级](skills/team-workflow/references/onboarding.md)，命令见[工具约定](skills/team-workflow/references/contracts.md)。项目保留 `.team-workflow.json`、简短 AGENTS 入口和可选 CS 文档登记；升级通用工具只更新共享插件。原有检查、卡片编号和历史继续保留，普通技能升级不需要重建知识库。
+可选工具的使用见[团队协作与交付](skills/team-workflow/references/team-delivery.md)。采用工具的项目保留 `.team-workflow.json` 和必要运行材料；普通 MATT 调用无需这些配置。升级通用工具只更新共享插件，原有检查、卡片编号和历史继续保留，普通技能升级不需要重建知识库。
 
 MATT 基于 [mattpocock/skills](https://github.com/mattpocock/skills)，固定版本 1.3.1，保留 MIT 许可。技能正文及模板直接复用，适配差异可独立查看和核验，见[来源与更新](docs/upstream.md)。
 

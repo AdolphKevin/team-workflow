@@ -3,14 +3,14 @@ name: matt-to-tickets
 description: Break a plan, spec, or the current conversation into a set of tracer-bullet tickets, each declaring its blocking edges, published to the configured tracker (edges as text in one file per ticket locally, or native blocking links on a real tracker).
 ---
 
-Before following this method, read the [team integration rules](../team-workflow/references/matt-integration.md). They define the single CS knowledge entry, document ownership, verification and authorization boundaries.
+Before using this method, read the [CS integration rules](../team-workflow/references/matt-integration.md) for prerequisites and the shared knowledge entry.
 
 
 # To Tickets
 
 Break a plan, spec, or conversation into a set of **tickets**: tracer-bullet vertical slices, each declaring the tickets that **block** it.
 
-Use the project tracker and labels already configured. If absent, retain a local task draft; see the team-workflow onboarding guide.
+Use the project tracker and labels already configured. If absent, retain a local task draft.
 
 ## Process
 

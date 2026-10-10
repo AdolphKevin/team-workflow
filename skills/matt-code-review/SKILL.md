@@ -3,7 +3,7 @@ name: matt-code-review
 description: "Review the changes since a fixed point (commit, branch, tag, or merge-base) along two axes: Standards (does the code follow this repo's documented coding standards?) and Spec (does the code match what the originating issue/spec asked for?). Reports both axes separately; independent reviewers are optional. Use when the user wants to review a branch, a PR, work-in-progress changes, or asks to \"review since X\"."
 ---
 
-Before following this method, read the [team integration rules](../team-workflow/references/matt-integration.md). They define the single CS knowledge entry, document ownership, verification and authorization boundaries.
+Before using this method, read the [CS integration rules](../team-workflow/references/matt-integration.md) for prerequisites and the shared knowledge entry.
 
 
 Two-axis review of the final workspace against the fixed base in the accepted task:
@@ -13,7 +13,7 @@ Two-axis review of the final workspace against the fixed base in the accepted ta
 
 Review both axes separately. Use independent subagents when authorized and useful; otherwise keep distinct evidence and conclusions in the current agent.
 
-Use the project tracker and labels already configured. If absent, retain a local task draft; see the team-workflow onboarding guide.
+Use the accepted user goal and the project's existing requirements; a separate task platform is optional.
 
 ## Process
 
@@ -21,7 +21,7 @@ Use the project tracker and labels already configured. If absent, retain a local
 
 Use the task's full base commit or the user-supplied base. Resolve it before reviewing; ask only if no base can be established from the accepted task.
 
-Capture `git diff <fixed-point>` to include committed, staged and unstaged changes. Enumerate `git ls-files --others --exclude-standard` and read new files too. Use the team-workflow workspace binding; a committed diff alone does not cover the review.
+Capture `git diff <fixed-point>` to include committed, staged and unstaged changes. Enumerate `git ls-files --others --exclude-standard` and read new files too; a committed diff alone does not cover the review.
 
 Before going further, confirm the fixed point resolves (`git rev-parse <fixed-point>`) and the diff is non-empty. A bad ref fails here. Include new files before deciding the change is empty.
 
@@ -74,7 +74,7 @@ When delegated, issue both reviews independently and aggregate their reports. Wh
 - The path or fetched contents of the spec.
 - The brief: "Report: (a) requirements the spec asked for that are missing or partial; (b) behaviour in the diff that wasn't asked for (scope creep); (c) requirements that look implemented but where the implementation looks wrong. Quote the spec line for each finding. Under 400 words."
 
-If requirements are missing, mark the Spec result incomplete. Do not produce a complete team-workflow review.
+If requirements are missing, mark the Spec result incomplete.
 
 ### 5. Aggregate
 

@@ -1,6 +1,6 @@
 # 安装与升级
 
-Codex 与 Cursor 使用同一个 `plugin.json` 和完整 `skills/` 目录。两端不维护独立实现。发行 ZIP 包含工作流、MATT 方法、适配补丁、许可和说明；业务配置与知识不放入发行包。
+Codex 与 Cursor 使用同一个 `plugin.json` 和完整 `skills/` 目录。两端不维护独立实现。发行 ZIP 包含方法入口、MATT 方法、可选团队工具、适配补丁、许可和说明；业务配置与知识不放入发行包。
 
 ## Codex
 
@@ -21,9 +21,11 @@ codex plugin add team-workflow@team-workflow
 
 ## CS 与项目接入
 
-CS 独立安装，版本和源码提交固定在 [dependencies.json](../dependencies.json)。0.4 候选版使用 CS 2.1.0、知识格式 4；依赖的提交已公开，合并状态见 [CS 变更](https://github.com/AdolphKevin/codestable-compact/pull/1)。将该提交中的 `skills/cs` 目录作为 `--cs-skill`，或设置 `TEAM_WORKFLOW_CS_SKILL`。不要用旧版全局 CS 代替锁定版本。
+使用本包任何开发技能前，先独立安装 CS，并按 CS 自身要求完成项目知识初始化。仅建立空目录不算完成。缺少前提时，本包报告缺口，不代为安装、初始化或重建。
 
-运行主技能提供的 `project` 命令检查项目配置和 CS。已有第二版 `.team-workflow.json` 继续可读，旧执行记录按原范围解释；新协作记录和可移植结果使用第三版，不要求逐仓重写配置。具体命令见[工具约定](../skills/team-workflow/references/contracts.md)。
+工具接口测试的版本和源码提交固定在 [dependencies.json](../dependencies.json)，当前为 CS 2.1.0、知识格式 4。当前源码已锁定包含“开发方法与知识归属”说明的可获取提交，并与方法包联合验证。安装已发布版本时使用该版本自己的依赖锁定；源码提交不代表已生成新的发行标签或安装包。
+
+普通 MATT 调用无需 `.team-workflow.json`。项目明确采用团队工具时，再按[接入指南](../skills/team-workflow/references/onboarding.md)配置，将发现的 CS 目录传给 `--cs-skill` 或 `TEAM_WORKFLOW_CS_SKILL`，用 `project` 检查配置。已有第二版配置和材料保持原语义，新协作记录及可移植结果使用第三版；具体命令见[工具约定](../skills/team-workflow/references/contracts.md)。
 
 ## 版本切换
 

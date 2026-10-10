@@ -3,12 +3,12 @@ name: matt-implement-spec
 description: "Implement the result of /to-spec and /to-tickets in code."
 ---
 
-Before following this method, read the [team integration rules](../team-workflow/references/matt-integration.md). They define the single CS knowledge entry, document ownership, verification and authorization boundaries.
+Before using this method, read the [CS integration rules](../team-workflow/references/matt-integration.md) for prerequisites and the shared knowledge entry.
 
 
 You have been provided a spec. This spec should have tickets associated with it, describing how to implement the spec.
 
-Use the project tracker and labels already configured. If absent, retain a local task draft; see the team-workflow onboarding guide.
+Use the project tracker and labels already configured. If absent, retain a local task draft.
 
 The goal is the entire spec implemented on a single **integration branch**, with every ticket resolved the way the issue tracker closes work.
 
@@ -37,6 +37,6 @@ Use subagents and worktrees only when authorized and useful. Otherwise execute t
 
 7. Once all tickets are complete, call the bundled skill `matt-code-review` on the integration branch. Fix all issues raised by the code review in a single **implementer subagent**.
 
-8. Complete the CS task record and team-workflow verification. Report the branch and unresolved acceptance. Change external issue or PR status only within existing authorization.
+8. Finish the logical task under the shared CS integration rules. Report the branch and unresolved acceptance. Change external issue or PR status only within existing authorization.
 
 9. Clean up only task-owned temporary worktrees after preserving their work.

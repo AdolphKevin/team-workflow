@@ -3,14 +3,14 @@ name: matt-domain-modeling
 description: Build and sharpen a project's domain model. Use when discussing codebase terminology, writing or editing a GLOSSARY.md, or recording or editing an ADR.
 ---
 
-Before following this method, read the [team integration rules](../team-workflow/references/matt-integration.md). They define the single CS knowledge entry, document ownership, verification and authorization boundaries.
+Before using this method, read the [CS integration rules](../team-workflow/references/matt-integration.md) for prerequisites and the shared knowledge entry.
 
 
 # Domain Modeling
 
 Actively build and sharpen the project's domain model as you design. This is the *active* discipline: challenging terms, inventing edge-case scenarios, and writing the glossary and decisions down the moment they crystallise. (Merely *reading* `GLOSSARY.md` for vocabulary is not this skill: that's a one-line habit any skill can do. This skill is for when you're changing the model, not just consuming it.)
 
-Read existing definitions through CS. Edit the registered original file when a term or decision changes; register a new original source in `wiki.documents` when needed. CS task notes record the change and references; source bodies and decision rationale stay only in the original documents.
+Use the original glossary and decision documents returned by CS. Apply CS's content-ownership rules when editing or creating these documents; retain the formats below.
 
 ## File structure
 

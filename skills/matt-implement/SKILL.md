@@ -3,7 +3,7 @@ name: matt-implement
 description: "Implement a piece of work based on a spec or set of tickets."
 ---
 
-Before following this method, read the [team integration rules](../team-workflow/references/matt-integration.md). They define the single CS knowledge entry, document ownership, verification and authorization boundaries.
+Before using this method, read the [CS integration rules](../team-workflow/references/matt-integration.md) for prerequisites and the shared knowledge entry.
 
 
 Implement the work described by the user in the spec or tickets.
@@ -12,8 +12,8 @@ If the user passes a ticket reference, fetch it from the issue tracker and state
 
 Use the bundled `matt-tdd` method when test-first development fits the task, at existing or agreed public boundaries.
 
-Run the appropriate focused checks, then the project-required wider checks for the actual risk. Record real results with team-workflow.
+Run the appropriate focused checks, then the project-required wider checks for the actual risk. Report the actual results.
 
 Once done, call the bundled skill `matt-code-review` to review the work.
 
-Complete CS task writeback and team-workflow verification. Commit only when requested or already authorized.
+Finish the logical task under the shared CS integration rules. Commit only when requested or already authorized.

@@ -8,13 +8,13 @@
 -disable-model-invocation: true
  ---
 +
-+Before following this method, read the [team integration rules](../team-workflow/references/matt-integration.md). They define the single CS knowledge entry, document ownership, verification and authorization boundaries.
++Before using this method, read the [CS integration rules](../team-workflow/references/matt-integration.md) for prerequisites and the shared knowledge entry.
 +
  
  This skill takes the current conversation context and codebase understanding and produces a spec. Do NOT interview the user; just synthesize what you already know.
  
 -The issue tracker and triage label vocabulary should have been provided to you. If not, tell the user to run `/setup-matt-pocock-skills`.
-+Use the project tracker and labels already configured. If absent, retain a local task draft; see the team-workflow onboarding guide.
++Use the project tracker and labels already configured. If absent, retain a local task draft.
  
  ## Process
  
@@ -58,7 +58,7 @@
 -disable-model-invocation: true
  ---
 +
-+Before following this method, read the [team integration rules](../team-workflow/references/matt-integration.md). They define the single CS knowledge entry, document ownership, verification and authorization boundaries.
++Before using this method, read the [CS integration rules](../team-workflow/references/matt-integration.md) for prerequisites and the shared knowledge entry.
 +
  
  # To Tickets
@@ -66,7 +66,7 @@
  Break a plan, spec, or conversation into a set of **tickets**: tracer-bullet vertical slices, each declaring the tickets that **block** it.
  
 -The issue tracker and triage label vocabulary should have been provided to you. If not, tell the user to run `/setup-matt-pocock-skills`.
-+Use the project tracker and labels already configured. If absent, retain a local task draft; see the team-workflow onboarding guide.
++Use the project tracker and labels already configured. If absent, retain a local task draft.
  
  ## Process
  
@@ -103,7 +103,7 @@
 -disable-model-invocation: true
  ---
 +
-+Before following this method, read the [team integration rules](../team-workflow/references/matt-integration.md). They define the single CS knowledge entry, document ownership, verification and authorization boundaries.
++Before using this method, read the [CS integration rules](../team-workflow/references/matt-integration.md) for prerequisites and the shared knowledge entry.
 +
  
  Implement the work described by the user in the spec or tickets.
@@ -114,13 +114,13 @@
 +Use the bundled `matt-tdd` method when test-first development fits the task, at existing or agreed public boundaries.
  
 -Run typechecking regularly, single test files regularly, and the full test suite once at the end.
-+Run the appropriate focused checks, then the project-required wider checks for the actual risk. Record real results with team-workflow.
++Run the appropriate focused checks, then the project-required wider checks for the actual risk. Report the actual results.
  
 -Once done, call the Skill tool with "code-review" to review the work.
 +Once done, call the bundled skill `matt-code-review` to review the work.
  
 -Commit your work to the current branch.
-+Complete CS task writeback and team-workflow verification. Commit only when requested or already authorized.
++Finish the logical task under the shared CS integration rules. Commit only when requested or already authorized.
 --- a/skills/matt-implement-spec/SKILL.md
 +++ b/skills/matt-implement-spec/SKILL.md
 @@ -1,12 +1,14 @@
@@ -131,13 +131,13 @@
 -disable-model-invocation: true
  ---
 +
-+Before following this method, read the [team integration rules](../team-workflow/references/matt-integration.md). They define the single CS knowledge entry, document ownership, verification and authorization boundaries.
++Before using this method, read the [CS integration rules](../team-workflow/references/matt-integration.md) for prerequisites and the shared knowledge entry.
 +
  
  You have been provided a spec. This spec should have tickets associated with it, describing how to implement the spec.
  
 -The issue tracker should have been provided to you. If not, tell the user to run `/setup-matt-pocock-skills`.
-+Use the project tracker and labels already configured. If absent, retain a local task draft; see the team-workflow onboarding guide.
++Use the project tracker and labels already configured. If absent, retain a local task draft.
  
  The goal is the entire spec implemented on a single **integration branch**, with every ticket resolved the way the issue tracker closes work.
  
@@ -172,7 +172,7 @@
 +7. Once all tickets are complete, call the bundled skill `matt-code-review` on the integration branch. Fix all issues raised by the code review in a single **implementer subagent**.
  
 -8. If a draft PR exists, mark it ready for review. Otherwise, resolve each ticket the way the issue tracker closes work, and report the integration branch.
-+8. Complete the CS task record and team-workflow verification. Report the branch and unresolved acceptance. Change external issue or PR status only within existing authorization.
++8. Finish the logical task under the shared CS integration rules. Report the branch and unresolved acceptance. Change external issue or PR status only within existing authorization.
  
 -9. Clean up all **implementer subagent** worktrees.
 +9. Clean up only task-owned temporary worktrees after preserving their work.
@@ -185,7 +185,7 @@
  description: Diagnosis loop for hard bugs and performance regressions. Use when the user says "diagnose"/"debug this", or reports something broken/throwing/failing/slow.
  ---
 +
-+Before following this method, read the [team integration rules](../team-workflow/references/matt-integration.md). They define the single CS knowledge entry, document ownership, verification and authorization boundaries.
++Before using this method, read the [CS integration rules](../team-workflow/references/matt-integration.md) for prerequisites and the shared knowledge entry.
 +
  
  # Diagnosing Bugs
@@ -206,7 +206,7 @@
  description: Test-driven development. Use when the user wants to build features or fix bugs test-first, mentions "red-green-refactor", or wants integration tests.
  ---
 +
-+Before following this method, read the [team integration rules](../team-workflow/references/matt-integration.md). They define the single CS knowledge entry, document ownership, verification and authorization boundaries.
++Before using this method, read the [CS integration rules](../team-workflow/references/matt-integration.md) for prerequisites and the shared knowledge entry.
 +
  
  # Test-Driven Development
@@ -253,7 +253,7 @@
  description: Shared vocabulary for designing deep modules. Use when the user wants to design or improve a module's interface, find deepening opportunities, decide where a seam goes, make code more testable or AI-navigable, or when another skill needs the deep-module vocabulary.
  ---
 +
-+Before following this method, read the [team integration rules](../team-workflow/references/matt-integration.md). They define the single CS knowledge entry, document ownership, verification and authorization boundaries.
++Before using this method, read the [CS integration rules](../team-workflow/references/matt-integration.md) for prerequisites and the shared knowledge entry.
 +
  
  # Codebase Design
@@ -267,14 +267,14 @@
  description: Build and sharpen a project's domain model. Use when discussing codebase terminology, writing or editing a GLOSSARY.md, or recording or editing an ADR.
  ---
 +
-+Before following this method, read the [team integration rules](../team-workflow/references/matt-integration.md). They define the single CS knowledge entry, document ownership, verification and authorization boundaries.
++Before using this method, read the [CS integration rules](../team-workflow/references/matt-integration.md) for prerequisites and the shared knowledge entry.
 +
  
  # Domain Modeling
  
  Actively build and sharpen the project's domain model as you design. This is the *active* discipline: challenging terms, inventing edge-case scenarios, and writing the glossary and decisions down the moment they crystallise. (Merely *reading* `GLOSSARY.md` for vocabulary is not this skill: that's a one-line habit any skill can do. This skill is for when you're changing the model, not just consuming it.)
 +
-+Read existing definitions through CS. Edit the registered original file when a term or decision changes; register a new original source in `wiki.documents` when needed. CS task notes record the change and references; source bodies and decision rationale stay only in the original documents.
++Use the original glossary and decision documents returned by CS. Apply CS's content-ownership rules when editing or creating these documents; retain the formats below.
  
  ## File structure
  
@@ -289,7 +289,7 @@
  ---
  
 -Two-axis review of the diff between `HEAD` and a fixed point the user supplies:
-+Before following this method, read the [team integration rules](../team-workflow/references/matt-integration.md). They define the single CS knowledge entry, document ownership, verification and authorization boundaries.
++Before using this method, read the [CS integration rules](../team-workflow/references/matt-integration.md) for prerequisites and the shared knowledge entry.
 +
 +
 +Two-axis review of the final workspace against the fixed base in the accepted task:
@@ -301,7 +301,7 @@
 +Review both axes separately. Use independent subagents when authorized and useful; otherwise keep distinct evidence and conclusions in the current agent.
  
 -The issue tracker should have been provided to you. If not, tell the user to run `/setup-matt-pocock-skills`.
-+Use the project tracker and labels already configured. If absent, retain a local task draft; see the team-workflow onboarding guide.
++Use the accepted user goal and the project's existing requirements; a separate task platform is optional.
  
  ## Process
  
@@ -311,7 +311,7 @@
 +Use the task's full base commit or the user-supplied base. Resolve it before reviewing; ask only if no base can be established from the accepted task.
  
 -Capture the diff command once: `git diff <fixed-point>...HEAD` (three-dot, so the comparison is against the merge-base). Also note the list of commits via `git log <fixed-point>..HEAD --oneline`.
-+Capture `git diff <fixed-point>` to include committed, staged and unstaged changes. Enumerate `git ls-files --others --exclude-standard` and read new files too. Use the team-workflow workspace binding; a committed diff alone does not cover the review.
++Capture `git diff <fixed-point>` to include committed, staged and unstaged changes. Enumerate `git ls-files --others --exclude-standard` and read new files too; a committed diff alone does not cover the review.
  
 -Before going further, confirm the fixed point resolves (`git rev-parse <fixed-point>`) and the diff is non-empty. A bad ref or empty diff should fail here, not inside two parallel sub-agents.
 +Before going further, confirm the fixed point resolves (`git rev-parse <fixed-point>`) and the diff is non-empty. A bad ref fails here. Include new files before deciding the change is empty.
@@ -344,47 +344,82 @@
  - The brief: "Report: (a) requirements the spec asked for that are missing or partial; (b) behaviour in the diff that wasn't asked for (scope creep); (c) requirements that look implemented but where the implementation looks wrong. Quote the spec line for each finding. Under 400 words."
  
 -If the spec is missing, skip the Spec sub-agent and note this in the final report.
-+If requirements are missing, mark the Spec result incomplete. Do not produce a complete team-workflow review.
++If requirements are missing, mark the Spec result incomplete.
  
  ### 5. Aggregate
  
 --- a/skills/matt-retro/SKILL.md
 +++ b/skills/matt-retro/SKILL.md
-@@ -1,14 +1,16 @@
+@@ -1,44 +1,26 @@
  ---
 -name: retro
-+name: matt-retro
- description: "Conduct a retrospective on a coding session."
+-description: "Conduct a retrospective on a coding session."
 -disable-model-invocation: true
++name: matt-retro
++description: "Review a coding session to improve the agent's working environment when an environment retrospective or improvement is requested. Produces suggestions, not a code review or a routine task-completion step."
  ---
-+
-+Before following this method, read the [team integration rules](../team-workflow/references/matt-integration.md). They define the single CS knowledge entry, document ownership, verification and authorization boundaries.
-+
  
- The user has asked for a **retrospective**. You are suggesting improvements to the coding agent's **environment** to improve future runs.
+-The user has asked for a **retrospective**. You are suggesting improvements to the coding agent's **environment** to improve future runs.
++Before using this method, read the [CS integration rules](../team-workflow/references/matt-integration.md) for prerequisites and the shared knowledge entry.
  
- ## Steps
+-## Steps
++Suggest improvements to the coding agent's **environment** from the session the user identifies; default to the current session. Focus on the environment goal already in the task.
  
 -1. Call the Skill tool with `writing-for-agents` for the writing style guide.
-+1. Call the bundled skill `matt-writing-for-agents` for the writing style guide.
++## Inspect the session
  
- 2. Read the primary sources for the session the user specifies. This may mean searching through session logs on this machine. If the user doesn't specify a session, default to the current one.
+-2. Read the primary sources for the session the user specifies. This may mean searching through session logs on this machine. If the user doesn't specify a session, default to the current one.
++Read the available primary evidence for that session and the relevant environment files. Distinguish observed problems from hypotheses and unavailable history; a missing transcript does not prove a step was skipped.
  
-@@ -22,7 +24,7 @@
- - **No-ops**: look for instructions in steering files that don't modify the agent's behavior. _Use when_ the steering files are large and unwieldy.
- - **Information access**: look for opportunities to increase the agent's access to information. Teeing dev server logs, readonly access to third-party services. _Use when_ a crucial piece of information was not available to the agent.
+-3. Look for candidates for improvement in these categories.
++Look for improvements supported by that evidence:
+ 
+-- **Navigation**: how easy was it for the agent to find the right files? Are there hidden dependencies between files? Would a **navigation pointer** make it easier? _Use when_ the session took a long time to find a piece of information.
+-- **Automated checks**: are there automated checks that could catch errors the agent made? Linting, typing, tests, filesystem linters? Read the repo's own check command first (its `package.json`/build-tool `lint`/`check` scripts, its CI workflow), so a check that already exists but sits unwired or silently broken is the finding, not a reinvention. A repo with no **guardrail** (no pre-commit hook and no CI job running its lint/typecheck/test command) is itself a finding: an un-linted repo is a standing missed opportunity, not a neutral default. _Use when_ the agent made a mistake an automated check could have caught, or the repo has no guardrail at all.
+-- **Coding standards**: should the **reviewer agent** be given a new rule to enforce? Should an existing rule be removed or clarified? Classify the violation first: a **mechanical** one (a fixed syntactic pattern, a banned API, an import shape, a file-location rule) gets a deterministic check, full stop: a custom rule in the repo's own linter, a new pre-commit hook, or a new CI job, whichever the repo's language and existing guardrail make cheapest. Default to building the check over writing the rule. Reserve `CODING_STANDARDS.md` for genuine **judgement calls** (cross-file consistency, "matches the surrounding style," anything no guardrail could ever substitute for). _Use when_ the reviewer agent failed to catch a mistake.
+-- **Global AGENTS.md**: are there any steering instructions that should be moved to coding standards (or automated checks) instead? _Use when_ the AGENTS.md file is particularly large - in the repo OR the user's global scope.
+-- **Tool economy**: did the agent make expensive tool calls that could be streamlined? Is there any custom tooling (CLI's, MCP's) that is particularly token-inefficient? _Use when_ the agent made an expensive tool call.
+-- **No-ops**: look for instructions in steering files that don't modify the agent's behavior. _Use when_ the steering files are large and unwieldy.
+-- **Information access**: look for opportunities to increase the agent's access to information. Teeing dev server logs, readonly access to third-party services. _Use when_ a crucial piece of information was not available to the agent.
++- **Navigation**: repeated searches, hidden dependencies or missing pointers that made the right information hard to find.
++- **Automated checks**: mistakes a deterministic check could catch. Inspect existing commands, hooks and CI first; identify broken or unwired checks before proposing another one. Missing checks can be a finding when tied to the project's work.
++- **Instructions**: conflicting, redundant or ineffective steering in agent instructions and skills. When proposing new instructions, consult the bundled `matt-writing-for-agents` method.
++- **Tool economy**: expensive or repetitive calls that could be reduced without losing needed information.
++- **Information access**: missing logs, documentation or permitted read access that prevented sound decisions.
  
 -4. Present these candidates to the user, in order of severity.
-+4. Present these candidates to the user, in order of severity. Stable project experience belongs in the existing CS task/card model. Reference existing glossary or decision bodies instead of copying them. Changes to agent instructions are proposals until they fall within the authorized task.
++## Present improvements
  
- ## Reference
+-## Reference
++Rank findings by their effect on future work. For each, identify the observed problem, its evidence, the proposed environment change and how to check that the change helps. Say when no supported improvement was found.
  
-@@ -41,4 +43,4 @@
- - `CLAUDE.md`/`AGENTS.md`: these files are pushed to the context window of any agent working in this repo. They should be used incredibly sparingly, usually only for **navigation pointers** to other files.
- - `CODING_STANDARDS.md`: this file is read during review, not implementation. Add **navigation pointers** to docs folders if the standards file gets more than 1,000 lines long.
- - Docs: use docs as references files, pointed to by other files. Look for existing docs before writing new ones.
+-### Implementation vs Review
+-
+-Remember that all work goes through two stages: implementation and review. The implementation agent has the most **context pressure**. They are responsible for exploration, writing code, and debugging failures.
+-
+-The review agent has the least context pressure - it receives a diff, so no exploration needed. It often does not need to write code or debug.
+-
+-This means that the review agent should be responsible for imposing coding standards, not the implementation agent.
+-
+-### Files
+-
+-You have access to several files in the repo:
+-
+-- `CLAUDE.md`/`AGENTS.md`: these files are pushed to the context window of any agent working in this repo. They should be used incredibly sparingly, usually only for **navigation pointers** to other files.
+-- `CODING_STANDARDS.md`: this file is read during review, not implementation. Add **navigation pointers** to docs folders if the standards file gets more than 1,000 lines long.
+-- Docs: use docs as references files, pointed to by other files. Look for existing docs before writing new ones.
 -- Skills: use skills for docs (since their description goes into the agent's context window), or for user-invoked commands. Follow the advice in the `writing-for-agents` skill.
-+- Skills: use skills for docs (since their description goes into the agent's context window), or for user-invoked commands. Follow the advice in the `matt-writing-for-agents` skill.
++The result is a set of recommendations. Implement changes only when they are part of the user's authorized task. This method adds no separate code-review rules or knowledge-maintenance steps.
+--- a/skills/matt-retro/agents/openai.yaml
++++ b/skills/matt-retro/agents/openai.yaml
+@@ -1,5 +1,5 @@
+ interface:
+-  display_name: "Retro"
+-  short_description: "Conduct a retrospective on a coding session."
++  display_name: "Agent Environment Retro"
++  short_description: "Review agent navigation, instructions, tools and checks."
+ policy:
+   allow_implicit_invocation: false
 --- a/skills/matt-grilling/SKILL.md
 +++ b/skills/matt-grilling/SKILL.md
 @@ -1,7 +1,10 @@
@@ -394,7 +429,7 @@
  description: Grill the user relentlessly about a plan, decision, or idea. Use when the user wants to stress-test their thinking, or uses any 'grill' trigger phrases.
  ---
 +
-+Before following this method, read the [team integration rules](../team-workflow/references/matt-integration.md). They define the single CS knowledge entry, document ownership, verification and authorization boundaries.
++Before using this method, read the [CS integration rules](../team-workflow/references/matt-integration.md) for prerequisites and the shared knowledge entry.
 +
  
  Interview the user relentlessly until you reach a shared understanding. Map this as a **design tree**: every decision branches into the decisions that hang off it.
@@ -413,7 +448,7 @@
      url: "https://github.com/humanlayer/skills/blob/main/plugins/show-me/skills/show-me/SKILL.md"
  ---
 +
-+Before following this method, read the [team integration rules](../team-workflow/references/matt-integration.md). They define the single CS knowledge entry, document ownership, verification and authorization boundaries.
++Before using this method, read the [CS integration rules](../team-workflow/references/matt-integration.md) for prerequisites and the shared knowledge entry.
 +
  
  Use this template for writing the PR body:
@@ -436,7 +471,7 @@
  description: Build a throwaway prototype to answer a design question. Use when the user wants to sanity-check whether a state model or logic feels right, or explore what a UI should look like.
  ---
 +
-+Before following this method, read the [team integration rules](../team-workflow/references/matt-integration.md). They define the single CS knowledge entry, document ownership, verification and authorization boundaries.
++Before using this method, read the [CS integration rules](../team-workflow/references/matt-integration.md) for prerequisites and the shared knowledge entry.
 +
  
  # Prototype
@@ -456,14 +491,14 @@
  description: Writing documents for agents. Use when creating or editing skills, or modifying AGENTS.md or CLAUDE.md.
  ---
 +
-+Before following this method, read the [team integration rules](../team-workflow/references/matt-integration.md). They define the single CS knowledge entry, document ownership, verification and authorization boundaries.
++Before using this method, read the [CS integration rules](../team-workflow/references/matt-integration.md) for prerequisites and the shared knowledge entry.
 +
  
  Reference for writing any document an agent consumes: a skill, an `AGENTS.md` / `CLAUDE.md`, a doc reached by a pointer. The packaging differs; the writing does not: the same levers make each one predictable, since the agent takes the same _process_ every run rather than producing the same output.
  
 --- a/skills/matt-research/SKILL.md
 +++ b/skills/matt-research/SKILL.md
-@@ -1,9 +1,12 @@
+@@ -1,12 +1,16 @@
  ---
 -name: research
 +name: matt-research
@@ -471,10 +506,14 @@
  ---
  
 -Spin up a **background agent** to do the research, so you keep working while it reads.
-+Before following this method, read the [team integration rules](../team-workflow/references/matt-integration.md). They define the single CS knowledge entry, document ownership, verification and authorization boundaries.
++Before using this method, read the [CS integration rules](../team-workflow/references/matt-integration.md) for prerequisites and the shared knowledge entry.
 +
 +
 +Research directly, or use an independent background agent when authorized and useful.
  
  Its job:
  
+ 1. Investigate the question against **primary sources** (official docs, source code, specs, first-party APIs), not a secondary write-up of them. Follow every claim back to the source that owns it.
+ 2. Write the findings to a single Markdown file, citing each claim's source.
+ 3. Save it where the repo already keeps such notes; match the existing convention, and if there is none, put it somewhere sensible and say where.
++4. For project findings that need future retrieval, follow CS's content-ownership rules for the existing document.
