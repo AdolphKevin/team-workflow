@@ -25,7 +25,15 @@ jobs:
         with:
           python-version: ${{ matrix.python }}
       - name: Run behavior regressions
-        run: python3 scripts/test.py --junitxml "$RUNNER_TEMP/workflow-tests.xml"
+        id: results
+        run: python3 scripts/ci_result.py
+      - name: Preserve execution-time source and native reports
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: workflow-python-${{ matrix.python }}-attempt-${{ github.run_attempt }}
+          path: ${{ steps.results.outputs.directory }}
+          if-no-files-found: error
+          retention-days: 30
       - name: Verify release source and upstream provenance
         run: python3 scripts/check_release.py
       - name: Fetch the exact independent CS dependency
