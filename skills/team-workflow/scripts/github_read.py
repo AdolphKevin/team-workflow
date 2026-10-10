@@ -2,6 +2,7 @@
 import json
 import re
 import subprocess
+from urllib.parse import quote, unquote
 
 from common import Invalid, require, text
 
@@ -57,6 +58,19 @@ def commit(repo, revision):
 def reachable(url):
     """Resolve only supported stable GitHub references, never an arbitrary URL."""
     text(url)
+    match = re.fullmatch(r'https://github\.com/([A-Za-z0-9_-]+/[A-Za-z0-9_.-]+)/(commit|blob)/([a-f0-9]{40}|[a-f0-9]{64})(?:/([^?#]+))?(?:#L[0-9]+(?:-L[0-9]+)?)?', url)
+    if match:
+        repo, kind, revision, path = match.groups()
+        commit(repo, revision)
+        if kind == 'blob':
+            require(bool(path), 'A source reference needs a file path')
+            path = unquote(path)
+            require(not path.startswith('/') and '..' not in path.split('/') and '\\' not in path, 'Invalid source reference path')
+            result = api(f'repos/{repo}/contents/{quote(path, safe="/")}?ref={revision}')
+            require(isinstance(result, dict) and result.get('type') == 'file', 'Reference is not an accessible file')
+        else:
+            require(path is None, 'Invalid commit reference')
+        return
     match = re.fullmatch(r'https://github\.com/([A-Za-z0-9_-]+/[A-Za-z0-9_.-]+)/(issues|pull)/(\d+)(?:#issuecomment-(\d+))?', url)
     if match:
         repo, kind, number, comment = match.groups()
@@ -71,4 +85,4 @@ def reachable(url):
         repository(repo)
         api(f'repos/{repo}/actions/runs/{run}' + (f'/attempts/{attempt}' if attempt else ''))
         return
-    raise Invalid('Reference needs a supported, accessible GitHub issue, comment, PR or Actions URL')
+    raise Invalid('Reference needs an accessible GitHub issue, comment, PR, Actions run or immutable commit/file URL')

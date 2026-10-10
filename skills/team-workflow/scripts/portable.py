@@ -58,7 +58,7 @@ def source_state(root, profile):
     return {'repositories': repositories, 'files': files}
 
 
-def capture_result(directory, check, row, before, after, environment, started, finished):
+def capture_result(directory, check, row, before, after, environment, started, finished, producer_before, producer_after):
     """Called by the execution runner with snapshots taken around actual execution."""
     artifacts = {}
     for name in ('stdout.txt', 'stderr.txt'):
@@ -70,7 +70,7 @@ def capture_result(directory, check, row, before, after, environment, started, f
         if path.is_file() and not path.is_symlink():
             artifacts[name] = {'path': name, 'sha256': sha(path)}
     record = {'schema_version': 3, 'kind': 'portable-result', 'check': row['id'], 'contract': digest(check),
-              'producer': tool_identity(), 'source_before': before, 'source_after': after,
+              'producer': producer_before, 'producer_after': producer_after, 'source_before': before, 'source_after': after,
               'run_context': ({'repository': os.environ.get('GITHUB_REPOSITORY'),
                                'run_id': os.environ.get('GITHUB_RUN_ID'), 'attempt': os.environ.get('GITHUB_RUN_ATTEMPT'),
                                'job': os.environ.get('GITHUB_JOB')} if os.environ.get('GITHUB_ACTIONS') == 'true' else None),
@@ -81,9 +81,11 @@ def capture_result(directory, check, row, before, after, environment, started, f
 
 
 def validate_result(root, profile, manifest, directory):
-    obj(manifest, {'schema_version', 'kind', 'check', 'contract', 'producer', 'source_before', 'source_after', 'run_context',
+    obj(manifest, {'schema_version', 'kind', 'check', 'contract', 'producer', 'producer_after', 'source_before', 'source_after', 'run_context',
                   'started_at', 'finished_at', 'environment', 'state', 'exit_code', 'artifacts'})
     require(manifest['schema_version'] == 3 and manifest['kind'] == 'portable-result', 'Expected v3 portable result')
+    require(manifest['producer'] == manifest['producer_after'] and isinstance(manifest['producer'], dict)
+            and manifest['producer'], 'Workflow producer changed during execution or is missing')
     key = manifest['check']
     require(key in profile['checks'], 'Unknown imported check')
     check = profile['checks'][key]

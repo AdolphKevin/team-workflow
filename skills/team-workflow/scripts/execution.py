@@ -136,6 +136,7 @@ def run(root, profile, task, selected=None, portable=False):
     required = task_valid(task, profile, root)
     selected = selected if selected is not None else required
     require(set(selected) <= profile['checks'].keys(), 'Unknown selected check')
+    tools_before = tool_identity()
     before = binding(root, profile, task)
     if portable:
         from portable import source_state, capture_result
@@ -184,15 +185,16 @@ def run(root, profile, task, selected=None, portable=False):
                         'state': result['state'], 'exit_code': result['exit_code'], 'seconds': result['seconds'],
                         'cases': cases, 'detail': detail, 'artifacts': artifacts})
     after = binding(root, profile, task)
+    tools_after = tool_identity()
     finished = now()
     if portable:
         portable_after = source_state(root, profile)
         for row in results:
             capture_result(directory / row['id'], profile['checks'][row['id']], row,
-                           portable_before, portable_after, versions, started, finished)
+                           portable_before, portable_after, versions, started, finished, tools_before, tools_after)
     record = {'schema_version': 2, 'kind': 'execution', 'id': run_id, 'project': profile['project'],
-              'task_id': task['id'], 'started_at': started, 'finished_at': finished, 'tools': tool_identity(),
-              'binding': before, 'source_unchanged': before == after, 'environment_versions': versions,
+              'task_id': task['id'], 'started_at': started, 'finished_at': finished, 'tools': tools_before,
+              'binding': before, 'source_unchanged': before == after and tools_before == tools_after, 'environment_versions': versions,
               'required_checks': required, 'results': results}
     write(directory / 'run.json', record)
     return directory / 'run.json', record

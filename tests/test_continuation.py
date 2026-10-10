@@ -138,6 +138,22 @@ class ContinuationCases(unittest.TestCase):
         self.issue['assignees'] = [{'login': 'bob'}]
         self.issue['updated_at'] = '2026-02-01T00:00:00Z'
         self.assertEqual(original, digest(handoffs.task_source(self.issue)))
+        self.issue['body'] += '\nChanged prose acceptance: another required behavior.\n'
+        self.assertNotEqual(original, digest(handoffs.task_source(self.issue)))
+
+    def test_immutable_file_references_and_missing_reports(self):
+        self.prepare()
+        with patch.object(github_read, 'api', side_effect=lambda endpoint, **kw: {'type': 'file'} if '/contents/' in endpoint else self.github(endpoint, **kw)):
+            github_read.reachable('https://github.com/example/project/blob/' + self.task['base'] + '/app.py#L1')
+            github_read.reachable('https://github.com/example/project/commit/' + self.task['base'])
+            with self.assertRaises(Invalid):
+                github_read.reachable('https://github.com/example/project/blob/main/app.py')
+        self.check('print("report missing")', format='junit', report='{output}/absent.xml')
+        path, record = execution.run(self.root, self.profile, self.task, portable=True)
+        self.assertEqual(record['results'][0]['status'], 'incomplete')
+        manifest = read(path.parent / 'unit/result.json')
+        with self.assertRaises(Invalid):
+            portable.validate_result(self.root, self.profile, manifest, path.parent / 'unit')
 
     def archive_result(self):
         self.locator = {'kind': 'github-actions', 'repository': 'example/project', 'run_id': 17,
@@ -242,6 +258,15 @@ class ContinuationCases(unittest.TestCase):
             destination = Path(temp) / 'different-directory'
             shutil.copytree(self.root, destination)
             self.assertEqual(before, portable.source_state(destination, self.profile))
+
+    def test_workflow_upgrade_during_execution_leaves_incomplete_evidence(self):
+        self.prepare()
+        self.check('print("actual command")')
+        with patch.object(execution, 'tool_identity', side_effect=[{'version': 'before'}, {'version': 'after'}]):
+            path, record = execution.run(self.root, self.profile, self.task, portable=True)
+        self.assertFalse(record['source_unchanged'])
+        with self.assertRaisesRegex(Invalid, 'producer changed'):
+            portable.validate_result(self.root, self.profile, read(path.parent / 'unit/result.json'), path.parent / 'unit')
 
     def test_archive_cannot_write_outside_import_directory(self):
         for name in ('../escaped', '/absolute', 'a/../../escaped'):

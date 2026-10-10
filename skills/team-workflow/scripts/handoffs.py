@@ -28,7 +28,9 @@ def task_source(issue):
     require(value['task'].get('id') == issue['html_url'], 'Task ID must be the canonical issue URL')
     if value['parent']:
         github.issue_ref(value['parent'])
-    return value
+    # Prose is part of the platform specification too. Editing it must not
+    # leave a handoff looking current merely because its JSON stayed unchanged.
+    return {**value, 'body_digest': digest(issue.get('body', ''))}
 
 
 def history(issue):
