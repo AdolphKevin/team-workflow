@@ -20,6 +20,8 @@ Use already agreed interfaces and acceptance criteria. Ask only about a material
 
 3. Write the spec using the template below, sized to the actual task. Publish it and apply project labels only when that external action is authorized; otherwise retain a reviewable local draft.
 
+When the [stage flow](../team-workflow/references/stage-flow.md) is enabled, write every point that needs an owner's decision as a decision item in that format (options, recommendation, default if unconfirmed, affected work) for the G1 review, not as prose in Further Notes. Name the entry-level seam (API, RPC or UI entry point) the acceptance tests will drive in Testing Decisions.
+
 <spec-template>
 
 ## Problem Statement

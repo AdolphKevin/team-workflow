@@ -21,6 +21,9 @@ MATT 负责开发方法，项目知识统一交给 CS。普通方法调用无需
 | 审查改动或撰写 PR 说明 | [审查](../matt-code-review/SKILL.md)、[PR 说明](../matt-pr/SKILL.md) |
 | 验证设计想法、调研资料或编写代理指引 | [原型](../matt-prototype/SKILL.md)、[调研](../matt-research/SKILL.md)、[代理写作](../matt-writing-for-agents/SKILL.md) |
 
+用户要求走完整流程、按阶段推进需求交付，或项目规则要求时，读取[阶段流程](references/stage-flow.md)：
+它规定阶段、确认关卡、关闭条件和中断后的子代理恢复方式。默认不启用。
+
 用户要求代理工作环境复盘，或当前任务明确包含环境改进时，使用[环境复盘](../matt-retro/SKILL.md)。
 普通开发任务结束按 CS 完成知识记录，不自动增加环境复盘或 CS 使用分析。
 

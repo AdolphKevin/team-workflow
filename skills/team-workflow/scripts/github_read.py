@@ -28,7 +28,8 @@ def api(endpoint, paginate=False, binary=False):
     except (OSError, subprocess.TimeoutExpired) as exc:
         raise Invalid('GitHub read unavailable: ' + str(exc)) from exc
     # Do not expose gh's credential diagnostics or arbitrary downloaded HTML.
-    require(result.returncode == 0, 'GitHub read failed: ' + endpoint.split('?')[0])
+    require(result.returncode == 0, 'GitHub read failed: ' + endpoint.split('?')[0]
+            + '; check `gh auth status`, repository access and that the object exists')
     if binary:
         return result.stdout
     try:

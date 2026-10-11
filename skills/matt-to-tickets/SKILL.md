@@ -68,6 +68,8 @@ Work the **frontier**: any ticket whose blockers are all done. For a purely line
 
 Do NOT close or modify any parent issue.
 
+When the [stage flow](../team-workflow/references/stage-flow.md) is enabled, give every ticket issue a `team-workflow-task` block whose `parent` is the parent issue, with the owning repository, acceptance items, their checks at the entry-level seam, and which decision items it depends on. A ticket closes only when its handoff has no remaining work or questions and cites its verification. Record the ticket list as the parent's `children` through a stage record, not by editing the parent body.
+
 <local-ticket-template>
 
 # <NN>: <Ticket title>

@@ -16,7 +16,8 @@ def parser():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument('command', choices=['project', 'snapshot', 'run', 'brief', 'knowledge', 'review-template',
                                       'verify', 'aggregate', 'migrate', 'evidence', 'version',
-                                      'resume', 'handoff', 'progress', 'task-export', 'delivery-template', 'import-result'])
+                                      'resume', 'handoff', 'progress', 'task-export', 'delivery-template', 'import-result',
+                                      'status', 'stage-draft', 'agents'])
     p.add_argument('--root', type=Path, default=Path.cwd())
     p.add_argument('--profile', type=Path, default=Path('.team-workflow.json'))
     p.add_argument('--task', type=Path)
@@ -41,6 +42,11 @@ def parser():
     p.add_argument('--result', type=Path, help='GitHub Actions result locator')
     p.add_argument('--portable', action='store_true', help='Capture result.json for a portable CI artifact')
     p.add_argument('--repository', action='append', default=[], help='Local checkout mapping owner/repo=/path; not shared task data')
+    p.add_argument('--record', type=Path, help='Stage change input for stage-draft')
+    p.add_argument('--ledger', help='Sub-agent ledger name under .team-workflow/agents')
+    p.add_argument('--plan', type=Path, help='Sub-agent plan [{id, purpose}] that creates a new ledger')
+    p.add_argument('--mark', help='Sub-agent ID whose ledger status changes')
+    p.add_argument('--status', dest='agent_status', help='New sub-agent status')
     return p
 
 
@@ -79,6 +85,16 @@ def main(argv=None):
 
         if args.command == 'version':
             result = tool_identity()
+        elif args.command in ('status', 'stage-draft'):
+            import stages
+            require(bool(args.issue), args.command + ' needs --issue')
+            result = stages.status(args.issue) if args.command == 'status' else stages.draft(args.issue, read(local(root, args.record)))
+        elif args.command == 'agents':
+            import stages
+            require(bool(args.ledger), 'agents needs --ledger')
+            require(not args.mark or bool(args.agent_status), '--mark needs --status')
+            result = stages.agents(root, args.ledger, read(local(root, args.plan)) if args.plan else None,
+                                   args.mark, args.agent_status, args.reason)
         elif args.command == 'aggregate':
             mapping = {key: (root / Path(path).expanduser()).resolve() for key, path in location_settings(root)['repositories'].items()}
             result = verification.aggregate(read(local(root, args.joint)), args.cs_skill, mapping)

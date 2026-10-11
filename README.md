@@ -30,7 +30,7 @@ CI 获取 CS 默认分支验证真实接口，实际使用的提交只记入[验
 python3 <team-workflow技能目录>/scripts/workflow.py project --root <项目目录> --cs-skill <CS技能目录>
 ```
 
-可选工具的使用见[团队协作与交付](skills/team-workflow/references/team-delivery.md)。采用工具的项目保留 `.team-workflow.json` 和必要运行材料；普通 MATT 调用无需这些配置。升级通用工具只更新共享插件，原有检查、卡片编号和历史继续保留，普通技能升级不需要重建知识库。
+可选工具的使用见[团队协作与交付](skills/team-workflow/references/team-delivery.md)。需要按阶段推进需求、确认方案并判定 Issue 能否关闭时，显式开启[阶段流程](skills/team-workflow/references/stage-flow.md)。采用工具的项目保留 `.team-workflow.json` 和必要运行材料；普通 MATT 调用无需这些配置。升级通用工具只更新共享插件，原有检查、卡片编号和历史继续保留，普通技能升级不需要重建知识库。
 
 MATT 基于 [mattpocock/skills](https://github.com/mattpocock/skills)，固定版本 1.3.1，保留 MIT 许可。技能正文及模板直接复用，适配差异可独立查看和核验，见[来源与更新](docs/upstream.md)。
 
@@ -41,7 +41,7 @@ python3 -m unittest discover -s tests -v
 python3 scripts/check_release.py
 python3 scripts/check_cs.py --cs-skill <独立CS源码或安装目录>/skills/cs
 python3 scripts/check_parallel.py --cs-skill <独立CS源码或安装目录>/skills/cs
-python3 scripts/package.py --output <仓库外目录>/team-workflow-0.4.0-rc.1.zip
+python3 scripts/package.py --output <仓库外目录>/team-workflow-0.5.0-rc.1.zip
 ```
 
 [验收标准](docs/acceptance.md)区分自动化工具验证、隔离技能试用和真实团队试点。交付检查只证明记录与所列检查一致；它不签名、防伪或证明所有业务正确。真实数据库、场景审查和跨服务验证仍按项目风险执行。

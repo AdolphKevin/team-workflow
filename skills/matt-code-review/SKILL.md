@@ -76,6 +76,8 @@ When delegated, issue both reviews independently and aggregate their reports. Wh
 
 If requirements are missing, mark the Spec result incomplete.
 
+The Spec axis reviews against the original requirement (the PRD or issue spec) plus decisions the user has confirmed. A plan, audit or design note written by the implementing agent is not the spec; reviewing against it only confirms the agent's own reading. Verify each subagent finding against the source before reporting it, and drop or mark any finding you could not confirm.
+
 ### 5. Aggregate
 
 Present the two reports under `## Standards` and `## Spec` headings, verbatim or lightly cleaned. Do **not** merge or rerank findings, because the two axes are deliberately separate (see _Why two axes_).

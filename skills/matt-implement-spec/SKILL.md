@@ -16,7 +16,7 @@ The tickets are not a list of steps. They are a **task graph** with blocking rel
 
 Communication to and from subagents should be sparse. Communicate primarily through **context pointers**: to the spec, tickets, research notes, and previous commits. Don't duplicate information already available via pointers.
 
-Use subagents and worktrees only when authorized and useful. Otherwise execute the same task graph in the current agent, keeping the per-ticket acceptance and final review.
+Use subagents and worktrees only when authorized and useful. Otherwise execute the same task graph in the current agent, keeping the per-ticket acceptance and final review. When the project forbids extra checkouts (for example shared workspace files above the repository), skip steps 4–6's per-ticket worktrees and implement the frontier serially in the current checkout. With the [stage flow](../team-workflow/references/stage-flow.md) enabled, record any subagent fan-out in its ledger and stop at its hard-pause triggers.
 
 ## Steps
 

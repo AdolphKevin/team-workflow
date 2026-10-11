@@ -7,10 +7,10 @@
  description: "Turn the current conversation into a spec and publish it to the project issue tracker: no interview, just synthesis of what you've already discussed."
 -disable-model-invocation: true
  ---
-+
+ 
 +Before using this method, read the [CS integration rules](../team-workflow/references/matt-integration.md) for prerequisites and the shared knowledge entry.
 +
- 
++
  This skill takes the current conversation context and codebase understanding and produces a spec. Do NOT interview the user; just synthesize what you already know.
  
 -The issue tracker and triage label vocabulary should have been provided to you. If not, tell the user to run `/setup-matt-pocock-skills`.
@@ -18,7 +18,7 @@
  
  ## Process
  
-@@ -14,9 +16,9 @@
+@@ -14,9 +16,11 @@ The issue tracker and triage label vocabulary should have been provided to you.
  
  2. Sketch out the seams at which you're going to test the feature. Existing seams should be preferred to new ones. Use the highest seam possible. If new seams are needed, propose them at the highest point you can. The fewer seams across the codebase, the better - the ideal number is one.
  
@@ -27,10 +27,12 @@
  
 -3. Write the spec using the template below, then publish it to the project issue tracker. Apply the `ready-for-agent` triage label - no need for additional triage.
 +3. Write the spec using the template below, sized to the actual task. Publish it and apply project labels only when that external action is authorized; otherwise retain a reviewable local draft.
++
++When the [stage flow](../team-workflow/references/stage-flow.md) is enabled, write every point that needs an owner's decision as a decision item in that format (options, recommendation, default if unconfirmed, affected work) for the G1 review, not as prose in Further Notes. Name the entry-level seam (API, RPC or UI entry point) the acceptance tests will drive in Testing Decisions.
  
  <spec-template>
  
-@@ -30,7 +32,7 @@
+@@ -30,7 +34,7 @@ The solution to the problem, from the user's perspective.
  
  ## User Stories
  
@@ -39,7 +41,7 @@
  
  1. As an <actor>, I want a <feature>, so that <benefit>
  
-@@ -38,7 +40,7 @@
+@@ -38,7 +42,7 @@ A LONG, numbered list of user stories. Each user story should be in the format o
  1. As a mobile bank customer, I want to see balance on my accounts, so that I can make better informed decisions about my spending
  </user-story-example>
  
@@ -57,10 +59,10 @@
  description: Break a plan, spec, or the current conversation into a set of tracer-bullet tickets, each declaring its blocking edges, published to the configured tracker (edges as text in one file per ticket locally, or native blocking links on a real tracker).
 -disable-model-invocation: true
  ---
-+
+ 
 +Before using this method, read the [CS integration rules](../team-workflow/references/matt-integration.md) for prerequisites and the shared knowledge entry.
 +
- 
++
  # To Tickets
  
  Break a plan, spec, or conversation into a set of **tickets**: tracer-bullet vertical slices, each declaring the tickets that **block** it.
@@ -70,7 +72,7 @@
  
  ## Process
  
-@@ -37,7 +39,7 @@
+@@ -37,7 +39,7 @@ Break the work into **tracer bullet** tickets.
  
  Give each ticket its **blocking edges**: the other tickets that must complete before it can start. A ticket with no blockers can start immediately.
  
@@ -79,7 +81,7 @@
  
  ### 4. Quiz the user
  
-@@ -53,11 +55,11 @@
+@@ -53,11 +55,11 @@ Ask the user:
  - Are the blocking edges correct: does each ticket only depend on tickets that genuinely gate it?
  - Should any tickets be merged or split further?
  
@@ -93,6 +95,15 @@
  
  - **Local files** → write one file per ticket under `.scratch/<feature-slug>/issues/<NN>-<slug>.md`, numbered from `01` in dependency order (blockers first). Each file's "Blocked by" lists the numbers/titles it depends on. Use the per-ticket file template below: one ticket per file, never a single combined file.
  - **A real issue tracker (GitHub, Linear, …)** → publish one issue per ticket in dependency order (blockers first) so each ticket's blocking edges can reference real identifiers. Use the platform's native blocking relationship where it has one; otherwise set each ticket's "Blocked by" to the blocking issues. If the source was an existing issue, make each ticket its sub-issue (tracker doc's operation). Apply the `ready-for-agent` triage label unless instructed otherwise; the tickets are agent-grabbable by construction.
+@@ -66,6 +68,8 @@ Work the **frontier**: any ticket whose blockers are all done. For a purely line
+ 
+ Do NOT close or modify any parent issue.
+ 
++When the [stage flow](../team-workflow/references/stage-flow.md) is enabled, give every ticket issue a `team-workflow-task` block whose `parent` is the parent issue, with the owning repository, acceptance items, their checks at the entry-level seam, and which decision items it depends on. A ticket closes only when its handoff has no remaining work or questions and cites its verification. Record the ticket list as the parent's `children` through a stage record, not by editing the parent body.
++
+ <local-ticket-template>
+ 
+ # <NN>: <Ticket title>
 --- a/skills/matt-implement/SKILL.md
 +++ b/skills/matt-implement/SKILL.md
 @@ -1,17 +1,19 @@
@@ -130,10 +141,10 @@
  description: "Implement the result of /to-spec and /to-tickets in code."
 -disable-model-invocation: true
  ---
-+
+ 
 +Before using this method, read the [CS integration rules](../team-workflow/references/matt-integration.md) for prerequisites and the shared knowledge entry.
 +
- 
++
  You have been provided a spec. This spec should have tickets associated with it, describing how to implement the spec.
  
 -The issue tracker should have been provided to you. If not, tell the user to run `/setup-matt-pocock-skills`.
@@ -141,16 +152,16 @@
  
  The goal is the entire spec implemented on a single **integration branch**, with every ticket resolved the way the issue tracker closes work.
  
-@@ -14,7 +16,7 @@
+@@ -14,7 +16,7 @@ The tickets are not a list of steps. They are a **task graph** with blocking rel
  
  Communication to and from subagents should be sparse. Communicate primarily through **context pointers**: to the spec, tickets, research notes, and previous commits. Don't duplicate information already available via pointers.
  
 -**Implementer subagents** should be run in the background where possible for maximum concurrency.
-+Use subagents and worktrees only when authorized and useful. Otherwise execute the same task graph in the current agent, keeping the per-ticket acceptance and final review.
++Use subagents and worktrees only when authorized and useful. Otherwise execute the same task graph in the current agent, keeping the per-ticket acceptance and final review. When the project forbids extra checkouts (for example shared workspace files above the repository), skip steps 4–6's per-ticket worktrees and implement the frontier serially in the current checkout. With the [stage flow](../team-workflow/references/stage-flow.md) enabled, record any subagent fan-out in its ledger and stop at its hard-pause triggers.
  
  ## Steps
  
-@@ -22,19 +24,19 @@
+@@ -22,19 +24,19 @@ Communication to and from subagents should be sparse. Communicate primarily thro
  
  2. (optional) Use an **exploration subagent** to conduct any exploration required by the tickets - relevant codebase files or external documentation. Ensure the exploration subagent can save files - it should save its markdown notes in a directory outside the repo, accessible by all future subagents. This lets **implementer subagents** focus on implementation rather than exploration.
  
@@ -318,7 +329,7 @@
  
  ### 2. Identify the spec source
  
-@@ -29,7 +32,7 @@
+@@ -29,7 +32,7 @@ Look for the originating spec, in this order:
  1. Issue references in the commit messages (`#123`, `Closes #45`, GitLab `!67`, etc.), fetched via the workflow in the tracker doc.
  2. A path the user passed as an argument.
  3. A spec file under `docs/`, `specs/`, or `.scratch/` matching the branch name or feature.
@@ -327,7 +338,7 @@
  
  ### 3. Identify the standards sources
  
-@@ -55,9 +58,9 @@
+@@ -55,9 +58,9 @@ Each smell reads *what it is* → *how to fix*; match it against the diff:
  - **Middle Man**: a class or function that mostly just delegates onward. → cut it, call the real target direct.
  - **Refused Bequest**: a subclass or implementer that ignores or overrides most of what it inherits. → drop the inheritance, use composition.
  
@@ -339,12 +350,14 @@
  
  **Standards sub-agent prompt** should include:
  
-@@ -71,7 +74,7 @@
+@@ -71,7 +74,9 @@ Issue both sub-agent calls together, in the foreground, and aggregate the report
  - The path or fetched contents of the spec.
  - The brief: "Report: (a) requirements the spec asked for that are missing or partial; (b) behaviour in the diff that wasn't asked for (scope creep); (c) requirements that look implemented but where the implementation looks wrong. Quote the spec line for each finding. Under 400 words."
  
 -If the spec is missing, skip the Spec sub-agent and note this in the final report.
 +If requirements are missing, mark the Spec result incomplete.
++
++The Spec axis reviews against the original requirement (the PRD or issue spec) plus decisions the user has confirmed. A plan, audit or design note written by the implementing agent is not the spec; reviewing against it only confirms the agent's own reading. Verify each subagent finding against the source before reporting it, and drop or mark any finding you could not confirm.
  
  ### 5. Aggregate
  

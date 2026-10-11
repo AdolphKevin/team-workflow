@@ -9,7 +9,7 @@ import tempfile
 from contextvars import ContextVar
 from datetime import datetime, timezone
 
-VERSION = '0.4.0-rc.1'
+VERSION = '0.5.0-rc.1'
 RISKS = {'authorization', 'persistence', 'concurrency', 'messaging', 'public-contract', 'cross-service'}
 KINDS = {'code', 'docs'}
 LOCATIONS = ContextVar('workflow_locations', default={'repositories': {}, 'inputs': {}})
