@@ -14,7 +14,7 @@
 | 任务结果、引用和新增经验 | 业务仓 `.codestable`，不复制原文正文 |
 | 实际业务验证 | 业务仓的命令、测试和必要环境 |
 
-按[安装与升级](docs/install.md)将同一插件安装到 Codex、Cursor 或 Claude Code，在新会话中使用 `$team-workflow` 或 `/team-workflow`。根目录 `plugin.json` 是 Codex 与 Cursor 的插件入口，`.claude-plugin/plugin.json` 是 Claude Code 的插件入口，`skills/` 是完整技能集合；也可将这些技能作为一组安装，保留同级目录关系。不要只复制主技能，否则 MATT 配套方法无法定位。
+按[安装与升级](docs/install.md)用 `npx skills add AdolphKevin/team-workflow -g --skill '*' --agent claude-code codex cursor` 一次安装全部技能，Claude Code、Codex 与 Cursor 共用同一份文件，`npx skills update -g` 同时升级。在新会话中使用 `/team-workflow` 或 `$team-workflow`。必须安装完整技能集合，保留同级目录关系；只复制主技能会导致 MATT 配套方法无法定位。根目录 `plugin.json` 与 `.claude-plugin/plugin.json` 作为可选插件入口保留，不要与统一安装混用。
 
 CS 独立安装，运行时通过公开命令和返回字段核对能力，不锁定版本或提交。各方法遵循[CS 接入约定](skills/team-workflow/references/matt-integration.md)。使用可选工具时，通过已安装技能发现 CS 路径，再传给 `--cs-skill` 或 `TEAM_WORKFLOW_CS_SKILL`。本仓不携带 CS 副本，不修改全局技能目录。
 

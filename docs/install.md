@@ -1,34 +1,40 @@
 # 安装与升级
 
-Codex、Cursor 与 Claude Code 使用同一个完整 `skills/` 目录。Codex 与 Cursor 读取根目录 `plugin.json`，Claude Code 读取 `.claude-plugin/plugin.json`；两份清单只声明入口，名称、版本和描述保持一致，由 `scripts/check_release.py` 核对。各端不维护独立实现。发行 ZIP 包含方法入口、MATT 方法、可选团队工具、适配补丁、许可和说明；业务配置与知识不放入发行包。
+Codex、Cursor 与 Claude Code 使用同一个完整 `skills/` 目录，推荐通过 skills CLI 统一安装。Codex 与 Cursor 读取根目录 `plugin.json`，Claude Code 读取 `.claude-plugin/plugin.json`；两份清单只声明入口，名称、版本和描述保持一致，由 `scripts/check_release.py` 核对。各端不维护独立实现。发行 ZIP 包含方法入口、MATT 方法、可选团队工具、适配补丁、许可和说明；业务配置与知识不放入发行包。
 
-## Codex
+## 统一安装（推荐）
 
-在支持插件的 Codex 中登记本仓提供的插件目录，固定到候选版标签，再安装：
+用 [skills CLI](https://github.com/vercel-labs/skills) 一次安装全部技能，Claude Code、Codex 与 Cursor 共用
+`~/.agents/skills/` 下的同一份文件，一条命令同时更新所有客户端。CS 使用同一种方式安装。
 
 ```bash
-codex plugin marketplace add AdolphKevin/team-workflow --ref v0.4.0-rc.1
-codex plugin add team-workflow@team-workflow
+npx skills add AdolphKevin/codestable-compact -g --skill '*' --agent claude-code codex cursor
+npx skills add AdolphKevin/team-workflow -g --skill '*' --agent claude-code codex cursor
+npx skills update -g          # 以后升级
+npx skills list -g            # 核对来源与安装位置
 ```
 
-在新会话中使用 `$team-workflow`。如果客户端尚未支持这些命令，先更新客户端；也可以通过客户端的插件来源界面登记同一个 Git 仓库和版本。仓库中的 `.agents/plugins/marketplace.json` 是目录入口，根目录的 `plugin.json` 是插件入口。格式依据 [Codex 官方插件文档](https://developers.openai.com/plugins/build/plugins)。
+必须用 `--skill '*'` 安装全部 16 个技能：主技能与 MATT 方法通过同级目录的相对路径互相引用，只装主技能会找不到配套方法。
+安装后在新会话中使用 `/team-workflow`（Codex 为 `$team-workflow`），或直接调用 `/matt-implement` 等方法。
+`npx skills update` 跟随默认分支，推送到 `main` 即发布；锁文件 `~/.agents/.skill-lock.json` 记录实际安装的目录哈希，
+工具版本以 `workflow.py version` 输出为准。
 
-## Claude Code
+## 插件方式（可选）
 
-在 Claude Code 中登记本仓作为插件目录，再安装插件：
+根目录 `plugin.json`（Codex、Cursor）与 `.claude-plugin/plugin.json`（Claude Code）仍作为插件入口保留，
+适合需要固定到发行标签的场景。插件按客户端分别安装、分别固定版本，容易出现一端已升级另一端未升级，
+因此不要与上面的统一安装混用，否则同名技能会出现两份。
 
 ```bash
 claude plugin marketplace add AdolphKevin/team-workflow
 claude plugin install team-workflow@team-workflow
+codex plugin marketplace add AdolphKevin/team-workflow --ref <发行标签>
+codex plugin add team-workflow@team-workflow
 ```
 
-在新会话中使用 `/team-workflow`，或直接调用 `/matt-implement` 等各个 MATT 技能。仓库中的 `.claude-plugin/marketplace.json` 是目录入口，`.claude-plugin/plugin.json` 是插件入口，Claude Code 自动发现插件根目录下的 `skills/`。本地试用可以不登记目录，直接以 `claude --plugin-dir <仓库目录>` 启动。固定版本时在 `marketplace add` 后用 `claude plugin marketplace update` 跟随目录更新；升级插件用 `claude plugin update team-workflow@team-workflow`。格式依据 [Claude Code 插件文档](https://code.claude.com/docs/en/plugins)。
-
-## Cursor
-
-从本仓 Releases 下载同一版本的 ZIP 并核对发行校验值。将包内完整的 `team-workflow` 目录放到 `~/.cursor/plugins/local/team-workflow`，重新加载窗口或新开项目，在新会话中确认 `/team-workflow` 出现在技能选择中。使用实际目录，不以指向其他目录的符号链接代替。插件格式见 [Cursor 官方文档](https://cursor.com/docs/plugins)。
-
-安装时若已有同名目录，先备份旧版本再替换；不要混合两个发行版的文件。插件安装不要求把脚本复制到业务项目。
+格式依据 [Claude Code 插件文档](https://code.claude.com/docs/en/plugins)与 [Codex 官方插件文档](https://developers.openai.com/plugins/build/plugins)。
+本地试用可以不安装，直接以 `claude --plugin-dir <仓库目录>` 启动。从统一安装改用插件前，先运行
+`npx skills remove -g` 移除同名技能；反之先卸载各客户端插件与插件目录登记。
 
 ## CS 与项目接入
 
