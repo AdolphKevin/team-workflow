@@ -41,8 +41,16 @@ def main():
     if os.environ.get('GITHUB_OUTPUT'):
         with open(os.environ['GITHUB_OUTPUT'], 'a') as stream:
             stream.write('directory=' + str(output) + '\n')
-    print(json.dumps({'record': str(path), 'directory': str(output), 'status': record['results'][0]['status']}, indent=2))
-    return 0 if record['source_unchanged'] and record['results'][0]['status'] == 'passed' else 1
+    result = record['results'][0]
+    passed = record['source_unchanged'] and result['status'] == 'passed'
+    print(json.dumps({'record': str(path), 'directory': str(output), 'status': result['status'],
+                      'detail': result['detail'], 'source_unchanged': record['source_unchanged']}, indent=2))
+    if not passed:
+        for channel in ('stdout', 'stderr'):
+            # Execution already redacted these original outputs before saving them.
+            print(f'--- regression {channel} ---', file=sys.stderr)
+            print((output / (channel + '.txt')).read_text(), file=sys.stderr)
+    return 0 if passed else 1
 
 
 if __name__ == '__main__':

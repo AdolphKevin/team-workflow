@@ -49,7 +49,7 @@ class PortableCases(unittest.TestCase):
     def capture(self, provider=True):
         self.directory = self.root / '.team-workflow/ci' / uuid.uuid4().hex
         context = {'GITHUB_ACTIONS': 'true', 'GITHUB_REPOSITORY': 'example/project',
-                   'GITHUB_RUN_ID': '17', 'GITHUB_RUN_ATTEMPT': '2', 'GITHUB_JOB': 'test'} if provider else {}
+                   'GITHUB_RUN_ID': '17', 'GITHUB_RUN_ATTEMPT': '2', 'GITHUB_JOB': 'test'} if provider else {'GITHUB_ACTIONS': 'false'}
         with patch.dict(os.environ, context):
             before = portable.source_state(self.root, self.profile)
             start = now()
@@ -168,7 +168,10 @@ class PortableCases(unittest.TestCase):
         with self.assertRaisesRegex(Invalid, 'did not pass'):
             self.import_result()
         self.configure_check()
-        self.capture(provider=False)
+        with patch.dict(os.environ, {'GITHUB_ACTIONS': 'true', 'GITHUB_REPOSITORY': 'outer/runner',
+                                     'GITHUB_RUN_ID': '999', 'GITHUB_RUN_ATTEMPT': '1', 'GITHUB_JOB': 'validate'}):
+            self.capture(provider=False)
+        self.assertIsNone(self.archive_manifest['run_context'])
         with self.assertRaisesRegex(Invalid, 'provider context'):
             self.import_result()
 

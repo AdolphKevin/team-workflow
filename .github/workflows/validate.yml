@@ -28,6 +28,7 @@ jobs:
         id: results
         run: python3 scripts/ci_result.py
       - name: Preserve execution-time source and native reports
+        if: ${{ always() && steps.results.outputs.directory != '' }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: workflow-python-${{ matrix.python }}-attempt-${{ github.run_attempt }}
