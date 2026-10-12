@@ -82,8 +82,19 @@ def run(skill):
         payload['task'].update(id=applied['task_id'], update_existing=True, expected_revision=1)
         write(payload_path, payload)
         preview = knowledge.call(skill, root, ['learn', '--file', str(payload_path), '--dry-run'])
+        assert preview['idempotent'] and preview['task_id'] == applied['task_id']
+        if 'plan_state' in preview:
+            assert preview['plan_state'] == 'not-needed' and preview['plan_token'] is None
+        # A no-op preview has nothing to apply. Add the actual delivery result
+        # to exercise a real update, then retry that same payload and plan.
+        payload['task']['verification'].append('Workflow document delivery verification passed.')
+        write(payload_path, payload)
+        preview = knowledge.call(skill, root, ['learn', '--file', str(payload_path), '--dry-run'])
+        assert preview['plan_token']
+        updated = knowledge.call(skill, root, ['learn', '--file', str(payload_path), '--plan-token', preview['plan_token']])
+        assert updated['task_id'] == applied['task_id'] and updated['task_revision'] == 2
         repeated = knowledge.call(skill, root, ['learn', '--file', str(payload_path), '--plan-token', preview['plan_token']])
-        assert repeated['task_id'] == applied['task_id']
+        assert repeated['idempotent'] and repeated['task_id'] == applied['task_id'] and repeated['task_revision'] == 2
         later = knowledge.brief(root, task, skill, ['README.md'], [])
         assert applied['task_id'] in json.dumps(later), 'Task outcome must be discoverable in the later brief'
         assert later['brief']['authoritative_documents'][0]['source'] == 'contracts:GLOSSARY.md'
