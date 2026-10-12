@@ -254,8 +254,9 @@ class PortableCases(unittest.TestCase):
         self.assertEqual(imported['result']['binding']['environment'], target)
         self.assertEqual(target['versions']['python']['command'], [sys.executable, '--version'])
         self.assertEqual(target['fixture']['identity'], 'fixture-v1')
-        with self.assertRaisesRegex(Invalid, 'environment|target'):
-            validation.capture(self.root, self.profile, 'unit', self.root / '.team-workflow/local-incompatible')
+        with patch('platform.system', return_value='Darwin'), patch('platform.machine', return_value='arm64'):
+            with self.assertRaisesRegex(Invalid, 'environment|target'):
+                validation.capture(self.root, self.profile, 'unit', self.root / '.team-workflow/local-incompatible')
 
     def test_remote_target_must_match_complete_recorded_environment(self):
         self.prepare()
