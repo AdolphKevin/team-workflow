@@ -67,10 +67,11 @@ class WorkflowCases(unittest.TestCase):
         (wiki / 'INDEX.md').write_text('Project knowledge')
         (wiki / 'task.md').write_text(self.task['id'] + '\ncompleted')
         write(self.root / '.codestable/config.json', {'version': '2.1.0'})
-        (skill / 'scripts/bootstrap.py').write_text('import json\nprint(json.dumps({"ok":True,"skill_version":"2.1.0","capabilities":["documents","receipt-check","task-files"]}))')
+        (skill / 'scripts/bootstrap.py').write_text('import json\nprint(json.dumps({"ok":True,"skill_version":"2.1.0","capabilities":["documents","receipt-check","task-files","task-external-refs","exclusive-plan-file","review-actions"]}))')
         reply = {'ok': True, 'state': '0'*64, 'kind': 'receipt-check', 'read_only': True, 'query_state': {}, 'changed': [], 'receipt': {'query_state': {}}, 'task_status': 'completed', 'canonical_task_id': 'CS-T', 'task_revision': 1,
                  'files': ['.codestable/wiki/task.md'],
                  'records': [{'id': 'CS-T', 'path': '.codestable/wiki/task.md', 'relations': ['task-note']} ]}
+        reply['external_refs'] = [{'system': 'github' if self.task['id'].startswith('https://github.com/') else 'team-workflow', 'id': self.task['id']}]
         (skill / 'scripts/cs_knowledge.py').write_text('import json\nprint(' + repr(json.dumps(reply)) + ')')
         return skill
 

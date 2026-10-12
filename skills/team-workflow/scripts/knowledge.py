@@ -31,8 +31,10 @@ def call(skill, root, command, bootstrap=False, input_data=None):
         raise Invalid(f'CS command unavailable/incomplete: {label}: {exc}') from exc
 
 
-def supported(preflight):
+def supported(preflight, modern=False):
     required = {'documents', 'receipt-check', 'task-files'}
+    if modern:
+        required |= {'task-external-refs', 'exclusive-plan-file', 'review-actions'}
     missing = required - set(preflight.get('capabilities', []))
     require(not missing, 'CS interface missing: ' + ', '.join(sorted(missing)))
 
@@ -47,19 +49,72 @@ def receipt_check(skill, root, brief):
 
 def brief(root, task, skill, paths, symbols):
     preflight = call(skill, root, ['--check'], bootstrap=True)
-    supported(preflight)
+    modern = task.get('schema_version') == 4
+    supported(preflight, modern)
+    paths = paths or task.get('paths', [])
+    symbols = symbols or task.get('symbols', [])
     command = ['brief', '--task', task['goal'], '--format', 'json']
     for value in paths:
         command += ['--path', value]
     for value in symbols:
         command += ['--symbol', value]
+    for value in task.get('scopes', []):
+        scope = value['repository'] + ':' + value['path']
+        if value.get('symbol'):
+            scope += '#' + value['symbol']
+        command += ['--scope', scope]
     data = call(skill, root, command)
     require(isinstance(data.get('receipt', {}).get('query_state'), dict), 'CS brief must include scoped source state')
-    record = {'schema_version': 2, 'kind': 'knowledge-brief', 'task_id': task['id'],
+    record = {'schema_version': 4 if modern else 2, 'kind': 'knowledge-brief', 'task_id': task['id'],
               'at': now(), 'cs_version': preflight.get('skill_version'),
               'task_digest': digest(task), 'paths': paths, 'symbols': symbols,
               'query_state': data['receipt']['query_state'], 'brief': data}
     return record
+
+
+def external_ref(task):
+    from github_read import issue_ref
+    if task['id'].startswith('https://github.com/'):
+        repository, number = issue_ref(task['id'])
+        return {'system': 'github', 'id': f'https://github.com/{repository.lower()}/issues/{number}'}
+    return {'system': 'team-workflow', 'id': task['id']}
+
+
+def finish_v4(root, profile, task, skill, task_id, brief_path, disposition, reason,
+              acceptance_path, final_brief_path=None):
+    """Capture actual CS completion after business acceptance, without writing knowledge."""
+    from common import artifact_valid
+    from validation import source_digest
+    require(disposition in ('none', 'reused', 'updated', 'added') and reason.strip(), 'Describe actual knowledge disposition')
+    supported(call(skill, root, ['--check'], bootstrap=True), True)
+    acceptance = read(acceptance_path)
+    require(acceptance.get('schema_version') == 4 and acceptance.get('kind') == 'acceptance'
+            and acceptance.get('ok') is True and acceptance.get('task_digest') == digest(task)
+            and acceptance.get('source_digest') == source_digest(root, profile),
+            'Current business acceptance is required before recording CS completion')
+    initial = read(brief_path)
+    latest_path = final_brief_path or brief_path
+    latest = read(latest_path)
+    for value in (initial, latest):
+        require(value.get('schema_version') == 4 and value.get('kind') == 'knowledge-brief'
+                and value.get('task_digest') == digest(task), 'Knowledge brief belongs to another task/version')
+    from datetime import datetime
+    require(datetime.fromisoformat(initial['at']) <= datetime.fromisoformat(acceptance['at']),
+            'Initial knowledge reading was captured after acceptance; report and repeat the affected review')
+    sources = receipt_check(skill, root, latest['brief'])
+    files = call(skill, root, ['task-files', '--task-id', task_id, '--format', 'json'])
+    require(files.get('task_status') == 'completed' and files.get('canonical_task_id') == task_id,
+            'CS canonical task must be completed')
+    require(external_ref(task) in files.get('external_refs', []), 'CS task needs an exact structured external_refs association')
+    related = [artifact(root, inside(root, name)) for name in files['files']]
+    require(bool(related), 'Missing actual CS task files')
+    require(receipt_check(skill, root, latest['brief']) == sources, 'Knowledge sources changed during capture')
+    return {'schema_version': 4, 'kind': 'knowledge-completion', 'task_id': task['id'],
+            'task_digest': digest(task), 'at': now(), 'brief': artifact(root, brief_path),
+            'final_brief': artifact(root, latest_path), 'acceptance': artifact(root, acceptance_path),
+            'cs_task_id': task_id, 'cs_task_revision': files['task_revision'],
+            'external_refs': files['external_refs'], 'files': related, 'query_state': sources,
+            'disposition': disposition, 'reason': reason}
 
 
 def finish(root, task, skill, task_id, brief_path, disposition, reason):

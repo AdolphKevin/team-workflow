@@ -1,0 +1,553 @@
+{
+  "schema_version": 1,
+  "date": "2026-10-12",
+  "candidate": "0.6.0-rc.1",
+  "scope": "Local paired engineering candidate; real-member pilot deferred by user. No publication, push or global installation.",
+  "sources": {
+    "team-workflow": {
+      "base_commit": "031bec79d261a325d5169acfdb9acfd20a8f9e32",
+      "files_sha256": {
+        ".claude-plugin/marketplace.json": "6ecab9054cd4701064fa9b103668779b08c3abeb8ea5bfcbb194a357ada6420b",
+        ".claude-plugin/plugin.json": "bbc5f161da11660b4fd2735ea1ef3b983b8eac7cadf3f5077244e61dfe8ea7b0",
+        "CHANGELOG.md": "5ad5a8e0cdab9fbe944767788c20fc37ed36ce9c9edda5a91a144c3a6a96b858",
+        "README.md": "0210ca753822490785d94738ae6f5c62a50cca2abd44188b7859ca68ed14b75f",
+        "VERSION": "ceceb113c124af18aa5ef3f3578bb215944f78838275c94241d5a315efdf0362",
+        "docs/acceptance.md": "cbd287c8083170fa09a1d9f3ab6acec622bb06fe0338d41b5f0843ebf8881dfe",
+        "docs/design.md": "0c27b8abbbeea385c72635764d82162e9c006aebcdadcfac270d438a503d00ab",
+        "docs/install.md": "27271319cbccfb51086192b0103fd24fe35670593b49d6f20f2c86116c3abfd4",
+        "plugin.json": "c6b19bfe468969ce29a0d41a2d36a152c1372ed9e96e9ccf1c16adca058b3a38",
+        "scripts/check_cs.py": "2846d7f0e73f143bb53e6f5769f05b8130596c3a73254ce9f0476fae0e274fbd",
+        "scripts/check_cs_v4.py": "be1d53595ef3bb55dcbd2335c94e0abe9e01736d8afda4bf3666ba405970497a",
+        "scripts/check_parallel.py": "5b097fa0794a1300d1f16b0b8680ad6437d59f8348cc039647a0dffbe8788c8e",
+        "scripts/check_release.py": "093009d8e4ef76dda70b15b47617feac5a7fa812436082aded02cced6d6cca54",
+        "scripts/ci_result.py": "22f7bb37d767791e6bdadf8907b62c2e8c6a681e6b96fe3815c7037c0100f77b",
+        "scripts/package.py": "4f80a024bc04a5c0d1a8ae182a06d9e4e178e9a4ce2c718002cd324940946c4a",
+        "scripts/test.py": "cfdee6ad3d125649ee0d5422a1c034c6f614ce6124d87be3b8af43fc68175e98",
+        "skills/matt-code-review/SKILL.md": "0046812c7d944c2bc8e540ea25520168a40ab980929b9e304ab5385670f79d5a",
+        "skills/matt-code-review/agents/openai.yaml": "8229ca854e11dc8e6aef2131ee03f31fb1561cf905fab9ccc325180cf3331352",
+        "skills/matt-codebase-design/DEEPENING.md": "f3dd099ce99289bd213914d8ee3e2429b78309c3957ca4583f7659551b1d53c1",
+        "skills/matt-codebase-design/DESIGN-IT-TWICE.md": "52b52e75655a27aea59c6966b410bac82448968ad46ef1ebb9f07c274e3ae010",
+        "skills/matt-codebase-design/SKILL.md": "da1bc33223f21b6c16abeec4756cc7ce60f9bae1148d1d354f3308265e85bbc1",
+        "skills/matt-codebase-design/agents/openai.yaml": "edebc9e4fcfe102114012575eaa9600b9b5fd08c311664f389c36e7bc717740f",
+        "skills/matt-diagnosing-bugs/SKILL.md": "e3e6a1ba3245f246b6feac12bb5eaa0820830a3e5f23fc465cbf03d22c757737",
+        "skills/matt-diagnosing-bugs/agents/openai.yaml": "3e430dbe4334a87597488c060cb3dc3786bb00c9182877d6f5ec41f62490e90b",
+        "skills/matt-diagnosing-bugs/scripts/hitl-loop.template.sh": "35103539fc36873eea36074769ad454f9379d6fc8b2dc0e26ce987fd3bfe5503",
+        "skills/matt-domain-modeling/ADR-FORMAT.md": "944c92aa790e8fbdc9199640b170979abb8a34ba8d0fe18c2a01a63bce140ca0",
+        "skills/matt-domain-modeling/GLOSSARY-FORMAT.md": "21dcc40cdec8e151a829b98ab1517c1867bc444e3665134a98c6983411996801",
+        "skills/matt-domain-modeling/SKILL.md": "738a3671b30ef0ddc8602fe6556a4ab87dbb1a32aa742fa9b096f4a14196900f",
+        "skills/matt-domain-modeling/agents/openai.yaml": "f6bf2aa996c6e6f53fdd0708e18a0d16a56aed8322cca59fedbe3c0d2c75f06b",
+        "skills/matt-grilling/SKILL.md": "510d09e6b25cdfb06ba274f04cf769fc14fcdd95358d09e588e6a0626838b4e8",
+        "skills/matt-grilling/agents/openai.yaml": "1411d7df7d99b7e621a1ff8283c8133cc2464be63d064e52d8ce169c6800ee9b",
+        "skills/matt-implement/SKILL.md": "329c70271312877c22af247426b9c0b73bfe42325443e94581eb096c29309a4f",
+        "skills/matt-implement/agents/openai.yaml": "8970a8596ade0c28ab427f41a4ea242d6bdf6186c59ebf55e1238dbecaab79dc",
+        "skills/matt-implement-spec/SKILL.md": "88af5474e8269d8c4f880e3b82898f3b1ba78c9796ac23c21422dd322e797c71",
+        "skills/matt-implement-spec/agents/openai.yaml": "fd41efb42c60c96320d6531be7e4bf15cbf5518cd652d57dff27ccffa46988e9",
+        "skills/matt-pr/CREDITS.md": "a7a087127665d7298a72280ef6e19c41ad8404523712a788c8dc3ab414bc2497",
+        "skills/matt-pr/SKILL.md": "2b91a1faab0fa354895cf5035370c6f63666812612c6af62be9e93ac2fb72aef",
+        "skills/matt-pr/agents/openai.yaml": "2295b586624db4ef546f3fd4695492f039d941a46d8a1593a702ce3ca511b8ad",
+        "skills/matt-prototype/LOGIC.md": "f61c7d249e786a79ef289018901c348271e1798dd0b0bc5607b5c6f4d4a01ab9",
+        "skills/matt-prototype/SKILL.md": "dfae44550717b51f1900b9e706199f30c35f281b20a0741c035649087067236f",
+        "skills/matt-prototype/UI.md": "723211e878acbc7b6ff09755263f3295cde724ba902ff0064da41eed51d45ad3",
+        "skills/matt-prototype/agents/openai.yaml": "5af65e43ab41a350436697b81e27b7f848d36782043b73c322bb2c9fa9cc55dc",
+        "skills/matt-research/SKILL.md": "c3ae12f3ce459d7b965fb5449db03ae332df60b9cb4674778fc70e5e29df5413",
+        "skills/matt-research/agents/openai.yaml": "9b4c470d63221c1f68f22df70b83e2f12401b317babe0d1b7b5f24a974474d0d",
+        "skills/matt-retro/SKILL.md": "9b10e41677535be2fd9c211f55da730cef313f3e5215267ec0140b220c550d7b",
+        "skills/matt-retro/agents/openai.yaml": "eeca7f79f501ad4abd90e06571d5248c9e3cd41c96de6b494f18026455f4a6ce",
+        "skills/matt-tdd/SKILL.md": "761ffeb0e5a948cad2952b96deae6cd8e9250d12f4d2d951cd1f4d4218ba5424",
+        "skills/matt-tdd/agents/openai.yaml": "ea6f01cf1b8c06a4b0f5b649d74b1b8ce8685e72af1b38d70d877693e092af0b",
+        "skills/matt-tdd/mocking.md": "3ceb807fdf4a47d6a93d4d9a891e5ba6d362a6247bd08adc451feebfc17361ef",
+        "skills/matt-tdd/tests.md": "859f9e592c188fda4fc7277dd180e4ce9c7a2e13f6efe1f6f29eccc9d28c106a",
+        "skills/matt-to-spec/SKILL.md": "225fcc8dc34ade40a4a36744489cc412af0010b0d35d5a8d1e8021055f619829",
+        "skills/matt-to-spec/agents/openai.yaml": "1c5b4d1e3d8e52287ef19cc2742fdbbfae1914ac75d33af3e4c8174f08cc55bb",
+        "skills/matt-to-tickets/SKILL.md": "ae7bf2e5781517543c9266c1c4a5a43a4033e5f96d74f6b964e1142f2df45779",
+        "skills/matt-to-tickets/agents/openai.yaml": "21bc6215fffcd7614e9f772bb1760e87cc5fc7dcc707e7d282bc9414267a6090",
+        "skills/matt-writing-for-agents/SKILL-MECHANICS.md": "c768e6307c7c10728c401c213f2c4ba71c542127eeb7ad2956aabd15a0fa0059",
+        "skills/matt-writing-for-agents/SKILL.md": "e9a34b26aa7fc9b12364e35dd21f555b1d83654a348bd5495aa4be5999bf430f",
+        "skills/matt-writing-for-agents/agents/openai.yaml": "eacb24b2a618cfb81dacb0416f4fdd75ddf3a8060f8ddb99aae1b1e301907e4b",
+        "skills/team-workflow/SKILL.md": "d97ff7f50dd7f6b47a2c0e4beaddb1fdd650e4b634b01a850673d2d3fb340bef",
+        "skills/team-workflow/agents/openai.yaml": "aa80a1177e15751d3baeeb17f4caad13664e9db4318af00434ff99bcee55b524",
+        "skills/team-workflow/references/collaboration.md": "9457aabee0463cd99cbe5686aad27cd63f544271d1ce952bb68ffa55c05d23f0",
+        "skills/team-workflow/references/contracts-v4.md": "d3f96b6d465b416756cf86cdcbaf0cfeedc99e9c6f13218b35993e0ed7e26539",
+        "skills/team-workflow/references/contracts.md": "636a20b53c6acb0da226626f665fe1084bea1d932bbbcd7e78bcd5df310a0c68",
+        "skills/team-workflow/references/coordination-v4.md": "06e474533572d33c0a328fc0f1c5be94c349e5ca783e328002cb289d51f669fc",
+        "skills/team-workflow/references/cross-repository.md": "c3a4554881c78b348312ef40faacc87bef432930844744e822477165aebdfb3b",
+        "skills/team-workflow/references/designs.md": "2903db0a0527aaff2f55207faf3c002d78de45d98e56b543882f80554afd88eb",
+        "skills/team-workflow/references/external-results.md": "b5894e6b6a5ce57aa00124bdbaf71049f5ffd4ad69e4b1d7a4de19e88a923c90",
+        "skills/team-workflow/references/legacy-contracts.md": "4fcf56f07002df53c330911a9be626f462252e5f50ff6ba28905eb8a34754a7d",
+        "skills/team-workflow/references/matt-integration.md": "5be8572edf94502c488a9c6f1d111a2d3e3c0df908212eedc669b2360924a13d",
+        "skills/team-workflow/references/onboarding.md": "c38bd30dd4a3734d5915e95b478d1fea7c7aa65023a22df4bd8d27ae1859fa2e",
+        "skills/team-workflow/references/portable-v4.md": "31348342d1cf8c8a25a10c706fd4da8b69c3aba1c76dddb648eb54c49c1bbf1e",
+        "skills/team-workflow/references/stage-flow.md": "ad78f6940a815c2f535aaa8d0201e7ce966290df4d5b7cf1a91db70a37e4d005",
+        "skills/team-workflow/references/team-delivery.md": "5354f0c3ee75b2480b552bce014bc8ba05dbb5b4dabd2376b2a12e5d929c8b01",
+        "skills/team-workflow/scripts/artifacts.py": "30273b67b4b20455e87ca6d1d891ef3ba6045d375bee802c00b8a80e19568783",
+        "skills/team-workflow/scripts/check.py": "ca4eb063fed3221aa46c075e30893c50d9342b5ad70de5f5cec0c0cdfc30b011",
+        "skills/team-workflow/scripts/cleanup.py": "b78f0413f36770d407d73b981c4e5830e55d737f53b4da37750e1266e0d8dfaf",
+        "skills/team-workflow/scripts/common.py": "c2cbebead11a707e80dbb25796515e689690457b17025194f968e54db59e6e83",
+        "skills/team-workflow/scripts/coordination.py": "58e6f698447f7aa133f4be31b88c597f991b472a8b82910e183434c1b9da695e",
+        "skills/team-workflow/scripts/delivery.py": "d5612a0bd63d1d54064a1fa647e7d9a54561aa97a46c78cbad13f5c8f0f207e9",
+        "skills/team-workflow/scripts/designs.py": "22b74fc63e3b79c2f3ad1dbee4dcd891dd5860e8502a618857442dff7f5f9fb9",
+        "skills/team-workflow/scripts/execution.py": "5033759f8ff27b2605f6d3071fbf215a5cc1eea0fd9ceda8221100728f89ac2b",
+        "skills/team-workflow/scripts/github_read.py": "cfd135a85e65bf03e38ad7cf936da8aae4031136013943f135656d0328f4e8d7",
+        "skills/team-workflow/scripts/handoffs.py": "eaf4e45be3cdc7c565598fc74e051f06bb99a882989854dec443d07bb15f0dc4",
+        "skills/team-workflow/scripts/knowledge.py": "5e36d09bf426cac7d8eaa10097431966f4c9a6b50a93cefad280ba142854cf76",
+        "skills/team-workflow/scripts/portable.py": "8594d21805a2b1cae70e397dee3ebc085ceb1ca5231475ced4d43df90294acfe",
+        "skills/team-workflow/scripts/portable_v4.py": "e620133bf61a63e23981a6fd69bc243442764e9457f8c02cd33e38fad19daf76",
+        "skills/team-workflow/scripts/stages.py": "e63e9c72b87d751890173c269cba7514621c75affc848379079eb52ed12307a6",
+        "skills/team-workflow/scripts/validation.py": "b53c40e8b181eb3ce49ee8c20b70efbb1823eb35a1b85d2fb3755c38c6259a68",
+        "skills/team-workflow/scripts/verification.py": "509c0b83a357ea77e5b9ce3940fff225d2b134f137badcfc75d09f4d1c6eb983",
+        "skills/team-workflow/scripts/workflow.py": "6f2070f9b136137aedd930c0198e5e44e582429abf446dba6200283856d00673",
+        "skills/team-workflow/scripts/workflow_v4.py": "ca2f8cc077bcadd7ef7a8b818e3faf66ce97ce3c65ce614e3afb8509c85e95f2",
+        "skills/team-workflow/templates/design.json": "ccf737b164133e7633671d2905d1d20ef3caea2fd8400a810d4f0eb2aa01a942",
+        "skills/team-workflow/templates/profile.json": "db816318fadf58523a52eeaf38b0a05376ebbc3c208411e384b0669dc4231fc3",
+        "skills/team-workflow/templates/task.json": "2b84f5bbbdaced41f2d1b36f6d936cb77291fb3107bb7d1dbc3e9eabd0f1e3f0",
+        "tests/test_check.py": "f0cb73b52fc6a33bad2791589a5d68748e179f4f8fbbd29b9e7a387f59a25476",
+        "tests/test_cleanup_v4.py": "f8cc304b400a95554f84816a36d29f1b32321fe8e35d6715220b4d065f04669f",
+        "tests/test_continuation.py": "aad408336b1c3584551f8c08f93bfd42bec7ca52d68278f0d4ce1a8e065f3840",
+        "tests/test_coordination_v4.py": "88c1408ce539aff3f00deb4c511ca4c1f8ffdde4a5c388d6bdc065ca5fb75757",
+        "tests/test_delivery_v4.py": "d16be0ff2e77f017f863dd44cda63d2fa0407a25ca207dd4c999e6516429aabf",
+        "tests/test_designs.py": "15a0fc967d01aef6cdd2c3f50268c82e31a3fe5429c2fcc56c11e0e4fddf00e2",
+        "tests/test_joint_portable.py": "3f948fd56ca254ac0b10a3e5d2de67e86654a7c93e3f41a1d1beeee412ad0dc4",
+        "tests/test_parallel.py": "4ba311ecbd6b19bcf4d7de209ec3c6fc3a3bd09451270922ff03c0b58ac00131",
+        "tests/test_portable_v4.py": "c311ff426682352e9010f07035afaf144c2679b9a71c45a8875b4db21efac4ca",
+        "tests/test_stages.py": "7aa2696eee8e98c114a918acbd7e446b9a99bc432eecde7eb91434d0947f531e",
+        "tests/test_validation_v4.py": "c0c6cfff8908ebc56e723b685868bdb4fefd3859ca186cb109671bdde0d31aea",
+        "tests/test_workflow.py": "d4a41efc86ad10f6c9a10ca28211aad6c5179c19276173307455d0768c867812",
+        "upstream/matt.lock.json": "6f3bc2aa9cec0d2972c5e69304c5af26d93266e1ca7645c802472114b33f5b22",
+        "upstream/matt.patch": "2b6c79716c0a3f1c883ba1194b81954431588b7c943e79e5ba22147b94bf5ed0"
+      },
+      "source_sha256": "a5fc33184b798bb131427eb102c26697d0bac77ab572694c8ff001cf9483ee4d"
+    },
+    "cs": {
+      "base_commit": "72fe37e3c3379b2ae71723c1f493b31745ffb7c0",
+      "files_sha256": {
+        "CHANGELOG.md": "49dd9a3ee8012e38127a89cf26b78d59acd0bacdc5dfee09c2188cd5a0f995bc",
+        "README.md": "abbc089dfbb558b3134094e0dbdef99c2d697a9be4bd8fd86f8925c42e6eee4f",
+        "VERSION": "c89b87c262e9d5ffd20e73aac74a1772adcc9f5a21682cc33adcf5086e5fef5c",
+        "scripts/build_runtime.py": "246c13d03516e43700a8f0f531a2d57888baecfba4dd87fd5d92ed65b4b50799",
+        "scripts/check_knowledge_reliability.py": "1319ee7beb50a4a9e43f4b46bcb08b8641f2ef5005486afd7219da916c5c8461",
+        "scripts/validate_release.py": "86627461cf8949fcf75b0afd51804ad32be3c6032ba72e9fd0415d08a3e5366d",
+        "skills/cs/SKILL.md": "d932209c3733c4509f1779b48b76951dea0263d4bcc8be618d7bef2613227768",
+        "skills/cs/assets/project/.codestable/.gitignore": "09d3d27f9bd31bb54e8d7b6201506548ee3b6b03984d25fb4615d8e9e6a5593b",
+        "skills/cs/assets/project/.codestable/README.md": "29cfb1494cb84ee2b3480faaba20460db881f3e949b4a14fced7215dedb4875a",
+        "skills/cs/assets/project/.codestable/VERSION": "c89b87c262e9d5ffd20e73aac74a1772adcc9f5a21682cc33adcf5086e5fef5c",
+        "skills/cs/assets/project/.codestable/cache/.gitignore": "240a3e0d37d2e86b614063f5347eb02d4f99ca6c254de6b82871ff8d95532a7d",
+        "skills/cs/assets/project/.codestable/config.json": "57748f153ea2d5c7a37bce0d794c0ad1978b813ab1835bc3df8220eb9f0ad0ed",
+        "skills/cs/assets/project/.codestable/manifest.json": "f43e0f2635bd50c0d2cc65ca4272d739832a6c953fb9af921fa50207e9c7db04",
+        "skills/cs/assets/project/.codestable/wiki/HISTORY.md": "ea5252daa0fec6d57a5d076b0bc947dafdecc125f4488eaf56da607f8d63a277",
+        "skills/cs/assets/project/.codestable/wiki/INDEX.md": "28658b990640fa3150063298127ff8b16ea890c7bf3f8810400b579785b19a66",
+        "skills/cs/assets/project/.codestable/wiki/PROJECT.md": "7870a44f64d75794b690203ead6e72633507693f9270dbdf572551e6469f61df",
+        "skills/cs/assets/project/.codestable/wiki/README.md": "c0ee51a665ea0caeacf09bc0ee787adef9dbe6bb954736626ccf62921311c687",
+        "skills/cs/assets/project/.codestable/wiki/TOPICS.md": "0b424d66e6eed678fcef7906d4f87d1a9c0e77fd5e13c94bddd538dd0c8cea57",
+        "skills/cs/assets/project/.codestable/wiki/acceptance/INDEX.md": "2d114d91cc8270cfb5a33398ae78c02629e2f0070752e66cc814e17b2a91d6be",
+        "skills/cs/assets/project/.codestable/wiki/acceptance/README.md": "9963e5de06183485b5f33909dc0cfd88746fed5465dd87732f504463ac955cc2",
+        "skills/cs/assets/project/.codestable/wiki/architecture/INDEX.md": "e130a8fbdf98d761d27e0778d6b439bdf58f75728c1a65f7ac561faab39f54c7",
+        "skills/cs/assets/project/.codestable/wiki/architecture/README.md": "8552a8b95312894e6cbb75ef597d147e1b08553e9b8832f6b1a294c2f0d91c35",
+        "skills/cs/assets/project/.codestable/wiki/compatibility/INDEX.md": "1e7eb85f746feab1362ab58b6301e44b5cedf6158942258f4e3bc9635146b293",
+        "skills/cs/assets/project/.codestable/wiki/compatibility/README.md": "fe87d83cfbf5906c0102bde54339c8939acb21a837e330180a413ac2218efca3",
+        "skills/cs/assets/project/.codestable/wiki/data-model/INDEX.md": "9b5d62ca6ae786632aaf218ae2a7988f2698e40ef6eac741d7af5a3030512e52",
+        "skills/cs/assets/project/.codestable/wiki/data-model/README.md": "04c390c4586ff394fedfbe6b4295d3402267e95c1006e47d3e950a530b1909a4",
+        "skills/cs/assets/project/.codestable/wiki/decisions/INDEX.md": "48b13457fbe5d9b705dbda8ef41bdb55f04980757837c4573aa9f97925d1a8e9",
+        "skills/cs/assets/project/.codestable/wiki/decisions/README.md": "237b323f913644a6ecdec1078ff5a979beee9f10edae2c1c2aba7ad18eed16b1",
+        "skills/cs/assets/project/.codestable/wiki/error-handling/INDEX.md": "7a1cc7af91f966672f2d2eca2f66f706ac6c754e3cb90fa6b3f6c5a74bb707fa",
+        "skills/cs/assets/project/.codestable/wiki/error-handling/README.md": "5ba302914fe758c7f8d3ddb13f8f9fa1f731f850511044b7c2361e0560ef0168",
+        "skills/cs/assets/project/.codestable/wiki/interfaces/INDEX.md": "c7d61dce9d2451944d029f3a022cf300187e32c8a7953cceecebdbbde3ed2b24",
+        "skills/cs/assets/project/.codestable/wiki/interfaces/README.md": "b86ae8690b3755fc041335f2c1f644fdbf95a18b245c23248f4036f1acf3fb76",
+        "skills/cs/assets/project/.codestable/wiki/learning.schema.json": "33496c8d303e3ce43402c6eb33668760f6b852a86cd746b8068c178e8cd58624",
+        "skills/cs/assets/project/.codestable/wiki/performance-risks/INDEX.md": "423bfafc39eedb74f78f82ef08875790f875aca907eab89639a29602dc30971d",
+        "skills/cs/assets/project/.codestable/wiki/performance-risks/README.md": "c3d0749c72afd5efbd95580b0785fb5ca7d2fd5891a7de45b832436667977307",
+        "skills/cs/assets/project/.codestable/wiki/requirements/INDEX.md": "36ed77b5373b7495b74c204baca37cd5b4503e5365bb9baf2d007f86e3e9d3b1",
+        "skills/cs/assets/project/.codestable/wiki/requirements/README.md": "24f7d05d737093895788ef6633a275c4e86d27767f20031dddf3dcf33a723769",
+        "skills/cs/assets/project/.codestable/wiki/security-boundaries/INDEX.md": "1af0d9ffbe1220fb6b652941f549e2f3e8651e001473f70782840645151dd333",
+        "skills/cs/assets/project/.codestable/wiki/security-boundaries/README.md": "4d3227b9ed21ec251670434cf20129f23a047d298cdd12528c6d67a21168a795",
+        "skills/cs/assets/project/.codestable/wiki/task-notes/.gitkeep": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "skills/cs/assets/project/.codestable/wiki/transaction-boundaries/INDEX.md": "6bc505edb1c662668e499ddfee6c0c6ad5733a7f19a8dc726d8dafeffb6a00d2",
+        "skills/cs/assets/project/.codestable/wiki/transaction-boundaries/README.md": "dbd7b1741adc68189fb5038462a7752ff72a57d1ec712529b6cffd321b919362",
+        "skills/cs/references/development-methods.md": "2ecdf02bee945a0b60df1cf70473f70f763a13bc87fc657937fd1ec085c62d2c",
+        "skills/cs/references/documents.md": "feffebe6f3513712413cf6151793c3ae71f0236637fde51273eb9ad19e4f40ac",
+        "skills/cs/references/task-links-and-receipts.md": "0887017ccc15f3d273a723099a325a99ae344741d816bf06bf0b6a0614f505a4",
+        "skills/cs/runtime_src/00_core.py": "fc5498a2f940e37f2478faab96b4cae23124269fe1aca5319f5bf06ecfd8ded3",
+        "skills/cs/runtime_src/05_read_view.py": "836341db2ffaf72029c1a67aeea67c38d26636ec14c0f34e1c886750cfb5cc17",
+        "skills/cs/runtime_src/10_capture.py": "fc4ee7b5583f797351d12c49b3984b55ccc3503c7bdf935872847778a2479c07",
+        "skills/cs/runtime_src/20_storage.py": "1d1e628de9393f2cd2ca77a147284ce24af8767f975e0d0f32b23fe32dabe7d3",
+        "skills/cs/runtime_src/30_learning.py": "4083563b0be0f4133911d3bf49715d645665d3d52c4298dcf43cddc643b46ab6",
+        "skills/cs/runtime_src/40_retrieval.py": "0e8e1095913f4794da6b8e9ef184e3905924d006f7c1b8fc77eda96eade91a1f",
+        "skills/cs/runtime_src/45_validity.py": "6d56499cc8638d2ec7f97a4943faf804959d4b57249d1fc3c601095979ffe460",
+        "skills/cs/runtime_src/47_documents.py": "ea0e3096b524baabcebedd564f9102cfd695282724c943438346efa4667b30e3",
+        "skills/cs/runtime_src/50_drift.py": "a1f21041f7f7700c382ccd3f97af1314f1919e61fc45f601d005deec38236ee3",
+        "skills/cs/runtime_src/60_governance.py": "316f84236e0a2469b440ecbbd09a8e1ac35a22058ca350e0a69fdb357d54d8c2",
+        "skills/cs/runtime_src/70_cli.py": "344d68d710548a4f71535099455b3b411a97d39c9aadda8facd6441f73b99027",
+        "skills/cs/runtime_src/README.md": "2c949491e6ec9ced44178c7c106532bc2f691fdecf88777fa8236226920ecb3c",
+        "skills/cs/scripts/bootstrap.py": "07f97b24aec797e63c535fc8242bf468dbc5900914c9406c9bc0e2f977c3a77c",
+        "skills/cs/scripts/cs_knowledge.py": "530c690ecaa2ea4db8928a376d0ad48f8ddec512b73155f8f787b49ac8c26d03",
+        "skills/cs/templates/AGENTS.codestable.md": "60828d110cebecfe00c116072734950c6e383f1126b9ca8053a9986b5c77b13c",
+        "skills/cs-analysis/SKILL.md": "10d05fdfd28000ab9495eb875feb67340aaf24f95a8c4bc1b03e07141fffe36b",
+        "skills/cs-analysis/agents/openai.yaml": "25a7c7c611b13f08bda35ab8f7fe1bcd9b9e205f6569229383ba069e1abcdd73",
+        "skills/cs-analysis/references/report-format.md": "46968925ba3eb90fd7c282f3335aed8db0116034e2b1f01559e8f519170f8a3c",
+        "tests/fixtures/reliability_eval.json": "0599005b26f034dad7322ab8566a06fbe1cd7e1cd3f9ed7199d9fc67009e85e1",
+        "tests/fixtures/retrieval_eval.json": "181d0a6dcf374117379a4afb3f996f9991e6ef1f1c7b50934d64b41207349aa0",
+        "tests/support.py": "fc80dee0da9b5890fee4392a8273418a0114a6ac0decc0a33bc271bdb2904189",
+        "tests/test_bootstrap.py": "0123b9a100c3ecc7189127faaa272e3da6ba0c883d71fd04d4eaf145b68f0948",
+        "tests/test_compact_storage.py": "beaeda18732ed9b25a8ddbe6440a9e6ce8942644a3cb519f728c68fb2e9816a4",
+        "tests/test_documents.py": "c92d0cacf73ff0e019adf0cfdd9e29490bce1add4ac1af9c3cae123d18962fe2",
+        "tests/test_governance_acceptance.py": "a405fe50a8f5f7db89fc9428ccb74a28ebd7f8609943481770f4d51a6766a890",
+        "tests/test_knowledge.py": "1c2f37710396a8e064276a1a5f9966779c5179e85a282ae93d633a3e891330c8",
+        "tests/test_knowledge_acceptance.py": "d23110330aaedba23f32d52d1c11b26f13ee376d080eeeade5cfbeae5e55c7b1",
+        "tests/test_knowledge_reliability.py": "c8a403851123172930ae7f5130613a59d6c340f622134f6fbb10c99edb06d6b7",
+        "tests/test_parallel_knowledge.py": "12b22d8a4acbdd1597e7104b1b0c796e8d0ac2e06ffa4051d6af69298e71dd65",
+        "tests/test_task_retrieval.py": "9ef7907c5a986957b8b73a1ffdda48e7728ed53bfd9614809d3916384a400def",
+        "tests/test_workflow_contract.py": "8c18ec242945d0171ffb7bcc4375d6ab10cf3fd734bc52e03bb99e68f48629b1"
+      },
+      "source_sha256": "21ca89fa2a321484205ebe0e130b5ff33a5020b09a5027ddec2147a6d92980c9"
+    }
+  },
+  "environment": {
+    "platform": "Darwin",
+    "machine": "arm64",
+    "python": [
+      "3.10.19",
+      "3.13.14"
+    ]
+  },
+  "regressions": [
+    {
+      "repository": "team-workflow",
+      "python": "3.10.19",
+      "command": "python scripts/test.py --junitxml <external-directory>/tests.xml",
+      "tests": 168,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "changed_during_run": [],
+      "verified_at": "2026-10-12T03:51:02.965080+00:00",
+      "reports": [
+        {
+          "original_evidence_id": "workflow-python-310-junit",
+          "sha256": "1d07849b8b41e2d118226041b4801353cd8f8d5f76e691b935c1db2f7de8eb71"
+        },
+        {
+          "original_evidence_id": "workflow-python-310-sources",
+          "sha256": "287a65a54001f558b60ed86119a8675d6c72d0cdf47a68584c51f72734e04d0a"
+        }
+      ]
+    },
+    {
+      "repository": "cs",
+      "python": "3.10.19",
+      "command": "python scripts/validate_release.py --source .",
+      "tests": 184,
+      "release_checks": 15,
+      "passed": true,
+      "validated_in": "isolated checkout; skills, scripts and tests match candidate byte for byte",
+      "checks": [
+        {
+          "name": "generated_runtime_sync",
+          "ok": true
+        },
+        {
+          "name": "unit_regression_suite",
+          "ok": true
+        },
+        {
+          "name": "public_skills",
+          "ok": true
+        },
+        {
+          "name": "analysis_skill_assets",
+          "ok": true
+        },
+        {
+          "name": "retired_skills_absent",
+          "ok": true
+        },
+        {
+          "name": "retired_tools_absent_from_assets",
+          "ok": true
+        },
+        {
+          "name": "canonical_assets_doctor",
+          "ok": true
+        },
+        {
+          "name": "fresh_install_shared_runtime",
+          "ok": true
+        },
+        {
+          "name": "fresh_install_distribution_preflight",
+          "ok": true
+        },
+        {
+          "name": "fresh_install_doctor",
+          "ok": true
+        },
+        {
+          "name": "compact_default_and_disposition_templates",
+          "ok": true
+        },
+        {
+          "name": "read_and_dry_run_zero_writes",
+          "ok": true
+        },
+        {
+          "name": "knowledge_round_trip",
+          "ok": true
+        },
+        {
+          "name": "learning_idempotency",
+          "ok": true
+        },
+        {
+          "name": "explicit_rebuild_and_new_knowledge",
+          "ok": true
+        }
+      ],
+      "report": {
+        "original_evidence_id": "cs-python-310-release",
+        "sha256": "94670c9c5176ca26745f149afa6565449ef9f49e59678b207f11a13e9bd8da96"
+      }
+    },
+    {
+      "repository": "team-workflow",
+      "python": "3.13.14",
+      "command": "python scripts/test.py --junitxml <external-directory>/tests.xml",
+      "tests": 168,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "changed_during_run": [],
+      "verified_at": "2026-10-12T03:50:56.089719+00:00",
+      "reports": [
+        {
+          "original_evidence_id": "workflow-python-313-junit",
+          "sha256": "1d07849b8b41e2d118226041b4801353cd8f8d5f76e691b935c1db2f7de8eb71"
+        },
+        {
+          "original_evidence_id": "workflow-python-313-sources",
+          "sha256": "c1d389db9325bc0f02e7fdbae0d4299dee3d6ca28f5a3b2536a89898c94b9815"
+        }
+      ]
+    },
+    {
+      "repository": "cs",
+      "python": "3.13.14",
+      "command": "python scripts/validate_release.py --source .",
+      "tests": 184,
+      "release_checks": 15,
+      "passed": true,
+      "validated_in": "isolated checkout; skills, scripts and tests match candidate byte for byte",
+      "checks": [
+        {
+          "name": "generated_runtime_sync",
+          "ok": true
+        },
+        {
+          "name": "unit_regression_suite",
+          "ok": true
+        },
+        {
+          "name": "public_skills",
+          "ok": true
+        },
+        {
+          "name": "analysis_skill_assets",
+          "ok": true
+        },
+        {
+          "name": "retired_skills_absent",
+          "ok": true
+        },
+        {
+          "name": "retired_tools_absent_from_assets",
+          "ok": true
+        },
+        {
+          "name": "canonical_assets_doctor",
+          "ok": true
+        },
+        {
+          "name": "fresh_install_shared_runtime",
+          "ok": true
+        },
+        {
+          "name": "fresh_install_distribution_preflight",
+          "ok": true
+        },
+        {
+          "name": "fresh_install_doctor",
+          "ok": true
+        },
+        {
+          "name": "compact_default_and_disposition_templates",
+          "ok": true
+        },
+        {
+          "name": "read_and_dry_run_zero_writes",
+          "ok": true
+        },
+        {
+          "name": "knowledge_round_trip",
+          "ok": true
+        },
+        {
+          "name": "learning_idempotency",
+          "ok": true
+        },
+        {
+          "name": "explicit_rebuild_and_new_knowledge",
+          "ok": true
+        }
+      ],
+      "report": {
+        "original_evidence_id": "cs-python-313-release",
+        "sha256": "ac2455790fdd1d5704ad675ee9f59a77cd63100a311b35994c07bbd590274337"
+      }
+    }
+  ],
+  "joint_interface": [
+    {
+      "python": "3.10.19",
+      "passed": true,
+      "checks": [
+        "real-v4-acceptance-before-learn",
+        "structured-external-task-association",
+        "github-identity-normalization-agrees-with-cs",
+        "knowledge-only-commit-reuses-business-execution",
+        "real-v4-final-delivery-without-close-permission"
+      ],
+      "scope": "isolated-public-interface-fixture; not a human pilot",
+      "report": {
+        "original_evidence_id": "joint-public-interface-310",
+        "sha256": "fd38de718475242a462d540c0cedf7415a16fa56d5076e4c2f86918e0d6986bd"
+      }
+    },
+    {
+      "python": "3.13.14",
+      "passed": true,
+      "checks": [
+        "real-v4-acceptance-before-learn",
+        "structured-external-task-association",
+        "github-identity-normalization-agrees-with-cs",
+        "knowledge-only-commit-reuses-business-execution",
+        "real-v4-final-delivery-without-close-permission"
+      ],
+      "scope": "isolated-public-interface-fixture; not a human pilot",
+      "report": {
+        "original_evidence_id": "joint-public-interface-313",
+        "sha256": "fd38de718475242a462d540c0cedf7415a16fa56d5076e4c2f86918e0d6986bd"
+      }
+    }
+  ],
+  "independent_trials": [
+    {
+      "name": "workflow",
+      "isolated_fresh_session": true,
+      "real_human_pilot": false,
+      "fixture_task": "clamp integer boundary correction",
+      "business_tests": 10,
+      "business_accepted": true,
+      "delivery_complete": true,
+      "closable": false,
+      "medium_task_pending_sections_visible": true,
+      "status_readonly_files": 200,
+      "environment_command_calls": {
+        "verify": 1,
+        "status_with_report": 0
+      },
+      "report": {
+        "original_evidence_id": "workflow-trial-report",
+        "sha256": "a9283ea1ea0811b09d60c62d93307b6c9f67dc0552deb9165df1373573b48051"
+      },
+      "result": {
+        "original_evidence_id": "workflow-trial-result",
+        "sha256": "5a241e152e5a8bd4ffdc737a5792108b1a9e676b81ba9d6bc25a611d85e54567"
+      },
+      "sources": {
+        "original_evidence_id": "workflow-trial-sources",
+        "sha256": "af10f793df52a5ca557c7d5b06a556c8d95b08a3b0c3e8f74befa1d0dc2c94b9"
+      },
+      "handoff": {
+        "original_evidence_id": "workflow-trial-handoff",
+        "sha256": "df40d6c2bc43e657c867ad5eb6fa0d082b4c084045578e0f981551c4914063d5"
+      }
+    },
+    {
+      "name": "cs",
+      "isolated_fresh_session": true,
+      "real_human_pilot": false,
+      "fixture_task": "signed 64-bit safe integer addition",
+      "business_tests": 5,
+      "subcases": 33,
+      "read_only_hash_comparisons": 23,
+      "external_ref_lookup_exact": true,
+      "existing_plan_preserved_and_apply_not_called": true,
+      "unchanged_maintenance_collapsed_usage_still_visible": true,
+      "report": {
+        "original_evidence_id": "cs-trial-report",
+        "sha256": "8fc1c6df9a3276123e2153ebc6a0229c634a95c7e6cca32707daa2563b783230"
+      },
+      "readonly_results": {
+        "original_evidence_id": "cs-trial-readonly",
+        "sha256": "0573090fd3f34341a7f9ff29a2b86d96aaebb909c7a08b7278fb13b5bd6400d8"
+      }
+    }
+  ],
+  "release_and_sources": {
+    "workflow_release_checks_passed_on": [
+      "3.10.19",
+      "3.13.14"
+    ],
+    "cs_generated_runtime_in_sync": true,
+    "matt_upstream_files_reconstructed": 41,
+    "changed_workflow_skills_format_validated": 6,
+    "no_runtime_dependencies_added": true
+  },
+  "post_regression_change": {
+    "path": "skills/team-workflow/scripts/workflow.py",
+    "before_sha256": "6dd0bd15d58e3eb7efd82c9eb773ad2f7ee2aee576245a1b1cf9419b492bd50e",
+    "after_sha256": "6f2070f9b136137aedd930c0198e5e44e582429abf446dba6200283856d00673",
+    "scope": "Only --record argparse help text changed from legacy stage-only description to design, approval and legacy stage drafts. No executable behavior change.",
+    "checks": [
+      "Exact diff against trial copy",
+      "Python 3.10 and 3.13 --help output",
+      "Five real public-interface checks on both Python versions after the help change"
+    ]
+  },
+  "remote_cs_default": {
+    "repository": "https://github.com/AdolphKevin/codestable-compact.git",
+    "commit": "72fe37e3c3379b2ae71723c1f493b31745ffb7c0",
+    "fetch": "fresh shallow clone of default branch",
+    "legacy_public_checks": {
+      "passed": 8,
+      "python": "3.13.14"
+    },
+    "parallel_checks": {
+      "passed": 8,
+      "python": "3.13.14"
+    },
+    "v4": {
+      "passed": false,
+      "exit_code": 1,
+      "missing_capabilities": [
+        "exclusive-plan-file",
+        "review-actions",
+        "task-external-refs"
+      ],
+      "result": {
+        "ok": false,
+        "problem": "CS interface missing: exclusive-plan-file, review-actions, task-external-refs",
+        "next_action": "Use a CS runtime declaring the v4 integration capabilities; do not downgrade task verification."
+      },
+      "report": {
+        "original_evidence_id": "remote-default-v4-capabilities",
+        "sha256": "83bb91c17c03a4e91450645fd2080da7f07847db3871f4a15f1cc4221c7250c9"
+      }
+    },
+    "next_action": "Deliver CS changes to its default branch, then rerun public interfaces and the remote Python matrix before rollout; do not bypass capability checks."
+  },
+  "boundaries": [
+    "Platform API transmissions and reviewer approvals in tests are explicit fixtures, not real-member confirmation.",
+    "Independent agent trials do not substitute for two real members handing off in both directions.",
+    "Current approval validity depends on declared section dependencies and path coverage being complete.",
+    "Original local execution artifacts remain at their creation locations; archive copies do not replace them.",
+    "No consumer knowledge was rebuilt or silently migrated."
+  ]
+}

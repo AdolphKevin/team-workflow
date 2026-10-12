@@ -8,7 +8,7 @@
       "source": "skills/engineering/to-spec/SKILL.md",
       "path": "skills/matt-to-spec/SKILL.md",
       "upstream_sha256": "43ad9cf318e5e7d3d1fa360253a37021796dc87a0c2e595ad262661a10f85088",
-      "sha256": "50a696cc96e1a533b17611327731c14538b68c29d244d52ee53fbee276c8ca9f"
+      "sha256": "225fcc8dc34ade40a4a36744489cc412af0010b0d35d5a8d1e8021055f619829"
     },
     {
       "source": "skills/engineering/to-spec/agents/openai.yaml",
@@ -20,7 +20,7 @@
       "source": "skills/engineering/to-tickets/SKILL.md",
       "path": "skills/matt-to-tickets/SKILL.md",
       "upstream_sha256": "56ec23c5b2782785d4e65bff9e315b6d3aeb4ef977c174a219e99489fada1995",
-      "sha256": "e2d0d2495b4acd5c91adc2ef255c2c318454be9c1b3001b0107d34cc2f8e6bcf"
+      "sha256": "ae7bf2e5781517543c9266c1c4a5a43a4033e5f96d74f6b964e1142f2df45779"
     },
     {
       "source": "skills/engineering/to-tickets/agents/openai.yaml",
@@ -32,7 +32,7 @@
       "source": "skills/engineering/implement/SKILL.md",
       "path": "skills/matt-implement/SKILL.md",
       "upstream_sha256": "483bdc4ccf4ac31d86ac7beeaa0d0db80313e71e120bb8c59b3196ae5decd53d",
-      "sha256": "00a7acc554e76c6c282349be1bbfa409e49867b3b221a0857800eee818bc4a07"
+      "sha256": "329c70271312877c22af247426b9c0b73bfe42325443e94581eb096c29309a4f"
     },
     {
       "source": "skills/engineering/implement/agents/openai.yaml",
@@ -44,7 +44,7 @@
       "source": "skills/engineering/implement-spec/SKILL.md",
       "path": "skills/matt-implement-spec/SKILL.md",
       "upstream_sha256": "7a22dd2e60b8fcece478ced9d2533582adf3520d695acd3ab715341535c9e56d",
-      "sha256": "5e652cf219740d4220f6e847d42ffdb25f5fee468c9693b877c3f489a138d8ab"
+      "sha256": "88af5474e8269d8c4f880e3b82898f3b1ba78c9796ac23c21422dd322e797c71"
     },
     {
       "source": "skills/engineering/implement-spec/agents/openai.yaml",
@@ -146,7 +146,7 @@
       "source": "skills/engineering/code-review/SKILL.md",
       "path": "skills/matt-code-review/SKILL.md",
       "upstream_sha256": "09eb147f793e4647949edd32dbad278f0554dfb56e0d46b699cd4c2c55bf0357",
-      "sha256": "dee6089335c0cc25b9f10e2ff875755bd07a8f5b789199160e754aaa0f4f3a12"
+      "sha256": "0046812c7d944c2bc8e540ea25520168a40ab980929b9e304ab5385670f79d5a"
     },
     {
       "source": "skills/engineering/code-review/agents/openai.yaml",

@@ -1,0 +1,25 @@
+{
+  "schema_version": 4,
+  "id": "__REPLACE__",
+  "base": "__REPLACE__",
+  "goal": "__REPLACE__",
+  "non_goals": [],
+  "kind": "code",
+  "risks": [],
+  "acceptance": [
+    {
+      "id": "A1",
+      "expectation": "__REPLACE__",
+      "checks": [
+        "unit"
+      ]
+    }
+  ],
+  "design_id": "__REPLACE__",
+  "section_ids": [
+    "T1"
+  ],
+  "paths": [],
+  "symbols": [],
+  "scopes": []
+}

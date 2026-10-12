@@ -26,7 +26,7 @@ Look for opportunities to prefactor the code to make the implementation easier. 
 
 ### 3. Draft vertical slices
 
-Break the work into **tracer bullet** tickets.
+Break work into **tracer bullet** tickets when decomposition is useful. A simple team task may remain in its existing issue; do not create child tickets merely to satisfy a stage checklist. Assess each proposed task's complexity, risk, effort, uncertainty and required capabilities separately from the parent plan.
 
 <vertical-slice-rules>
 
@@ -68,7 +68,7 @@ Work the **frontier**: any ticket whose blockers are all done. For a purely line
 
 Do NOT close or modify any parent issue.
 
-When the [stage flow](../team-workflow/references/stage-flow.md) is enabled, give every ticket issue a `team-workflow-task` block whose `parent` is the parent issue, with the owning repository, acceptance items, their checks at the entry-level seam, and which decision items it depends on. A ticket closes only when its handoff has no remaining work or questions and cites its verification. Record the ticket list as the parent's `children` through a stage record, not by editing the parent body.
+For a team task, use the [fourth-version contracts](../team-workflow/references/contracts-v4.md): associate each actual child with its parent, plan ID and task sections, retaining its own assessment, scope, acceptance and execution prerequisites. Approval concerns named plan sections; confirmed decomposition need not be approved again. A handoff or verification link alone does not authorize closure: actual acceptance, knowledge completion, final delivery checks and existing closure authorization are required.
 
 <local-ticket-template>
 

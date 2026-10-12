@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Team development workflow v2. check.py remains the read-only v1 material checker."""
+"""Team workflow v4. Explicit legacy tasks retain their original v2/v3 contracts."""
 import argparse
 import json
 from pathlib import Path
@@ -17,10 +17,25 @@ def parser():
     p.add_argument('command', choices=['project', 'snapshot', 'run', 'brief', 'knowledge', 'review-template',
                                       'verify', 'aggregate', 'migrate', 'evidence', 'version',
                                       'resume', 'handoff', 'progress', 'task-export', 'delivery-template', 'import-result',
-                                      'status', 'stage-draft', 'agents'])
+                                      'status', 'stage-draft', 'agents', 'prepare', 'design-draft',
+                                      'approval-draft', 'design-diff', 'schema', 'cleanup'])
     p.add_argument('--root', type=Path, default=Path.cwd())
     p.add_argument('--profile', type=Path, default=Path('.team-workflow.json'))
     p.add_argument('--task', type=Path)
+    p.add_argument('--with-task', action='append', default=[], type=Path, help='Additional v4 tasks sharing one validation batch')
+    p.add_argument('--design', type=Path)
+    p.add_argument('--approval', action='append', default=[], type=Path)
+    p.add_argument('--design-history', action='append', default=[], type=Path)
+    p.add_argument('--dependency', action='append', default=[], type=Path, help='Verified predecessor inputs {section,task,report}')
+    p.add_argument('--context', type=Path, help='Prepared v4 context artifact; resolves task/design/brief inputs')
+    p.add_argument('--acceptance', type=Path, help='Actual v4 business acceptance result')
+    p.add_argument('--final-brief', type=Path, help='Re-read knowledge after writeback; original brief is retained')
+    p.add_argument('--phase', choices=['acceptance', 'delivery'], default='delivery')
+    p.add_argument('--kind', choices=['design', 'implementation'], default='implementation')
+    p.add_argument('--format', choices=['json', 'text'], default='json')
+    p.add_argument('--apply', action='store_true', help='Apply an explicitly reviewed cleanup plan')
+    p.add_argument('--dry-run', action='store_true', help='Preview only (cleanup default)')
+    p.add_argument('--evidence-repository', help='Declared external repository for --path evidence')
     p.add_argument('--out', help='New file under .team-workflow; existing files are never overwritten')
     p.add_argument('--request-id', help='Stable ID for retrying one material-producing request')
     p.add_argument('--input', action='append', default=[], help='Local external file mapping name=/path')
@@ -42,7 +57,7 @@ def parser():
     p.add_argument('--result', type=Path, help='GitHub Actions result locator')
     p.add_argument('--portable', action='store_true', help='Capture result.json for a portable CI artifact')
     p.add_argument('--repository', action='append', default=[], help='Local checkout mapping owner/repo=/path; not shared task data')
-    p.add_argument('--record', type=Path, help='Stage change input for stage-draft')
+    p.add_argument('--record', type=Path, help='JSON input for design, approval or legacy stage drafts')
     p.add_argument('--ledger', help='Sub-agent ledger name under .team-workflow/agents')
     p.add_argument('--plan', type=Path, help='Sub-agent plan [{id, purpose}] that creates a new ledger')
     p.add_argument('--mark', help='Sub-agent ID whose ledger status changes')
@@ -83,7 +98,10 @@ def main(argv=None):
                 mappings[kind][name] = path
         LOCATIONS.set(mappings)
 
-        if args.command == 'version':
+        import workflow_v4
+        if workflow_v4.handles(args, root):
+            result = workflow_v4.dispatch(args, root)
+        elif args.command == 'version':
             result = tool_identity()
         elif args.command in ('status', 'stage-draft'):
             import stages
@@ -220,10 +238,18 @@ def main(argv=None):
                     result.pop('records')
         if request:
             result = request.finish(result)
-        print(json.dumps(result, ensure_ascii=False, indent=2))
+        if not result.get('ok', True):
+            result.setdefault('problem', '; '.join(str(value) for value in result.get('gaps', [])) or 'The operation is incomplete; inspect the recorded details.')
+            result.setdefault('next_action', 'Resolve the reported gap and retry without replacing prior evidence.')
+        if args.format == 'text':
+            print(workflow_v4.readable(result))
+        else:
+            print(json.dumps(result, ensure_ascii=False, indent=2))
         return 0 if result.get('ok', True) else 1
     except (Invalid, OSError, ValueError, TypeError, KeyError) as exc:
-        result = {'ok': False, 'scope': args.command, 'status': 'incomplete', 'problem': str(exc)}
+        result = {'ok': False, 'scope': args.command, 'status': 'incomplete', 'problem': str(exc),
+                  'error_code': 'invalid-or-incomplete-input',
+                  'next_action': 'Inspect the named input and run status or schema before retrying; preserve prior evidence.'}
         if args.command in ('verify', 'aggregate'):
             result['layers'] = getattr(exc, 'layers', dict.fromkeys(('materials', 'execution', 'review', 'knowledge'), 'not-evaluated'))
         if request and request.cached is None:

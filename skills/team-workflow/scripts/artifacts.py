@@ -24,6 +24,8 @@ class Request:
             raise Invalid('Ignore .team-workflow/ before generating local materials') from exc
         require(bool(ignored), 'Ignore .team-workflow/ before generating local materials')
         claim = {'task_id': task_id, 'input_digest': digest(inputs), 'pid': os.getpid(), 'started_at': now()}
+        if isinstance(inputs.get('task'), str) and re.fullmatch(r'[a-f0-9]{64}', inputs['task']):
+            claim['task_digest'] = inputs['task']
         try:
             create(self.directory / 'request.json', claim)
         except FileExistsError:

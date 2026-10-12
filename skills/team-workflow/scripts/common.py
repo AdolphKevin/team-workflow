@@ -9,7 +9,7 @@ import tempfile
 from contextvars import ContextVar
 from datetime import datetime, timezone
 
-VERSION = '0.5.0-rc.1'
+VERSION = '0.6.0-rc.1'
 RISKS = {'authorization', 'persistence', 'concurrency', 'messaging', 'public-contract', 'cross-service'}
 KINDS = {'code', 'docs'}
 LOCATIONS = ContextVar('workflow_locations', default={'repositories': {}, 'inputs': {}})
@@ -141,7 +141,8 @@ def inside(root, name, exists=True):
 
 def git(root, *args):
     try:
-        p = subprocess.run(['git', '-C', str(root), *args], capture_output=True, timeout=30)
+        p = subprocess.run(['git', '-C', str(root), *args], capture_output=True, timeout=30,
+                           env={**os.environ, 'GIT_OPTIONAL_LOCKS': '0'})
         require(p.returncode == 0, 'Cannot read Git state: ' + p.stderr.decode(errors='replace')[:300])
         return p.stdout
     except (OSError, subprocess.TimeoutExpired) as exc:
@@ -208,8 +209,8 @@ def snapshot(root, profile):
 
 def profile_valid(profile, root, check_context=True):
     obj(profile, {'schema_version', 'project', 'context', 'knowledge', 'checks', 'required_checks', 'risk_checks', 'inputs', 'environment_versions'}, {'external_inputs'})
-    require(type(profile['schema_version']) is int and profile['schema_version'] == 3,
-            'Unsupported project configuration; expected schema_version 3. Adjust configuration explicitly; no migration is performed')
+    require(type(profile['schema_version']) is int and profile['schema_version'] in (3, 4),
+            'Unsupported project configuration; expected schema_version 3 or 4. Adjust configuration explicitly; no migration is performed')
     location_settings(root)
     text(profile['project'])
     for name in strings(profile['context'], True):
@@ -222,7 +223,9 @@ def profile_valid(profile, root, check_context=True):
     require(isinstance(profile.get('external_inputs', {}), dict), 'external_inputs must be an object')
     for name, item in profile.get('external_inputs', {}).items():
         text(name)
-        obj(item, {'kind'}, {'repository'})
+        obj(item, {'kind'}, {'repository', 'role'} if profile['schema_version'] == 4 else {'repository'})
+        if 'role' in item:
+            require(item['role'] in ('build', 'modified', 'joint'), 'Dependency role must be build, modified or joint')
         require(item['kind'] in ('file', 'repository'), 'External input must be a file or Git repository')
         if item['kind'] == 'repository':
             require(bool(re.fullmatch(r'[^/\s]+/[^/\s]+', text(item.get('repository')))), 'Expected owner/repository identity')
@@ -231,17 +234,53 @@ def profile_valid(profile, root, check_context=True):
     require(isinstance(profile['checks'], dict), 'checks must be an object')
     for key, check in profile['checks'].items():
         require(re.fullmatch('[a-z][a-z0-9-]*', key), f'Invalid check ID: {key}')
-        obj(check, {'argv', 'purpose', 'cwd', 'timeout', 'format', 'required_cases', 'required_env'}, {'report', 'artifacts', 'review'})
+        optional = {'report', 'artifacts', 'review'}
+        if profile['schema_version'] == 4:
+            optional |= {'repository', 'environment', 'revision_sensitive'}
+        obj(check, {'argv', 'purpose', 'cwd', 'timeout', 'format', 'required_cases', 'required_env'}, optional)
         argv = check['argv']
         require(isinstance(argv, list) and bool(argv), 'Expected argv array')
         for arg in argv:
             text(arg)
         text(check['purpose'])
-        require(inside(root, check['cwd']).is_dir(), 'Check cwd must be an existing directory')
+        check_root = root
+        if check.get('repository'):
+            entries = [v for v in profile.get('external_inputs', {}).values() if v.get('repository') == check['repository']]
+            require(len(entries) == 1, 'Check repository must be a declared external input')
+            check_root = external_path(root, check['repository'], entries[0])
+        require(inside(check_root, check['cwd']).is_dir(), 'Check cwd must be an existing directory')
+        if 'revision_sensitive' in check:
+            require(type(check['revision_sensitive']) is bool, 'revision_sensitive must be boolean')
+        if 'environment' in check:
+            environment = obj(check['environment'], {'kind'}, {'identity', 'target'})
+            require(environment['kind'] in ('stateless', 'fixture'), 'Environment kind must be stateless or fixture')
+            if environment['kind'] == 'fixture':
+                strings(environment.get('identity'), True)
+            else:
+                require('identity' not in environment, 'Stateless environment has no fixture identity')
+            if 'target' in environment:
+                names = set(profile['environment_versions'])
+                target = obj(environment['target'], {'runtime', 'kind', 'versions'} | ({'fixture'} if environment['kind'] == 'fixture' else set()))
+                require(target['kind'] == environment['kind'], 'Target environment kind mismatch')
+                obj(target['runtime'], {'python', 'platform', 'machine'})
+                for name in ('python', 'platform', 'machine'):
+                    text(target['runtime'][name])
+                obj(target['versions'], names)
+                for name in names:
+                    item = obj(target['versions'][name], {'command', 'identity'})
+                    strings(item['command'], True); text(item['identity'])
+                    require(item['command'] == profile['environment_versions'][name], 'Target environment command mismatch: ' + name)
+                if environment['kind'] == 'fixture':
+                    item = obj(target['fixture'], {'command', 'identity'})
+                    text(item['identity'])
+                    require(item['command'] == environment['identity'], 'Target fixture identity command mismatch')
         require(type(check['timeout']) is int and 0 < check['timeout'] <= 86400, 'Invalid timeout')
         require(check['format'] in ('command', 'go-json', 'junit'), 'Unknown result format')
         strings(check['required_cases'])
         strings(check['required_env'])
+        if profile['schema_version'] == 4 and check['required_env']:
+            require(check.get('environment', {}).get('kind') == 'fixture',
+                    'Required environment values need a public fixture/configuration identity')
         if check['format'] == 'command':
             require(not check['required_cases'], 'Plain commands cannot declare test cases')
         if check['format'] == 'junit':
@@ -278,8 +317,13 @@ def profile_valid(profile, root, check_context=True):
 
 
 def task_valid(task, profile, root):
-    obj(task, {'schema_version', 'id', 'base', 'goal', 'non_goals', 'kind', 'risks', 'acceptance'})
-    require(type(task['schema_version']) is int and task['schema_version'] == 2, 'Expected task schema_version 2')
+    version = task.get('schema_version') if isinstance(task, dict) else None
+    optional = {'design_id', 'section_ids', 'paths', 'symbols', 'scopes', 'parent'} if version == 4 else set()
+    obj(task, {'schema_version', 'id', 'base', 'goal', 'non_goals', 'kind', 'risks', 'acceptance'}, optional)
+    require(type(version) is int and version in (2, 4), 'Expected task schema_version 2 or 4')
+    if version == 4:
+        text(task.get('design_id'))
+        strings(task.get('section_ids'), True)
     for key in ('id', 'goal', 'base'):
         text(task[key])
     require(re.fullmatch(r'[0-9a-f]{40}|[0-9a-f]{64}', task['base']), 'Task base must be a full commit ID')

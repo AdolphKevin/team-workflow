@@ -20,7 +20,7 @@ Use already agreed interfaces and acceptance criteria. Ask only about a material
 
 3. Write the spec using the template below, sized to the actual task. Publish it and apply project labels only when that external action is authorized; otherwise retain a reviewable local draft.
 
-When the [stage flow](../team-workflow/references/stage-flow.md) is enabled, write every point that needs an owner's decision as a decision item in that format (options, recommendation, default if unconfirmed, affected work) for the G1 review, not as prose in Further Notes. Name the entry-level seam (API, RPC or UI entry point) the acceptance tests will drive in Testing Decisions.
+For a team task, use the [versioned section format](../team-workflow/references/designs.md) as the shared plan: assess complexity and risk separately, give acceptance and tasks stable IDs, and declare their actual dependencies. Record unresolved business choices with their affected sections. Parent and child assessments are separate; simple tasks may be implemented before combined plan/code review. Carry forward existing approval and publish only within authorization. Standalone use keeps the prose template below. Name the entry-level API, RPC or UI seam the acceptance tests will drive.
 
 <spec-template>
 

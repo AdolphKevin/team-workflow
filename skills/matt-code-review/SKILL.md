@@ -15,6 +15,8 @@ Review both axes separately. Use independent subagents when authorized and usefu
 
 Use the accepted user goal and the project's existing requirements; a separate task platform is optional.
 
+For a team task, follow the [team delivery rules](../team-workflow/references/team-delivery.md). Record the actual reviewer without imposing a rank or requiring a different person. Simple tasks combine final plan and code approval with the actual code and run references; risks still determine checks. Existing approvals remain valid only for unchanged sections and dependencies. Business acceptance precedes the final CS record, followed by separate knowledge and delivery checks.
+
 ## Process
 
 ### 1. Pin the fixed point

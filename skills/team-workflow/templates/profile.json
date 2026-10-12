@@ -1,0 +1,47 @@
+{
+  "schema_version": 4,
+  "project": "__REPLACE__",
+  "context": [
+    "README.md"
+  ],
+  "knowledge": {
+    "provider": "cs",
+    "entry": ".codestable/wiki/INDEX.md"
+  },
+  "checks": {
+    "unit": {
+      "argv": [
+        "python3",
+        "-m",
+        "pytest",
+        "tests",
+        "--junitxml={output}/results.xml"
+      ],
+      "purpose": "__REPLACE__",
+      "cwd": ".",
+      "timeout": 600,
+      "format": "junit",
+      "report": "{output}/results.xml",
+      "required_cases": [],
+      "required_env": [],
+      "environment": {
+        "kind": "stateless"
+      }
+    }
+  },
+  "required_checks": {
+    "code": [
+      "unit"
+    ],
+    "docs": []
+  },
+  "risk_checks": {},
+  "inputs": [],
+  "environment_versions": {
+    "python": [
+      "python3",
+      "--version"
+    ]
+  },
+  "external_inputs": {}
+}

@@ -1,51 +1,59 @@
 # Team Workflow
 
-本仓集中分发直接复用的 MATT 开发方法和可选团队工具。使用技能前，CS 已安装且项目已完成 CS 知识初始化；MATT 负责开发方法，CS 统一负责项目知识的读取与沉淀。
+本仓集中维护团队工作流程、直接复用的 MATT 开发方法和验证工具。使用前独立安装 CS，并完成项目知识初始化。
 
-`team-workflow` 主技能按当前目标选择方法，也可以直接调用各个 MATT 技能。普通任务结束由 CS 完成知识记录。环境复盘和 CS 使用分析按需调用，不进入固定收尾流程。项目明确采用时，再启用交接、验证结果核对和跨仓交付工具。
+用 `team-workflow` 开始新任务，默认进入团队流程：评估、分节方案、评审、实施与交接、业务验收、知识回写和最终交付。简单任务可以先实施，再由具体评审人一并批准方案和代码；中等、复杂任务先批准方案再实施。复杂度与风险分别判断，简单任务涉及接口、数据库或权限时仍保留合并评审路径，并完成相应真实验证。
 
-| 职责 | 唯一维护位置 |
+直接调用 MATT 方法保持轻量，不要求团队配置。已经进入团队流程的任务，切换方法继续沿用其有效批准、验收与交接要求。已有批准且已指派的任务，接手者核对共享材料后即可实施；批准范围内不重复请求开工确认。
+
+| 内容 | 维护位置 |
 | --- | --- |
-| 开发方法 | 本仓直接复用的 15 个 MATT 技能及原配套文件 |
-| 方法选择与可选团队工具 | 本仓 `skills/team-workflow` |
-| 术语、架构决策、项目规则 | 业务仓已有 GLOSSARY、ADR、AGENTS 等原文 |
-| 知识读取与沉淀规则 | 独立 CS 及其开发方法组合约定 |
-| 进行中的需求、职责、依赖和交接 | 项目任务平台，首批支持 GitHub Issues |
-| 任务结果、引用和新增经验 | 业务仓 `.codestable`，不复制原文正文 |
-| 实际业务验证 | 业务仓的命令、测试和必要环境 |
+| 开发方法 | 15 个 MATT 技能及配套资源 |
+| 任务流程与验证工具 | `skills/team-workflow` |
+| 术语、架构决策和项目规则 | 所属项目已有原文，通过独立 CS 登记与读取 |
+| 方案、职责、进度和交接 | 共享任务材料，首批支持 GitHub Issues |
+| 最终任务记录与可复用经验 | 所属项目的 CS 知识库 |
+| 业务命令、测试及环境准备 | 业务仓库 |
 
-按[安装与升级](docs/install.md)用 `npx skills add AdolphKevin/team-workflow -g --skill '*' --agent claude-code codex cursor` 一次安装全部技能，Claude Code、Codex 与 Cursor 共用同一份文件，`npx skills update -g` 同时升级。在新会话中使用 `/team-workflow` 或 `$team-workflow`。必须安装完整技能集合，保留同级目录关系；只复制主技能会导致 MATT 配套方法无法定位。根目录 `plugin.json` 与 `.claude-plugin/plugin.json` 作为可选插件入口保留，不要与统一安装混用。
+## 安装与开始
 
-CS 独立安装，运行时通过公开命令和返回字段核对能力，不锁定版本或提交。各方法遵循[CS 接入约定](skills/team-workflow/references/matt-integration.md)。使用可选工具时，通过已安装技能发现 CS 路径，再传给 `--cs-skill` 或 `TEAM_WORKFLOW_CS_SKILL`。本仓不携带 CS 副本，不修改全局技能目录。
-
-CI 获取 CS 默认分支验证真实接口，实际使用的提交只记入[验证记录](docs/validation.md)。MATT 来源锁定及补丁核验继续保留。
-
-可选工具使用只读共享配置（格式 3）；本机位置与按任务分开的运行材料均被忽略。
-多人进度独立追加，负责人确认交接。原文正文保持唯一，CS 的登记、任务记录和独立
-经验分别存放，普通任务不改写共享目录或统计。
-
-项目需要团队工具时，运行配置检查：
+按[安装与升级](docs/install.md)安装完整技能集合，保留同级目录关系。新会话中使用 `/team-workflow` 或 `$team-workflow`；直接调用 MATT 时沿用同一份 CS 接入约定。
 
 ```bash
+npx skills add AdolphKevin/codestable-compact -g --skill '*' --agent claude-code codex cursor
+npx skills add AdolphKevin/team-workflow -g --skill '*' --agent claude-code codex cursor
+```
+
+新项目使用第四版配置与任务格式。从已安装技能获得模板和字段说明：
+
+```bash
+python3 <team-workflow技能目录>/scripts/workflow.py schema --root <项目目录>
 python3 <team-workflow技能目录>/scripts/workflow.py project --root <项目目录> --cs-skill <CS技能目录>
 ```
 
-可选工具的使用见[团队协作与交付](skills/team-workflow/references/team-delivery.md)。需要按阶段推进需求、确认方案并判定 Issue 能否关闭时，显式开启[阶段流程](skills/team-workflow/references/stage-flow.md)。采用工具的项目保留 `.team-workflow.json` 和必要运行材料；普通 MATT 调用无需这些配置。升级通用工具只更新共享插件，原有检查、卡片编号和历史继续保留，普通技能升级不需要重建知识库。
+首次接入读[接入指南](skills/team-workflow/references/onboarding.md)，日常任务读[团队协作与交付](skills/team-workflow/references/team-delivery.md)，实际命令和记录格式读[第四版工具约定](skills/team-workflow/references/contracts-v4.md)。旧任务继续使用其原格式与工具版本；历史记录不会被静默解释为新版通过证明。
 
-MATT 基于 [mattpocock/skills](https://github.com/mattpocock/skills)，固定版本 1.3.1，保留 MIT 许可。技能正文及模板直接复用，适配差异可独立查看和核验，见[来源与更新](docs/upstream.md)。
+## 0.6.0-rc.1 候选版
 
-开发者运行：
+本次增加分节方案及逐节批准、可追溯的局部重审、简单任务合并评审、独立的业务验收与知识核对，以及多任务共用实际检查结果。CS 通过结构化任务关联、不可覆盖的计划文件和分类复核提示提供知识能力；本仓按公开能力检查兼容性，不锁定 CS 提交或复制运行脚本。
+
+检查结果绑定源码内容、具体检查与可确认环境。仅提交知识记录或改变暂存布局，不要求重复业务测试。构建依赖、修改仓库和联合验收服务分别声明；跨仓材料保留仓库身份、相对位置及内容指纹。平台命令只生成草稿，提交、发布、关闭任务继续遵循已有授权。
+
+模板随技能安装。清理先预览，只处理已结束任务中没有被引用的请求材料；在途任务、共享批准历史与交付证据继续保留。正式推广仍需两位真实成员完成双向接续，代理试用不能替代该条件。
+
+本轮先交付两仓配套的本地候选版，真实成员试点另行安排。远端 CS 默认分支目前尚未包含新版所需的三项能力；推广前须先交付 CS 改动，再从远端默认分支重新通过第四版接口检查。不能仅更新 team-workflow 后沿用缺少能力的 CS；兼容判断仍依据能力声明，不固定某个提交。具体已执行范围见[本轮验证记录](docs/validation.md#060-rc1-联合候选版2026-10-12)。
+
+## 维护与验证
+
+MATT 基于 [mattpocock/skills](https://github.com/mattpocock/skills) 1.3.1，保留源码、配套资源和 MIT 许可；适配补丁可反向恢复并逐文件校验，见[来源与更新](docs/upstream.md)。
 
 ```bash
 python3 -m unittest discover -s tests -v
 python3 scripts/check_release.py
-python3 scripts/check_cs.py --cs-skill <独立CS源码或安装目录>/skills/cs
-python3 scripts/check_parallel.py --cs-skill <独立CS源码或安装目录>/skills/cs
-python3 scripts/package.py --output <仓库外目录>/team-workflow-0.5.0-rc.1.zip
+python3 scripts/check_cs.py --cs-skill <独立CS源码目录>/skills/cs
+python3 scripts/check_cs_v4.py --cs-skill <独立CS源码目录>/skills/cs
+python3 scripts/check_parallel.py --cs-skill <独立CS源码目录>/skills/cs
+python3 scripts/package.py --output <仓库外目录>/team-workflow-0.6.0-rc.1.zip
 ```
 
-[验收标准](docs/acceptance.md)区分自动化工具验证、隔离技能试用和真实团队试点。交付检查只证明记录与所列检查一致；它不签名、防伪或证明所有业务正确。真实数据库、场景审查和跨服务验证仍按项目风险执行。
-
-本版本的实际结果见[验证记录](docs/validation.md)。
-
-0.4 候选版新增 [任务接续与交接](skills/team-workflow/references/collaboration.md)、[外部验证结果](skills/team-workflow/references/external-results.md)和[可移植联合验收](skills/team-workflow/references/cross-repository.md)。工具仅生成平台更新草稿，发布沿用已有授权。Codex 与 Cursor 共用同一插件包；在途任务记录所用版本，升级不自动切换任务版本。
+[验收标准](docs/acceptance.md)区分自动化测试、隔离技能试用和真实成员试点。实际结果记录在[验证记录](docs/validation.md)，未执行项目不得写成通过。工具核对所列检查与材料，不替代业务判断，也不把未签名的本地文件当成防伪证明。

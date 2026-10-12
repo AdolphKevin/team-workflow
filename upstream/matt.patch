@@ -1,3 +1,4 @@
+diff --git a/skills/matt-to-spec/SKILL.md b/skills/matt-to-spec/SKILL.md
 --- a/skills/matt-to-spec/SKILL.md
 +++ b/skills/matt-to-spec/SKILL.md
 @@ -1,12 +1,14 @@
@@ -7,10 +8,10 @@
  description: "Turn the current conversation into a spec and publish it to the project issue tracker: no interview, just synthesis of what you've already discussed."
 -disable-model-invocation: true
  ---
- 
++
 +Before using this method, read the [CS integration rules](../team-workflow/references/matt-integration.md) for prerequisites and the shared knowledge entry.
 +
-+
+ 
  This skill takes the current conversation context and codebase understanding and produces a spec. Do NOT interview the user; just synthesize what you already know.
  
 -The issue tracker and triage label vocabulary should have been provided to you. If not, tell the user to run `/setup-matt-pocock-skills`.
@@ -18,7 +19,7 @@
  
  ## Process
  
-@@ -14,9 +16,11 @@ The issue tracker and triage label vocabulary should have been provided to you.
+@@ -14,9 +16,11 @@
  
  2. Sketch out the seams at which you're going to test the feature. Existing seams should be preferred to new ones. Use the highest seam possible. If new seams are needed, propose them at the highest point you can. The fewer seams across the codebase, the better - the ideal number is one.
  
@@ -28,11 +29,11 @@
 -3. Write the spec using the template below, then publish it to the project issue tracker. Apply the `ready-for-agent` triage label - no need for additional triage.
 +3. Write the spec using the template below, sized to the actual task. Publish it and apply project labels only when that external action is authorized; otherwise retain a reviewable local draft.
 +
-+When the [stage flow](../team-workflow/references/stage-flow.md) is enabled, write every point that needs an owner's decision as a decision item in that format (options, recommendation, default if unconfirmed, affected work) for the G1 review, not as prose in Further Notes. Name the entry-level seam (API, RPC or UI entry point) the acceptance tests will drive in Testing Decisions.
++For a team task, use the [versioned section format](../team-workflow/references/designs.md) as the shared plan: assess complexity and risk separately, give acceptance and tasks stable IDs, and declare their actual dependencies. Record unresolved business choices with their affected sections. Parent and child assessments are separate; simple tasks may be implemented before combined plan/code review. Carry forward existing approval and publish only within authorization. Standalone use keeps the prose template below. Name the entry-level API, RPC or UI seam the acceptance tests will drive.
  
  <spec-template>
  
-@@ -30,7 +34,7 @@ The solution to the problem, from the user's perspective.
+@@ -30,7 +34,7 @@
  
  ## User Stories
  
@@ -41,7 +42,7 @@
  
  1. As an <actor>, I want a <feature>, so that <benefit>
  
-@@ -38,7 +42,7 @@ A LONG, numbered list of user stories. Each user story should be in the format o
+@@ -38,7 +42,7 @@
  1. As a mobile bank customer, I want to see balance on my accounts, so that I can make better informed decisions about my spending
  </user-story-example>
  
@@ -50,6 +51,7 @@
  
  ## Implementation Decisions
  
+diff --git a/skills/matt-to-tickets/SKILL.md b/skills/matt-to-tickets/SKILL.md
 --- a/skills/matt-to-tickets/SKILL.md
 +++ b/skills/matt-to-tickets/SKILL.md
 @@ -1,14 +1,16 @@
@@ -59,10 +61,10 @@
  description: Break a plan, spec, or the current conversation into a set of tracer-bullet tickets, each declaring its blocking edges, published to the configured tracker (edges as text in one file per ticket locally, or native blocking links on a real tracker).
 -disable-model-invocation: true
  ---
- 
++
 +Before using this method, read the [CS integration rules](../team-workflow/references/matt-integration.md) for prerequisites and the shared knowledge entry.
 +
-+
+ 
  # To Tickets
  
  Break a plan, spec, or conversation into a set of **tickets**: tracer-bullet vertical slices, each declaring the tickets that **block** it.
@@ -72,7 +74,16 @@
  
  ## Process
  
-@@ -37,7 +39,7 @@ Break the work into **tracer bullet** tickets.
+@@ -24,7 +26,7 @@
+ 
+ ### 3. Draft vertical slices
+ 
+-Break the work into **tracer bullet** tickets.
++Break work into **tracer bullet** tickets when decomposition is useful. A simple team task may remain in its existing issue; do not create child tickets merely to satisfy a stage checklist. Assess each proposed task's complexity, risk, effort, uncertainty and required capabilities separately from the parent plan.
+ 
+ <vertical-slice-rules>
+ 
+@@ -37,7 +39,7 @@
  
  Give each ticket its **blocking edges**: the other tickets that must complete before it can start. A ticket with no blockers can start immediately.
  
@@ -81,7 +92,7 @@
  
  ### 4. Quiz the user
  
-@@ -53,11 +55,11 @@ Ask the user:
+@@ -53,11 +55,11 @@
  - Are the blocking edges correct: does each ticket only depend on tickets that genuinely gate it?
  - Should any tickets be merged or split further?
  
@@ -95,18 +106,19 @@
  
  - **Local files** → write one file per ticket under `.scratch/<feature-slug>/issues/<NN>-<slug>.md`, numbered from `01` in dependency order (blockers first). Each file's "Blocked by" lists the numbers/titles it depends on. Use the per-ticket file template below: one ticket per file, never a single combined file.
  - **A real issue tracker (GitHub, Linear, …)** → publish one issue per ticket in dependency order (blockers first) so each ticket's blocking edges can reference real identifiers. Use the platform's native blocking relationship where it has one; otherwise set each ticket's "Blocked by" to the blocking issues. If the source was an existing issue, make each ticket its sub-issue (tracker doc's operation). Apply the `ready-for-agent` triage label unless instructed otherwise; the tickets are agent-grabbable by construction.
-@@ -66,6 +68,8 @@ Work the **frontier**: any ticket whose blockers are all done. For a purely line
+@@ -65,6 +67,8 @@
+ Work the **frontier**: any ticket whose blockers are all done. For a purely linear chain that means top to bottom.
  
  Do NOT close or modify any parent issue.
- 
-+When the [stage flow](../team-workflow/references/stage-flow.md) is enabled, give every ticket issue a `team-workflow-task` block whose `parent` is the parent issue, with the owning repository, acceptance items, their checks at the entry-level seam, and which decision items it depends on. A ticket closes only when its handoff has no remaining work or questions and cites its verification. Record the ticket list as the parent's `children` through a stage record, not by editing the parent body.
 +
++For a team task, use the [fourth-version contracts](../team-workflow/references/contracts-v4.md): associate each actual child with its parent, plan ID and task sections, retaining its own assessment, scope, acceptance and execution prerequisites. Approval concerns named plan sections; confirmed decomposition need not be approved again. A handoff or verification link alone does not authorize closure: actual acceptance, knowledge completion, final delivery checks and existing closure authorization are required.
+ 
  <local-ticket-template>
  
- # <NN>: <Ticket title>
+diff --git a/skills/matt-implement/SKILL.md b/skills/matt-implement/SKILL.md
 --- a/skills/matt-implement/SKILL.md
 +++ b/skills/matt-implement/SKILL.md
-@@ -1,17 +1,19 @@
+@@ -1,17 +1,21 @@
  ---
 -name: implement
 +name: matt-implement
@@ -119,6 +131,8 @@
  
  Implement the work described by the user in the spec or tickets.
  
++For an existing team task, read the [team delivery rules](../team-workflow/references/team-delivery.md) and resume its shared materials. Carry forward valid approvals and assignments; approved work starts without another kickoff confirmation. Use the task's own assessment and review path, including combined review for simple work. A standalone MATT call stays lightweight.
++
  If the user passes a ticket reference, fetch it from the issue tracker and state its title before starting. If the reference is ambiguous, ask.
  
 -Call the Skill tool with "tdd" where possible, at pre-agreed seams.
@@ -132,6 +146,7 @@
  
 -Commit your work to the current branch.
 +Finish the logical task under the shared CS integration rules. Commit only when requested or already authorized.
+diff --git a/skills/matt-implement-spec/SKILL.md b/skills/matt-implement-spec/SKILL.md
 --- a/skills/matt-implement-spec/SKILL.md
 +++ b/skills/matt-implement-spec/SKILL.md
 @@ -1,12 +1,14 @@
@@ -141,10 +156,10 @@
  description: "Implement the result of /to-spec and /to-tickets in code."
 -disable-model-invocation: true
  ---
- 
++
 +Before using this method, read the [CS integration rules](../team-workflow/references/matt-integration.md) for prerequisites and the shared knowledge entry.
 +
-+
+ 
  You have been provided a spec. This spec should have tickets associated with it, describing how to implement the spec.
  
 -The issue tracker should have been provided to you. If not, tell the user to run `/setup-matt-pocock-skills`.
@@ -152,16 +167,16 @@
  
  The goal is the entire spec implemented on a single **integration branch**, with every ticket resolved the way the issue tracker closes work.
  
-@@ -14,7 +16,7 @@ The tickets are not a list of steps. They are a **task graph** with blocking rel
+@@ -14,7 +16,7 @@
  
  Communication to and from subagents should be sparse. Communicate primarily through **context pointers**: to the spec, tickets, research notes, and previous commits. Don't duplicate information already available via pointers.
  
 -**Implementer subagents** should be run in the background where possible for maximum concurrency.
-+Use subagents and worktrees only when authorized and useful. Otherwise execute the same task graph in the current agent, keeping the per-ticket acceptance and final review. When the project forbids extra checkouts (for example shared workspace files above the repository), skip steps 4–6's per-ticket worktrees and implement the frontier serially in the current checkout. With the [stage flow](../team-workflow/references/stage-flow.md) enabled, record any subagent fan-out in its ledger and stop at its hard-pause triggers.
++Use subagents and worktrees only when authorized and useful. Otherwise execute the same task graph in the current agent, keeping the per-ticket acceptance and final review. When the project forbids extra checkouts (for example shared workspace files above the repository), skip steps 4–6's per-ticket worktrees and implement the frontier serially in the current checkout. For an existing team task, follow the [team delivery rules](../team-workflow/references/team-delivery.md), retaining valid approvals and each task's assessment. Simple work may remain in one task; approved scope does not add repeated kickoff or file-type pauses. Record authorized delegation using the existing ledger when needed.
  
  ## Steps
  
-@@ -22,19 +24,19 @@ Communication to and from subagents should be sparse. Communicate primarily thro
+@@ -22,19 +24,19 @@
  
  2. (optional) Use an **exploration subagent** to conduct any exploration required by the tickets - relevant codebase files or external documentation. Ensure the exploration subagent can save files - it should save its markdown notes in a directory outside the repo, accessible by all future subagents. This lets **implementer subagents** focus on implementation rather than exploration.
  
@@ -187,6 +202,7 @@
  
 -9. Clean up all **implementer subagent** worktrees.
 +9. Clean up only task-owned temporary worktrees after preserving their work.
+diff --git a/skills/matt-diagnosing-bugs/SKILL.md b/skills/matt-diagnosing-bugs/SKILL.md
 --- a/skills/matt-diagnosing-bugs/SKILL.md
 +++ b/skills/matt-diagnosing-bugs/SKILL.md
 @@ -1,13 +1,16 @@
@@ -208,6 +224,7 @@
  
  ## Redact
  
+diff --git a/skills/matt-tdd/SKILL.md b/skills/matt-tdd/SKILL.md
 --- a/skills/matt-tdd/SKILL.md
 +++ b/skills/matt-tdd/SKILL.md
 @@ -1,13 +1,16 @@
@@ -255,6 +272,7 @@
  - **One slice at a time.** One seam, one test, one minimal implementation per cycle.
 -- **Refactoring is not part of the loop.** It belongs to the review stage (see the `code-review` skill), not the red → green implementation cycle.
 +- **Refactoring is not part of the loop.** It belongs to the review stage (see the `matt-code-review` skill), not the red → green implementation cycle.
+diff --git a/skills/matt-codebase-design/SKILL.md b/skills/matt-codebase-design/SKILL.md
 --- a/skills/matt-codebase-design/SKILL.md
 +++ b/skills/matt-codebase-design/SKILL.md
 @@ -1,7 +1,10 @@
@@ -269,6 +287,7 @@
  
  # Codebase Design
  
+diff --git a/skills/matt-domain-modeling/SKILL.md b/skills/matt-domain-modeling/SKILL.md
 --- a/skills/matt-domain-modeling/SKILL.md
 +++ b/skills/matt-domain-modeling/SKILL.md
 @@ -1,11 +1,16 @@
@@ -289,9 +308,10 @@
  
  ## File structure
  
+diff --git a/skills/matt-code-review/SKILL.md b/skills/matt-code-review/SKILL.md
 --- a/skills/matt-code-review/SKILL.md
 +++ b/skills/matt-code-review/SKILL.md
-@@ -1,26 +1,29 @@
+@@ -1,26 +1,31 @@
  ---
 -name: code-review
 -description: "Review the changes since a fixed point (commit, branch, tag, or merge-base) along two axes: Standards (does the code follow this repo's documented coding standards?) and Spec (does the code match what the originating issue/spec asked for?). Runs both reviews in parallel sub-agents and reports them side by side. Use when the user wants to review a branch, a PR, work-in-progress changes, or asks to \"review since X\"."
@@ -313,6 +333,8 @@
  
 -The issue tracker should have been provided to you. If not, tell the user to run `/setup-matt-pocock-skills`.
 +Use the accepted user goal and the project's existing requirements; a separate task platform is optional.
++
++For a team task, follow the [team delivery rules](../team-workflow/references/team-delivery.md). Record the actual reviewer without imposing a rank or requiring a different person. Simple tasks combine final plan and code approval with the actual code and run references; risks still determine checks. Existing approvals remain valid only for unchanged sections and dependencies. Business acceptance precedes the final CS record, followed by separate knowledge and delivery checks.
  
  ## Process
  
@@ -329,7 +351,7 @@
  
  ### 2. Identify the spec source
  
-@@ -29,7 +32,7 @@ Look for the originating spec, in this order:
+@@ -29,7 +34,7 @@
  1. Issue references in the commit messages (`#123`, `Closes #45`, GitLab `!67`, etc.), fetched via the workflow in the tracker doc.
  2. A path the user passed as an argument.
  3. A spec file under `docs/`, `specs/`, or `.scratch/` matching the branch name or feature.
@@ -338,7 +360,7 @@
  
  ### 3. Identify the standards sources
  
-@@ -55,9 +58,9 @@ Each smell reads *what it is* → *how to fix*; match it against the diff:
+@@ -55,9 +60,9 @@
  - **Middle Man**: a class or function that mostly just delegates onward. → cut it, call the real target direct.
  - **Refused Bequest**: a subclass or implementer that ignores or overrides most of what it inherits. → drop the inheritance, use composition.
  
@@ -350,7 +372,7 @@
  
  **Standards sub-agent prompt** should include:
  
-@@ -71,7 +74,9 @@ Issue both sub-agent calls together, in the foreground, and aggregate the report
+@@ -71,7 +76,9 @@
  - The path or fetched contents of the spec.
  - The brief: "Report: (a) requirements the spec asked for that are missing or partial; (b) behaviour in the diff that wasn't asked for (scope creep); (c) requirements that look implemented but where the implementation looks wrong. Quote the spec line for each finding. Under 400 words."
  
@@ -361,6 +383,7 @@
  
  ### 5. Aggregate
  
+diff --git a/skills/matt-retro/SKILL.md b/skills/matt-retro/SKILL.md
 --- a/skills/matt-retro/SKILL.md
 +++ b/skills/matt-retro/SKILL.md
 @@ -1,44 +1,26 @@
@@ -423,6 +446,7 @@
 -- Docs: use docs as references files, pointed to by other files. Look for existing docs before writing new ones.
 -- Skills: use skills for docs (since their description goes into the agent's context window), or for user-invoked commands. Follow the advice in the `writing-for-agents` skill.
 +The result is a set of recommendations. Implement changes only when they are part of the user's authorized task. This method adds no separate code-review rules or knowledge-maintenance steps.
+diff --git a/skills/matt-retro/agents/openai.yaml b/skills/matt-retro/agents/openai.yaml
 --- a/skills/matt-retro/agents/openai.yaml
 +++ b/skills/matt-retro/agents/openai.yaml
 @@ -1,5 +1,5 @@
@@ -433,6 +457,7 @@
 +  short_description: "Review agent navigation, instructions, tools and checks."
  policy:
    allow_implicit_invocation: false
+diff --git a/skills/matt-grilling/SKILL.md b/skills/matt-grilling/SKILL.md
 --- a/skills/matt-grilling/SKILL.md
 +++ b/skills/matt-grilling/SKILL.md
 @@ -1,7 +1,10 @@
@@ -447,6 +472,7 @@
  
  Interview the user relentlessly until you reach a shared understanding. Map this as a **design tree**: every decision branches into the decisions that hang off it.
  
+diff --git a/skills/matt-pr/SKILL.md b/skills/matt-pr/SKILL.md
 --- a/skills/matt-pr/SKILL.md
 +++ b/skills/matt-pr/SKILL.md
 @@ -1,5 +1,5 @@
@@ -475,6 +501,7 @@
  
  ### Summary
  
+diff --git a/skills/matt-prototype/SKILL.md b/skills/matt-prototype/SKILL.md
 --- a/skills/matt-prototype/SKILL.md
 +++ b/skills/matt-prototype/SKILL.md
 @@ -1,7 +1,10 @@
@@ -495,6 +522,7 @@
  5. **Surface the state.** After every action (logic) or on every variant switch (UI), print or render the full relevant state so the user can see what changed.
 -6. **Capture it when done.** Fold any validated decision into the real code, then capture the prototype itself as a **primary source**: commit it to a throwaway branch, out of main, and leave a context pointer to that branch on the implementation issue. Capture the answer too (the verdict and the question it settled) in the issue or a commit. The main branch keeps only the validated decision.
 +6. **Capture it when done.** Fold any validated decision into the real code, then capture the prototype itself as a **primary source**: retain it in an explicitly temporary location, and use a throwaway branch or an issue pointer only when those actions are authorized. Capture the answer too (the verdict and the question it settled) in the issue or a commit. The main branch keeps only the validated decision.
+diff --git a/skills/matt-writing-for-agents/SKILL.md b/skills/matt-writing-for-agents/SKILL.md
 --- a/skills/matt-writing-for-agents/SKILL.md
 +++ b/skills/matt-writing-for-agents/SKILL.md
 @@ -1,7 +1,10 @@
@@ -509,6 +537,7 @@
  
  Reference for writing any document an agent consumes: a skill, an `AGENTS.md` / `CLAUDE.md`, a doc reached by a pointer. The packaging differs; the writing does not: the same levers make each one predictable, since the agent takes the same _process_ every run rather than producing the same output.
  
+diff --git a/skills/matt-research/SKILL.md b/skills/matt-research/SKILL.md
 --- a/skills/matt-research/SKILL.md
 +++ b/skills/matt-research/SKILL.md
 @@ -1,12 +1,16 @@

@@ -1,0 +1,47 @@
+{
+  "schema_version": 4,
+  "kind": "design",
+  "id": "__REPLACE__",
+  "revision": 1,
+  "task_id": "__REPLACE__",
+  "assessment": {
+    "complexity": "simple",
+    "risks": [],
+    "effort": "__REPLACE__",
+    "drivers": ["__REPLACE__"],
+    "uncertainties": [],
+    "required_skills": []
+  },
+  "roles": {
+    "design_owner": "__REPLACE__",
+    "implementation_owner": "",
+    "acceptance_owner": "__REPLACE__"
+  },
+  "sections": [
+    {
+      "id": "scope-global",
+      "type": "global-scope",
+      "title": "全局范围",
+      "body": "__REPLACE__",
+      "data": {},
+      "depends_on": []
+    },
+    {
+      "id": "A1",
+      "type": "acceptance",
+      "title": "验收条件",
+      "body": "__REPLACE__",
+      "data": {"checks": ["__REPLACE__"]},
+      "depends_on": []
+    },
+    {
+      "id": "T1",
+      "type": "task",
+      "title": "实施任务",
+      "body": "__REPLACE__",
+      "data": {"acceptance": ["A1"], "scope": [], "blocked_by": []},
+      "depends_on": []
+    }
+  ],
+  "decisions": []
+}
