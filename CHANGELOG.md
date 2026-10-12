@@ -1,3 +1,9 @@
+# 未发布
+
+- `project` 比较已安装工具与项目配置的 `workflow_version`：项目较旧返回 `project-outdated`，项目较新时所有命令返回 `tool-outdated` 并提示 `npx skills update -g`。
+- 新增 `upgrade`：把第三、四版配置升级到最新格式并记录工具版本；默认预览，`--apply` 写入；需要夹具身份的检查列为缺项，不代写环境。
+- 配置升级后，Issue 中的第三版任务仍按自身格式走原兼容接口。
+
 # 0.5.0-rc.1
 
 - 新增显式开启的[阶段流程](skills/team-workflow/references/stage-flow.md)：S0–G3 阶段、G1/G3 用户确认关卡、决策项、硬暂停触发器和固定汇报格式；默认仍按目标选择方法。

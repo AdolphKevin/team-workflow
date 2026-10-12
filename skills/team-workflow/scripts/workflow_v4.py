@@ -30,6 +30,15 @@ def handles(args, root):
         return read(local(root, args.task)).get('schema_version') == 4
     if args.phase == 'acceptance':
         return True
+    if args.issue and args.command in ('resume', 'handoff', 'progress', 'task-export', 'status'):
+        # An upgraded project keeps its in-flight legacy Issue tasks on their original contract.
+        import github_read
+        import handoffs
+        value = handoffs.block(github_read.issue(args.issue).get('body'), 'task', required=False)
+        if isinstance(value, dict) and value.get('schema_version') in (3, 4):
+            return value['schema_version'] == 4
+        if args.command == 'status':
+            return False
     path = root / args.profile
     return path.is_file() and read(path).get('schema_version') == 4
 

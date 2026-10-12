@@ -10,6 +10,7 @@ from common import (Invalid, VERSION, artifact, binding, inside, obj, profile_va
 import execution
 import knowledge
 import verification
+import versioning
 
 
 def parser():
@@ -18,7 +19,7 @@ def parser():
                                       'verify', 'aggregate', 'migrate', 'evidence', 'version',
                                       'resume', 'handoff', 'progress', 'task-export', 'delivery-template', 'import-result',
                                       'status', 'stage-draft', 'agents', 'prepare', 'design-draft',
-                                      'approval-draft', 'design-diff', 'schema', 'cleanup'])
+                                      'approval-draft', 'design-diff', 'schema', 'cleanup', 'upgrade'])
     p.add_argument('--root', type=Path, default=Path.cwd())
     p.add_argument('--profile', type=Path, default=Path('.team-workflow.json'))
     p.add_argument('--task', type=Path)
@@ -33,7 +34,7 @@ def parser():
     p.add_argument('--phase', choices=['acceptance', 'delivery'], default='delivery')
     p.add_argument('--kind', choices=['design', 'implementation'], default='implementation')
     p.add_argument('--format', choices=['json', 'text'], default='json')
-    p.add_argument('--apply', action='store_true', help='Apply an explicitly reviewed cleanup plan')
+    p.add_argument('--apply', action='store_true', help='Apply an explicitly reviewed cleanup plan or project upgrade')
     p.add_argument('--dry-run', action='store_true', help='Preview only (cleanup default)')
     p.add_argument('--evidence-repository', help='Declared external repository for --path evidence')
     p.add_argument('--out', help='New file under .team-workflow; existing files are never overwritten')
@@ -98,8 +99,21 @@ def main(argv=None):
                 mappings[kind][name] = path
         LOCATIONS.set(mappings)
 
+        # A project written by a newer tool must never be interpreted by an older one.
+        profile_path = root / args.profile
+        version_info = None
+        if args.command not in ('version', 'schema', 'migrate') and profile_path.is_file():
+            version_info = versioning.ensure_tool_current(read(profile_path))
+
         import workflow_v4
-        if workflow_v4.handles(args, root):
+        if args.command == 'upgrade':
+            result = versioning.upgrade(root, read(local(root, args.profile)),
+                                        read(local(root, args.record)) if args.record else None)
+            if args.apply and result['ok'] and result['status'] != 'current':
+                write(profile_path, result.pop('profile'))
+                result['applied'] = True
+                result['next_action'] = 'Review the configuration diff, rerun `project`, and commit it under existing authorization.'
+        elif workflow_v4.handles(args, root):
             result = workflow_v4.dispatch(args, root)
         elif args.command == 'version':
             result = tool_identity()
@@ -238,6 +252,12 @@ def main(argv=None):
                     result.pop('records')
         if request:
             result = request.finish(result)
+        if args.command == 'project' and version_info:
+            result['version'] = version_info
+            if version_info['status'] == 'project-outdated':
+                result.update(ok=False, error_code='project-outdated', next_action=version_info['next_action'],
+                              problem=f"Project configuration targets {version_info['project'] or 'an older format'}; "
+                                      f"installed team-workflow is {version_info['tool']}")
         if not result.get('ok', True):
             result.setdefault('problem', '; '.join(str(value) for value in result.get('gaps', [])) or 'The operation is incomplete; inspect the recorded details.')
             result.setdefault('next_action', 'Resolve the reported gap and retry without replacing prior evidence.')
@@ -250,6 +270,8 @@ def main(argv=None):
         result = {'ok': False, 'scope': args.command, 'status': 'incomplete', 'problem': str(exc),
                   'error_code': 'invalid-or-incomplete-input',
                   'next_action': 'Inspect the named input and run status or schema before retrying; preserve prior evidence.'}
+        if isinstance(exc, versioning.Outdated):
+            result.update(error_code=exc.error_code, next_action=exc.next_action, version=exc.version)
         if args.command in ('verify', 'aggregate'):
             result['layers'] = getattr(exc, 'layers', dict.fromkeys(('materials', 'execution', 'review', 'knowledge'), 'not-evaluated'))
         if request and request.cached is None:

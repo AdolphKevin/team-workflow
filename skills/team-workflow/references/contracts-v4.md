@@ -12,7 +12,12 @@ Python 3.10+、Git 和项目自身的测试依赖。通用工具只使用标准�
 ```bash
 python3 "$WF" schema --root "$PROJECT"
 python3 "$WF" project --root "$PROJECT" --cs-skill "$CS_SKILL"
+python3 "$WF" upgrade --root "$PROJECT" [--record "$UPGRADE_INPUT"] [--apply]
 ```
+
+`project` 的 `version.status` 为 `current`、`project-outdated` 或 `tool-outdated`。
+项目较旧时用 `upgrade` 预览、`--apply` 写入；项目较新时返回 `tool-outdated`，先更新
+已安装技能。规则见[接入指南](onboarding.md#升级与回退)。
 
 `schema` 返回随技能安装的[配置模板](../templates/profile.json)、[任务模板](../templates/task.json)
 和[方案模板](../templates/design.json)。模板需要按实际项目填写；配置放在根目录
@@ -29,6 +34,7 @@ python3 "$WF" project --root "$PROJECT" --cs-skill "$CS_SKILL"
 | `inputs` | 参与结果但被 Git 忽略的文件或目录 |
 | `external_inputs` | 逻辑依赖及用途，本机位置另行提供 |
 | `environment_versions` | 名称到只读版本查询命令数组 |
+| `workflow_version` | 最近一次对齐配置的工具版本，由 `upgrade --apply` 写入 |
 
 检查包含 `argv` 参数数组、`purpose`、仓内 `cwd`、秒数 `timeout`、`format`、
 `required_cases`、`required_env` 和 `environment`。命令不经 shell，凭证通过环境传递，

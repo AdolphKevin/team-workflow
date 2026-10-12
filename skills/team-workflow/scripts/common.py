@@ -208,9 +208,13 @@ def snapshot(root, profile):
 
 
 def profile_valid(profile, root, check_context=True):
-    obj(profile, {'schema_version', 'project', 'context', 'knowledge', 'checks', 'required_checks', 'risk_checks', 'inputs', 'environment_versions'}, {'external_inputs'})
+    obj(profile, {'schema_version', 'project', 'context', 'knowledge', 'checks', 'required_checks', 'risk_checks', 'inputs', 'environment_versions'}, {'external_inputs', 'workflow_version'})
     require(type(profile['schema_version']) is int and profile['schema_version'] in (3, 4),
-            'Unsupported project configuration; expected schema_version 3 or 4. Adjust configuration explicitly; no migration is performed')
+            'Unsupported project configuration; expected schema_version 3 or 4. Run `workflow.py upgrade` for supported older formats')
+    if 'workflow_version' in profile:
+        require(profile['schema_version'] == 4, 'workflow_version requires schema_version 4')
+        require(bool(re.fullmatch(r'[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?', text(profile['workflow_version']))),
+                'workflow_version must be a semantic version')
     location_settings(root)
     text(profile['project'])
     for name in strings(profile['context'], True):
