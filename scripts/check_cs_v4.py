@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Exercise v4 acceptance and structured knowledge against the real independent CS CLI."""
+"""Exercise v5 acceptance and structured knowledge against the real independent CS CLI."""
 import argparse
 import json
 from pathlib import Path
@@ -33,14 +33,14 @@ def run(skill):
         assert accepted['business_accepted'] and not accepted['delivery_complete']
         case.write('acceptance', accepted)
         external = knowledge.external_ref(case.task)
-        template = knowledge.call(skill, case.root, ['template', '--title', 'Complete addition behavior',
-                    '--external-ref', external['system'] + '=' + external['id']])
+        template = knowledge.completion_template(case.root, case.profile, case.task, skill,
+            case.root / case.name('acceptance'))
         template['task'].update(request='Verify addition at the public entry.', summary='Executed the arithmetic entry assertion.',
             result='The assertion 1+2=3 passed and the actual plan/code review was recorded.',
             scopes=[{'repository': 'self', 'path': 'app.py'}],
-            verification=['Executed the configured Python assertion and v4 business acceptance.'],
+            verification=['Executed the configured Python assertion and v5 business acceptance.'],
             knowledge_summary='The existing public requirement owns the behavior; no additional durable fact is needed.')
-        with tempfile.TemporaryDirectory(prefix='workflow-v4-cs-plan-') as temporary:
+        with tempfile.TemporaryDirectory(prefix='workflow-v5-cs-plan-') as temporary:
             payload, plan = Path(temporary) / 'learning.json', Path(temporary) / 'plan.token'
             write(payload, template)
             knowledge.call(skill, case.root, ['learn', '--file', str(payload), '--dry-run', '--plan-out', str(plan)])
@@ -57,9 +57,9 @@ def run(skill):
         result = delivery.verify(case.root, case.profile, case.task, case.report, skill)
         assert result['delivery_complete'] and not result['closable']
         assert knowledge.call(skill, case.root, ['task-files', '--task-id', learned['task_id'], '--format', 'json'])['external_refs'] == [external]
-        return {'ok': True, 'checks': ['real-v4-acceptance-before-learn', 'structured-external-task-association',
+        return {'ok': True, 'checks': ['real-v5-acceptance-before-learn', 'structured-external-task-association',
                     'github-identity-normalization-agrees-with-cs',
-                    'knowledge-only-commit-reuses-business-execution', 'real-v4-final-delivery-without-close-permission'],
+                    'knowledge-only-commit-reuses-business-execution', 'real-v5-final-delivery-without-close-permission'],
                 'scope': 'isolated-public-interface-fixture; not a human pilot'}
     finally:
         case.doCleanups()
@@ -72,5 +72,5 @@ if __name__ == '__main__':
     try:
         print(json.dumps(run(args.cs_skill.resolve()), ensure_ascii=False, indent=2))
     except Invalid as exc:
-        print(json.dumps({'ok': False, 'problem': str(exc), 'next_action': 'Use a CS runtime declaring the v4 integration capabilities; do not downgrade task verification.'}))
+        print(json.dumps({'ok': False, 'problem': str(exc), 'next_action': 'Use a CS runtime declaring the v5 integration capabilities; do not downgrade task verification.'}))
         sys.exit(1)

@@ -5,7 +5,7 @@ import subprocess
 import sys
 import json
 
-from common import Invalid, artifact, digest, inside, now, read, require, sha, write
+from common import Invalid, artifact, artifact_valid, digest, inside, now, read, require, sha, write
 
 
 def skill_path(value=None):
@@ -49,7 +49,7 @@ def receipt_check(skill, root, brief):
 
 def brief(root, task, skill, paths, symbols):
     preflight = call(skill, root, ['--check'], bootstrap=True)
-    modern = task.get('schema_version') == 4
+    modern = task.get('schema_version') == 5
     supported(preflight, modern)
     paths = paths or task.get('paths', [])
     symbols = symbols or task.get('symbols', [])
@@ -65,7 +65,7 @@ def brief(root, task, skill, paths, symbols):
         command += ['--scope', scope]
     data = call(skill, root, command)
     require(isinstance(data.get('receipt', {}).get('query_state'), dict), 'CS brief must include scoped source state')
-    record = {'schema_version': 4 if modern else 2, 'kind': 'knowledge-brief', 'task_id': task['id'],
+    record = {'schema_version': 5 if modern else 2, 'kind': 'knowledge-brief', 'task_id': task['id'],
               'at': now(), 'cs_version': preflight.get('skill_version'),
               'task_digest': digest(task), 'paths': paths, 'symbols': symbols,
               'query_state': data['receipt']['query_state'], 'brief': data}
@@ -88,15 +88,16 @@ def finish_v4(root, profile, task, skill, task_id, brief_path, disposition, reas
     require(disposition in ('none', 'reused', 'updated', 'added') and reason.strip(), 'Describe actual knowledge disposition')
     supported(call(skill, root, ['--check'], bootstrap=True), True)
     acceptance = read(acceptance_path)
-    require(acceptance.get('schema_version') == 4 and acceptance.get('kind') == 'acceptance'
+    require(acceptance.get('schema_version') == 5 and acceptance.get('kind') == 'acceptance'
             and acceptance.get('ok') is True and acceptance.get('task_digest') == digest(task)
             and acceptance.get('source_digest') == source_digest(root, profile),
             'Current business acceptance is required before recording CS completion')
+    validate_acceptance(root, profile, task, acceptance)
     initial = read(brief_path)
     latest_path = final_brief_path or brief_path
     latest = read(latest_path)
     for value in (initial, latest):
-        require(value.get('schema_version') == 4 and value.get('kind') == 'knowledge-brief'
+        require(value.get('schema_version') == 5 and value.get('kind') == 'knowledge-brief'
                 and value.get('task_digest') == digest(task), 'Knowledge brief belongs to another task/version')
     from datetime import datetime
     require(datetime.fromisoformat(initial['at']) <= datetime.fromisoformat(acceptance['at']),
@@ -106,10 +107,19 @@ def finish_v4(root, profile, task, skill, task_id, brief_path, disposition, reas
     require(files.get('task_status') == 'completed' and files.get('canonical_task_id') == task_id,
             'CS canonical task must be completed')
     require(external_ref(task) in files.get('external_refs', []), 'CS task needs an exact structured external_refs association')
+    existing = call(skill, root, ['template', '--task-id', task_id])['task']
+    require(existing.get('source', {}).get('workflow_acceptance') == artifact(root, acceptance_path),
+            'CS completion must reference the actual current business acceptance')
+    expected = task.get('scopes') or [{'repository': 'self', 'path': p} for p in task.get('paths', [])]
+    actual = files.get('scopes') or [{'repository': 'self', 'path': p} for p in files.get('paths', [])]
+    require(bool(expected) and any(a.get('repository') == e.get('repository') and
+            (a['path'] == e['path'] or a['path'].startswith(e['path'].rstrip('/') + '/') or
+             e['path'].startswith(a['path'].rstrip('/') + '/')) for a in actual for e in expected),
+            'CS knowledge scope does not match the actual task repository and paths')
     related = [artifact(root, inside(root, name)) for name in files['files']]
     require(bool(related), 'Missing actual CS task files')
     require(receipt_check(skill, root, latest['brief']) == sources, 'Knowledge sources changed during capture')
-    return {'schema_version': 4, 'kind': 'knowledge-completion', 'task_id': task['id'],
+    return {'schema_version': 5, 'kind': 'knowledge-completion', 'task_id': task['id'],
             'task_digest': digest(task), 'at': now(), 'brief': artifact(root, brief_path),
             'final_brief': artifact(root, latest_path), 'acceptance': artifact(root, acceptance_path),
             'cs_task_id': task_id, 'cs_task_revision': files['task_revision'],
@@ -140,3 +150,42 @@ def finish(root, task, skill, task_id, brief_path, disposition, reason):
             'cs_task_id': task_id, 'cs_task_revision': files['task_revision'],
             'files': related, 'query_state': sources,
             'disposition': disposition, 'reason': reason}
+
+
+def completion_template(root, profile, task, skill, acceptance_path=None, task_id=None):
+    """Generate only a CS payload; CS still owns all writes and its preview/apply protocol."""
+    command = ['template', '--task-id', task_id] if task_id else ['template', '--title', task['goal'], '--kind', 'task']
+    payload = call(skill, root, command)
+    value = payload['task']
+    value['external_refs'] = list(value.get('external_refs', []))
+    if external_ref(task) not in value['external_refs']:
+        value['external_refs'].append(external_ref(task))
+    value['scopes'] = task.get('scopes') or [{'repository': 'self', 'path': p} for p in task.get('paths', [])]
+    require(bool(value['scopes']), 'Knowledge template needs actual repository scopes')
+    value['status'] = 'in-progress'
+    payload['items'] = []
+    if acceptance_path is not None:
+        acceptance = read(acceptance_path)
+        validate_acceptance(root, profile, task, acceptance)
+        value['status'] = 'completed'
+        value.setdefault('source', {})['workflow_acceptance'] = artifact(root, acceptance_path)
+    else:
+        value.setdefault('source', {}).pop('workflow_acceptance', None)
+    return payload
+
+
+def validate_acceptance(root, profile, task, value):
+    from validation import source_digest
+    require(value.get('schema_version') == 5 and value.get('kind') == 'acceptance'
+            and value.get('ok') is True and value.get('business_accepted') is True
+            and value.get('task_digest') == digest(task)
+            and value.get('source_digest') == source_digest(root, profile),
+            'Current business acceptance is required before CS completion')
+    for ref in value.get('materials', []):
+        artifact_valid(root, ref)
+    require(bool(value.get('materials')), 'Business acceptance must include original materials')
+    require(isinstance(value.get('report'), dict), 'Acceptance must retain its original verification inputs')
+    import delivery
+    fresh = delivery.verify(root, profile, task, value['report'], phase='acceptance')
+    require(all(fresh.get(key) == value.get(key) for key in ('task_digest', 'source_digest', 'sections', 'checks', 'acceptance_scope', 'issues', 'observations')),
+            'Business acceptance inputs or dispositions changed')

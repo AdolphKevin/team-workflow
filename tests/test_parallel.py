@@ -33,7 +33,9 @@ class ParallelMaterials(unittest.TestCase):
     run_check = fixtures.WorkflowCases.run_check
 
     def prepare(self, code='print("checked")'):
-        self.check(code)
+        self.profile['schema_version'] = 5
+        self.task.update(schema_version=5, design_id='arithmetic', section_ids=['T1'], acceptance_scope='requirement', paths=['app.py'])
+        self.check(code, environment={'kind': 'stateless'})
         write(self.root / '.team-workflow.json', self.profile)
         write(self.root / '.team-workflow/input/task.json', self.task)
         return [sys.executable, str(fixtures.SCRIPTS / 'workflow.py'), 'run', '--root', str(self.root),

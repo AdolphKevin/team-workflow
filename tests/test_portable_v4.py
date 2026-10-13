@@ -16,6 +16,7 @@ import uuid
 import zipfile
 
 import test_workflow as fixtures
+import v5_fixtures as v5
 from common import Invalid, artifact, now, read, write
 import delivery
 import designs
@@ -34,8 +35,8 @@ class PortableCases(unittest.TestCase):
 
     def prepare(self, xml=None, **options):
         self.git('remote', 'add', 'origin', 'https://github.com/example/project.git')
-        self.profile['schema_version'] = 4
-        self.task.update(schema_version=4, design_id='addition', section_ids=['T1'])
+        self.profile['schema_version'] = 5
+        self.task.update(schema_version=5, design_id='addition', section_ids=['T1'], acceptance_scope='requirement', paths=['app.py'])
         self.configure_check(xml, **options)
 
     def configure_check(self, xml=None, **options):
@@ -284,9 +285,9 @@ class AggregateCases(unittest.TestCase):
             fixture.setUp()
             self.addCleanup(fixture.doCleanups)
             fixture.git('remote', 'add', 'origin', 'https://github.com/example/' + name + '.git')
-            fixture.profile.update(schema_version=4, project=name)
-            fixture.task.update(schema_version=4, id='TASK-' + name, parent='JOINT-fixture',
-                                design_id='design-' + name, section_ids=['T1'], paths=['app.py'])
+            fixture.profile.update(schema_version=5, project=name)
+            fixture.task.update(schema_version=5, id='TASK-' + name, parent='JOINT-fixture',
+                                design_id='design-' + name, section_ids=['T1'], paths=['app.py'], acceptance_scope='task')
             fixture.check('import app; assert app.add(1,2)==3', environment={'kind': 'stateless'})
             fixture.skill = fixture.fake_cs()
             self.fixtures[name] = fixture
@@ -311,15 +312,20 @@ class AggregateCases(unittest.TestCase):
         # A real CS installation accepts --root for every project. The process
         # fixture returns each project's note identity from that actual root.
         script = self.skill / 'scripts/cs_knowledge.py'
-        script.write_text('import json,sys\nfrom pathlib import Path\n'
+        script.write_text('import json,sys,hashlib\nfrom pathlib import Path\n'
             'root=Path(sys.argv[sys.argv.index("--root")+1])\n'
             'task=(root/".codestable/wiki/task.md").read_text().splitlines()[0]\n'
-            'print(json.dumps({"ok":True,"kind":"receipt-check","read_only":True,"query_state":{},'
+            'p=root/".team-workflow/acceptance.json"\n'
+            'reply={"ok":True,"kind":"receipt-check","read_only":True,"query_state":{},'
             '"changed":[],"receipt":{"query_state":{}},"task_status":"completed",'
             '"canonical_task_id":"CS-T","task_revision":1,"files":[".codestable/wiki/task.md"],'
             '"records":[{"id":"CS-T","path":".codestable/wiki/task.md","relations":["task-note"]}],'
-            '"external_refs":[{"system":"team-workflow","id":task}]}))\n')
-        self.manifest = {'schema_version': 4, 'task_id': 'JOINT-fixture', 'joint': 'example/core',
+            '"scopes":[{"repository":"self","path":"app.py"}],'
+            '"external_refs":[{"system":"team-workflow","id":task}]}\n'
+            'if "template" in sys.argv:\n'
+            ' reply={"ok":True,"task":{"source":{"workflow_acceptance":{"path":str(p.relative_to(root)),"sha256":hashlib.sha256(p.read_bytes()).hexdigest()}}}}\n'
+            'print(json.dumps(reply))\n')
+        self.manifest = {'schema_version': 5, 'task_id': 'JOINT-fixture', 'joint': 'example/core',
             'participants': [{'repository': 'example/' + name, 'commit': fixture.task['base'],
                 'profile': '.team-workflow/profile.json', 'task': '.team-workflow/task.json',
                 'report': '.team-workflow/report.json'}
@@ -327,11 +333,17 @@ class AggregateCases(unittest.TestCase):
             'dependencies': [{'repository': 'example/common', 'commit': self.fixtures['common'].task['base']}]}
         for name in ('core', 'gateway'):
             self.complete(self.fixtures[name], portable_run=name == 'core')
+        from types import SimpleNamespace
+        parent_task = {**self.fixtures['core'].task, 'id': 'JOINT-fixture', 'design_id': 'joint-requirement', 'acceptance_scope': 'requirement'}
+        parent_task.pop('parent', None)
+        self.parent_fixture = SimpleNamespace(root=self.root, profile=self.fixtures['core'].profile, task=parent_task)
+        self.complete(self.parent_fixture, prefix='parent-', knowledge_complete=False)
+        self.manifest['requirement'] = {'repository': 'example/core', 'task': '.team-workflow/parent-task.json', 'report': '.team-workflow/parent-report.json'}
 
-    def complete(self, fixture, portable_run=False):
+    def complete(self, fixture, portable_run=False, prefix='', knowledge_complete=True):
         root, profile, task = fixture.root, fixture.profile, fixture.task
-        design = {'schema_version': 4, 'kind': 'design', 'id': task['design_id'], 'revision': 1,
-            'task_id': task['id'], 'assessment': {'complexity': 'medium', 'risks': list(task['risks']),
+        design = {'schema_version': 5, 'kind': 'design', 'id': task['design_id'], 'revision': 1,
+            'task_id': task.get('parent') or task['id'], 'assessment': {'complexity': 'medium', 'risks': list(task['risks']),
                 'effort': 'one hour', 'drivers': ['arithmetic behavior'], 'uncertainties': [], 'required_skills': ['Python']},
             'roles': {'design_owner': 'alice', 'implementation_owner': 'bob', 'acceptance_owner': 'carol'},
             'sections': [
@@ -340,30 +352,36 @@ class AggregateCases(unittest.TestCase):
                  'data': {'checks': ['unit']}, 'depends_on': []},
                 {'id': 'T1', 'type': 'task', 'title': 'Work', 'body': 'Check public behavior',
                  'data': {'acceptance': ['A1'], 'scope': ['app.py'], 'blocked_by': []}, 'depends_on': []}]}
+        v5.plan(design)
         def save(name, value):
-            write(root / '.team-workflow' / (name + '.json'), value)
-            return '.team-workflow/' + name + '.json'
+            write(root / '.team-workflow' / (prefix + name + '.json'), value)
+            return '.team-workflow/' + prefix + name + '.json'
         save('profile', profile)
         save('task', task)
         brief = save('brief', knowledge.brief(root, task, self.skill, [], []))
         run, _ = validation.run_batch(root, profile, [task], portable=portable_run)
         approval = designs.approval_draft(design, 'carol', 'Confirmed scope and testable acceptance')
-        report = {'schema_version': 4, 'task_id': task['id'], 'design': save('design', design),
+        report = {'schema_version': 5, 'task_id': task['id'], 'design': save('design', design),
             'approvals': [save('approval', approval)], 'brief': brief, 'runs': [run.relative_to(root).as_posix()],
-            'review': '.team-workflow/review.json'}
+            'review': '.team-workflow/' + prefix + 'review.json'}
         review = delivery.review_template(root, profile, task, report)
         ref = artifact(root, run)
         review.update(reviewer='carol', knowledge_conflicts_resolved=True)
         for axis in ('standards', 'spec'):
             review[axis] = {'status': 'passed', 'summary': 'Read actual public behavior and executed results', 'evidence': [ref]}
-        review['acceptance'] = [{'id': 'A1', 'status': 'passed', 'summary': 'Observed the declared arithmetic result', 'evidence': [ref]}]
+        review['acceptance'] = [{'id': 'A1', 'status': 'passed', 'summary': 'Observed the declared arithmetic result', 'evidence': [ref], 'observations': [v5.observation(ref)]}]
         save('review', review)
         accepted = delivery.verify(root, profile, task, report, self.skill, 'acceptance')
         save('acceptance', accepted)
+        if not knowledge_complete:
+            save('report', report)
+            return
         completion = knowledge.finish_v4(root, profile, task, self.skill, 'CS-T', root / brief,
             'none', 'Existing requirement remains sufficient', root / '.team-workflow/acceptance.json')
         report['knowledge'] = save('knowledge', completion)
         save('report', report)
+        if fixture is self.fixtures['core'] and hasattr(self, 'parent_fixture'):
+            self.complete(self.parent_fixture, prefix='parent-', knowledge_complete=False)
 
     def api(self, endpoint, **kwargs):
         if '/commits/' in endpoint:
@@ -381,6 +399,18 @@ class AggregateCases(unittest.TestCase):
         self.assertEqual(set(result['versions']), {'example/core', 'example/gateway', 'example/common'})
         self.assertEqual(len(result['participants']), 2)
         self.assertEqual(set(result['tested_versions'][0]['repositories']), set(result['versions']))
+
+    def test_complete_children_do_not_replace_parent_business_acceptance(self):
+        missing = copy.deepcopy(self.manifest)
+        missing.pop('requirement')
+        with self.assertRaisesRegex(Invalid, 'requirement'):
+            self.aggregate(missing)
+        path = self.root / '.team-workflow/parent-review.json'
+        review = read(path)
+        review['acceptance'][0]['observations'] = []
+        write(path, review)
+        with self.assertRaisesRegex(Invalid, 'actual execution'):
+            self.aggregate()
 
     def test_omitted_build_input_or_missing_joint_source_capture_is_rejected(self):
         missing = copy.deepcopy(self.manifest)

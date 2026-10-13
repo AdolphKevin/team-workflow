@@ -1,0 +1,369 @@
+"""Public entry regressions for the observed conversation failures."""
+import contextlib
+import copy
+import io
+import json
+import sys
+import unittest
+from unittest.mock import patch
+
+import test_workflow as fixtures
+from common import VERSION, Invalid, artifact, read, write
+import github_read
+import workflow
+import contracts_v5
+import delivery
+import designs
+import knowledge
+import validation
+import validation_session
+import v5_fixtures as v5
+import test_delivery_v4 as delivery_cases
+
+
+class AdoptionGate(unittest.TestCase):
+    setUp = fixtures.WorkflowCases.setUp
+    git = fixtures.WorkflowCases.git
+
+    def test_new_issue_cannot_select_legacy_execution_by_its_version(self):
+        self.profile.update(schema_version=4, workflow_version=VERSION)
+        write(self.root / '.team-workflow.json', self.profile)
+        url = 'https://github.com/example/project/issues/143'
+        self.task['id'] = url
+        issue = {'html_url': url, 'created_at': '2026-10-13T02:33:50Z',
+                 'body': 'New requirement\n```team-workflow-task\n' + json.dumps(
+                     {'schema_version': 3, 'parent': None, 'task': self.task}) + '\n```\n'}
+        output = io.StringIO()
+        with patch.object(github_read, 'issue', return_value=issue), contextlib.redirect_stdout(output):
+            code = workflow.main(['task-export', '--root', str(self.root), '--issue', url])
+        result = json.loads(output.getvalue())
+        self.assertNotEqual(code, 0, result)
+        self.assertIn('adopt', str(result))
+
+
+def problem(identifier='permission-gap', affects=('A1',), blocks=('acceptance',)):
+    return {'id': identifier, 'summary': 'A related operation still needs a decision', 'owner': 'carol',
+            'affects': list(affects), 'blocks': list(blocks), 'state': 'open', 'resolution': {}}
+
+
+class BusinessEvidence(unittest.TestCase):
+    setUp = fixtures.WorkflowCases.setUp
+    git = fixtures.WorkflowCases.git
+    check = fixtures.WorkflowCases.check
+    fake_cs = fixtures.WorkflowCases.fake_cs
+    setup_v4 = delivery_cases.DeliveryCases.setup_v4
+    name = delivery_cases.DeliveryCases.name
+    write = delivery_cases.DeliveryCases.write
+
+    def verify(self):
+        return delivery.verify(self.root, self.profile, self.task, self.report, self.skill, 'acceptance')
+
+    def refresh(self):
+        self.write('design', self.design)
+        self.write('task', self.task)
+        self.write('brief', knowledge.brief(self.root, self.task, self.skill, [], []))
+        run, _ = validation.run_batch(self.root, self.profile, [self.task])
+        self.runs = [run.relative_to(self.root).as_posix()]
+        self.report['runs'] = self.runs
+        self.write('approval', designs.approval_draft(self.design, 'carol', 'Reviewed the current plan and code',
+            code_digest=validation.source_digest(self.root, self.profile), run_refs=[artifact(self.root, run)]))
+        review = delivery.review_template(self.root, self.profile, self.task, self.report)
+        review.update(reviewer='carol', knowledge_conflicts_resolved=True)
+        ref = artifact(self.root, run)
+        for axis in ('standards', 'spec'):
+            review[axis] = {'status': 'passed', 'summary': 'Inspected actual behavior', 'evidence': [ref]}
+        review['acceptance'] = [{'id': 'A1', 'status': 'passed', 'summary': 'Executed the public operation',
+                                'evidence': [ref], 'observations': [v5.observation(ref)]}]
+        self.write('review', review)
+        self.write('report', self.report)
+
+    def test_missing_scenario_or_assessment_never_prepares_implementation(self):
+        self.setup_v4()
+        for field in ('scenario', 'verification'):
+            value = copy.deepcopy(self.design)
+            del value['sections'][1]['data'][field]
+            with self.assertRaisesRegex(Invalid, 'scenario'):
+                designs.approval_status(value, [], changed_paths=[])
+        self.design['assessment']['drivers'] = []
+        with self.assertRaises(Invalid):
+            designs.approval_status(self.design, [], changed_paths=[])
+
+    def test_local_unit_success_cannot_certify_a_business_journey(self):
+        self.setup_v4()
+        self.profile['checks']['unit']['coverage']['level'] = 'unit'
+        self.refresh()
+        with self.assertRaisesRegex(Invalid, 'Verification level'):
+            self.verify()
+
+    def test_fresh_business_entry_catches_missing_creation_despite_seeded_test_success(self):
+        self.setup_v4()
+        application = ('import json,sys\nfrom pathlib import Path\n'
+                       'state=Path(sys.argv[2])\n'
+                       'if sys.argv[1]=="install": state.write_text(json.dumps({"shop":True}))\n'
+                       'elif sys.argv[1]=="send":\n'
+                       ' data=json.loads(state.read_text()); assert data.get("channel"), "channel missing after installation"\n')
+        (self.root / 'app.py').write_text(application)
+        self.profile['checks']['unit']['argv'] = [sys.executable, '-c', 'seeded={"channel": True}; assert seeded["channel"]']
+        self.profile['checks']['unit']['coverage']['level'] = 'unit'
+        journey = copy.deepcopy(self.profile['checks']['unit'])
+        journey['coverage'] = {**v5.coverage(), 'entrypoints': ['app.py:install', 'app.py:send']}
+        journey['argv'] = [sys.executable, '-c',
+            'import subprocess,sys; state=".team-workflow/business-state.json"; '
+            'subprocess.run([sys.executable,"app.py","install",state],check=True); '
+            'subprocess.run([sys.executable,"app.py","send",state],check=True)']
+        self.profile['checks']['journey'] = journey
+        self.task['goal'] = 'A newly installed shop can accept its first message'
+        self.task['acceptance'][0]['expectation'] = 'Installation creates the channel needed to accept a message'
+        self.task['acceptance'][0]['checks'] = ['journey']
+        self.design['sections'][0]['body'] = self.task['goal']
+        self.design['sections'][1]['body'] = self.task['acceptance'][0]['expectation']
+        self.design['sections'][1]['data']['scenario'] = {'actor': 'buyer', 'initial_state': 'No installed shop',
+            'steps': ['Install through the public CLI', 'Send the first message'],
+            'expected': 'Message accepted after installation', 'negative_cases': ['A missing channel prevents accepting the message']}
+        self.design['sections'][1]['data']['verification']['coverage'] = journey['coverage']
+        self.design['sections'][1]['data']['checks'] = ['journey']
+        self.refresh()
+        first = read(self.root / self.runs[0])
+        outcomes = {r['id']: r['status'] for r in first['results']}
+        self.assertEqual(outcomes['unit'], 'passed')
+        self.assertEqual(outcomes['journey'], 'failed')
+        with self.assertRaisesRegex(Invalid, 'Check did not pass'):
+            self.verify()
+        # Repair the isolated business fixture, then exercise the same real CLI journey.
+        (self.root / 'app.py').write_text(application.replace('{"shop":True}', '{"shop":True,"channel":True}'))
+        self.refresh()
+        review = read(self.root / self.name('review'))
+        review['acceptance'][0]['observations'][0]['check'] = 'journey'
+        self.write('review', review)
+        self.assertTrue(self.verify()['business_accepted'])
+
+    def test_repository_entry_cannot_certify_the_public_entry(self):
+        self.setup_v4()
+        self.profile['checks']['unit']['coverage']['entrypoints'] = ['repository.add']
+        self.refresh()
+        with self.assertRaisesRegex(Invalid, 'entrypoint'):
+            self.verify()
+
+    def test_recorded_notification_cannot_certify_real_delivery(self):
+        self.setup_v4()
+        self.profile['checks']['unit']['coverage']['substitutes'] = ['notification recorder']
+        self.refresh()
+        with self.assertRaisesRegex(Invalid, 'substituted'):
+            self.verify()
+
+    def test_source_reference_and_passed_text_do_not_replace_observations(self):
+        self.setup_v4()
+        review = read(self.root / self.name('review'))
+        review['acceptance'][0]['observations'] = []
+        self.write('review', review)
+        with self.assertRaisesRegex(Invalid, 'actual execution'):
+            self.verify()
+        review['acceptance'][0]['observations'] = [v5.observation(artifact(self.root, self.root / 'app.py'))]
+        self.write('review', review)
+        with self.assertRaisesRegex(Invalid, 'run was not verified'):
+            self.verify()
+
+    def test_required_case_cannot_be_invented_or_omitted(self):
+        self.setup_v4()
+        self.design['sections'][1]['data']['verification']['cases'] = ['sample::TestFreshStart']
+        self.refresh()
+        with self.assertRaisesRegex(Invalid, 'required observed cases'):
+            self.verify()
+        review = read(self.root / self.name('review'))
+        review['acceptance'][0]['observations'][0]['cases'] = ['sample::TestFreshStart']
+        self.write('review', review)
+        with self.assertRaisesRegex(Invalid, 'missing, failed or skipped'):
+            self.verify()
+
+    def test_parent_cannot_claim_completion_from_only_child_acceptance(self):
+        self.setup_v4()
+        additional = copy.deepcopy(self.design['sections'][1])
+        additional['id'] = 'whole-journey'
+        self.design['sections'].append(additional)
+        self.design['sections'][0]['data']['requirement_acceptance'].append('whole-journey')
+        self.write('design', self.design)
+        with self.assertRaisesRegex(Invalid, 'Parent requirement omits'):
+            self.verify()
+
+    def test_child_result_is_explicitly_limited_to_the_task(self):
+        self.setup_v4(task_id='TASK-child', design_task_id='TASK-parent')
+        result = self.verify()
+        self.assertEqual(result['acceptance_scope'], 'task')
+        self.assertTrue(result['business_accepted'])
+        self.assertFalse(result['delivery_complete'])
+
+    def test_known_issue_cannot_disappear_from_a_passed_review(self):
+        self.setup_v4()
+        self.design['issues'] = [problem()]
+        self.write('design', self.design)
+        with self.assertRaisesRegex(Invalid, 'permission-gap'):
+            self.verify()
+
+    def test_failed_review_keeps_issues_for_the_next_attempt(self):
+        self.setup_v4()
+        review = read(self.root / self.name('review'))
+        review['findings'] = [problem()]
+        self.write('review', review)
+        args = ['verify', '--root', str(self.root), '--task', self.name('task'),
+                '--report', self.name('report'), '--phase', 'acceptance']
+        first = io.StringIO()
+        with contextlib.redirect_stdout(first):
+            self.assertEqual(workflow.main(args), 1)
+        self.assertIn('Unresolved issue', first.getvalue())
+        review['findings'] = []
+        self.write('review', review)
+        second = io.StringIO()
+        with contextlib.redirect_stdout(second):
+            self.assertEqual(workflow.main(args), 1)
+        self.assertIn('disappeared', second.getvalue())
+        template = delivery.review_template(self.root, self.profile, self.task, self.report)
+        self.assertEqual(template['findings'][0]['id'], 'permission-gap')
+
+    def test_deferred_and_accepted_issues_need_real_disposition_fields(self):
+        value = problem()
+        value.update(state='deferred', resolution={'reason': 'Later release', 'evidence': ['decision comment']})
+        with self.assertRaises(Invalid):
+            contracts_v5.issue(value)
+        value['resolution'].update(confirmed_by='carol', confirmation='Confirmed this scope change')
+        with self.assertRaises(Invalid):
+            contracts_v5.issue(value)
+        value['resolution'].update(follow_up='TASK-follow-up', scope_change='Current delivery excludes this operation')
+        contracts_v5.issue(value)
+
+    def test_issue_only_blocks_its_affected_branch(self):
+        self.setup_v4()
+        self.design['issues'] = [problem(affects=('A1',), blocks=('implementation', 'acceptance'))]
+        state = designs.approval_status(self.design, [], changed_paths=[])
+        self.assertFalse(state['implementation_ready'])
+        self.assertEqual(contracts_v5.unresolved(self.design['issues'], ['unrelated'], 'implementation'), [])
+
+    def test_knowledge_draft_is_partial_until_business_acceptance_exists(self):
+        self.setup_v4()
+        draft = knowledge.completion_template(self.root, self.profile, self.task, self.skill)
+        self.assertEqual(draft['task']['status'], 'in-progress')
+        self.assertEqual(draft['items'], [])
+        accepted = self.verify()
+        self.write('acceptance', accepted)
+        path = self.root / self.name('acceptance')
+        draft = knowledge.completion_template(self.root, self.profile, self.task, self.skill, path)
+        self.assertEqual(draft['task']['status'], 'completed')
+        self.assertEqual(draft['task']['source']['workflow_acceptance'], artifact(self.root, path))
+
+    def test_knowledge_rejects_an_unbound_or_stale_completion(self):
+        self.setup_v4()
+        self.write('acceptance', self.verify())
+        path = self.root / self.name('acceptance')
+        script = self.skill / 'scripts/cs_knowledge.py'
+        script.write_text(script.read_text().replace('"source":source', '"source":{}'))
+        with self.assertRaisesRegex(Invalid, 'reference the actual'):
+            knowledge.finish_v4(self.root, self.profile, self.task, self.skill, 'CS-T',
+                self.root / self.name('brief'), 'none', 'No new rule', path)
+        review = read(self.root / self.name('review'))
+        review['spec']['summary'] = 'Changed after acceptance'
+        self.write('review', review)
+        with self.assertRaises(Invalid):
+            knowledge.completion_template(self.root, self.profile, self.task, self.skill, path)
+
+    def test_knowledge_scope_cannot_use_an_unrelated_repository_path(self):
+        self.setup_v4()
+        self.write('acceptance', self.verify())
+        script = self.skill / 'scripts/cs_knowledge.py'
+        script.write_text(script.read_text().replace("'path': 'app.py'", "'path': 'unrelated/backend'"))
+        with self.assertRaisesRegex(Invalid, 'knowledge scope'):
+            knowledge.finish_v4(self.root, self.profile, self.task, self.skill, 'CS-T',
+                self.root / self.name('brief'), 'none', 'No new rule', self.root / self.name('acceptance'))
+
+    def test_unresolved_environment_does_not_execute_the_check(self):
+        self.setup_v4()
+        self.profile['checks']['unit']['coverage']['isolation'] = 'unresolved'
+        path, record = validation.run_batch(self.root, self.profile, [self.task])
+        self.assertEqual(record['results'][0]['state'], 'unavailable')
+        self.assertIn('isolation', record['results'][0]['detail'])
+        with self.assertRaises(Invalid):
+            validation.verify_runs(self.root, self.profile, self.task, [str(path.relative_to(self.root))])
+
+    def test_validation_session_is_visible_and_does_not_claim_editor_enforcement(self):
+        self.setup_v4()
+        self.assertIsNone(validation_session.active(self.root))
+        with validation_session.session(self.root, self.profile, [self.task]):
+            self.assertEqual(validation_session.active(self.root)['running'][0]['tasks'], [self.task['id']])
+            for option in (['--design', self.name('design')], ['--report', self.name('report')]):
+                output = io.StringIO()
+                with contextlib.redirect_stdout(output):
+                    code = workflow.main(['resume', '--root', str(self.root), '--task', self.name('task'), *option])
+                result = json.loads(output.getvalue())
+                self.assertEqual(code, 0, result)
+                self.assertFalse(result['implementation_ready'])
+                self.assertTrue(result['validation_active'])
+        self.assertIsNone(validation_session.active(self.root))
+
+    def test_local_resume_checks_task_against_current_plan(self):
+        self.setup_v4()
+        original = copy.deepcopy(self.task)
+        self.profile['risk_checks']['public-contract'] = ['unit']
+        write(self.root / '.team-workflow.json', self.profile)
+        variants = [dict(original, risks=['public-contract']),
+                    dict(original, design_id='another-plan'),
+                    dict(original, acceptance_scope='task', parent='another-parent'),
+                    dict(original, acceptance=[{**original['acceptance'][0], 'expectation':'A different requirement'}])]
+        for task in variants:
+            self.write('task', task)
+            for command in ('status', 'resume'):
+                with self.subTest(command=command, task=task):
+                    output = io.StringIO()
+                    with contextlib.redirect_stdout(output):
+                        code = workflow.main([command, '--root', str(self.root), '--task', self.name('task'),
+                                              '--design', self.name('design')])
+                    result = json.loads(output.getvalue())
+                    self.assertNotEqual(code, 0, result)
+                    self.assertFalse(result.get('implementation_ready', False))
+
+    def test_missing_brief_names_the_missing_argument(self):
+        self.setup_v4()
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            code = workflow.main(['review-template', '--root', str(self.root),
+                                  '--task', self.name('task'), '--design', self.name('design')])
+        self.assertEqual(code, 1)
+        self.assertIn('Missing --brief', json.loads(output.getvalue())['problem'])
+
+    def test_adoption_retains_exact_applicable_approval_without_inventing_execution(self):
+        self.setup_v4(complexity='medium')
+        old = copy.deepcopy(self.design)
+        old['schema_version'] = 4
+        old.pop('issues')
+        approved = designs.approval_draft(old, 'carol', 'Existing exact plan approval')
+        old_task = {**self.task, 'schema_version': 4}
+        old_task.pop('acceptance_scope')
+        self.write('old-task', old_task)
+        self.write('old-design', old)
+        self.write('old-approval', approved)
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            code = workflow.main(['adopt', '--root', str(self.root), '--task', self.name('old-task'),
+                '--design', self.name('old-design'), '--approval', self.name('old-approval')])
+        self.assertEqual(code, 0, output.getvalue())
+        adopted = json.loads(output.getvalue())
+        self.assertFalse(adopted['business_accepted'])
+        self.assertEqual(read(self.root / self.name('old-design')), old)
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            code = workflow.main(['prepare', '--root', str(self.root), '--task', adopted['task']['path'],
+                '--design', adopted['design']['path'], '--approval', adopted['approvals'][0]['path'],
+                '--design-history', adopted['design_history'][0]['path'], '--cs-skill', str(self.skill)])
+        self.assertEqual(code, 0, output.getvalue())
+        self.assertTrue(json.loads(output.getvalue())['implementation_ready'])
+
+    def test_shared_reference_cannot_be_a_json_pass_without_original_outputs(self):
+        self.setup_v4()
+        fabricated = {'schema_version': 5, 'kind': 'execution', 'source_unchanged': True,
+                      'results': [{'id': 'unit', 'status': 'passed', 'state': 'finished', 'exit_code': 0,
+                          'binding': {'definition': __import__('common').digest(self.profile['checks']['unit'])},
+                          'cases': {}, 'artifacts': []}]}
+        with self.assertRaisesRegex(Invalid, 'original stdout'):
+            validation.inspect_record(self.root, self.profile, fabricated)
+        self.assertEqual(validation.inspect_record(self.root, self.profile, read(self.root / self.runs[0])), {'unit'})
+
+
+if __name__ == '__main__':
+    unittest.main()

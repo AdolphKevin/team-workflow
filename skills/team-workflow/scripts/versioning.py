@@ -4,8 +4,8 @@ import re
 
 from common import Invalid, VERSION, profile_valid, require
 
-PROFILE_SCHEMA = 4
-UPGRADABLE_SCHEMAS = (3, 4)
+PROFILE_SCHEMA = 5
+UPGRADABLE_SCHEMAS = (3, 4, 5)
 SEMVER = re.compile(r'(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?')
 UPDATE_TOOL = 'npx skills update -g'
 

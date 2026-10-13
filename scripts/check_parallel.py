@@ -15,6 +15,7 @@ import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
 WF = ROOT / 'skills/team-workflow/scripts/workflow.py'
+sys.path.insert(0, str(WF.parent))
 
 
 def call(argv, cwd=None):
@@ -34,7 +35,10 @@ def write(path, value):
 
 
 def cs(skill, root, *args):
-    return json.loads(call([sys.executable, skill / 'scripts/cs_knowledge.py', '--root', root, *args]))
+    result = json.loads(call([sys.executable, skill / 'scripts/cs_knowledge.py', '--root', root, *args]))
+    if result.get('ok') is False:
+        raise RuntimeError('CS operation failed: ' + str(result))
+    return result
 
 
 def task_payload(name):
@@ -89,11 +93,13 @@ def prepare(parent, skill, optional_tools=True):
     write(seed / '.codestable/documents/project.json', {'path': 'README.md', 'always': True})
     cs(skill, seed, 'doctor')
     if optional_tools:
-        write(seed / '.team-workflow.json', {'schema_version': 3, 'project': 'parallel-validation',
+        write(seed / '.team-workflow.json', {'schema_version': 5, 'project': 'parallel-validation',
             'context': ['AGENTS.md'], 'knowledge': {'provider': 'cs', 'entry': '.codestable/wiki/INDEX.md'},
-            'checks': {'unit': {'argv': ['python3', '-m', 'unittest', 'discover', '-s', 'tests', '-v'],
+            'checks': {'unit': {'argv': [sys.executable, '-m', 'unittest', 'discover', '-s', 'tests', '-v'],
                 'cwd': '.', 'timeout': 30, 'purpose': 'Check public validators', 'format': 'command',
-                'required_cases': [], 'required_env': []}}, 'required_checks': {'code': ['unit'], 'docs': []},
+                'required_cases': [], 'required_env': [], 'environment': {'kind': 'stateless'},
+                'coverage': {'level': 'journey', 'entrypoints': ['orders.valid', 'invoices.valid'],
+                'environment': 'isolated-library', 'substitutes': [], 'isolation': 'isolated', 'isolation_evidence': []}}}, 'required_checks': {'code': ['unit'], 'docs': []},
             'risk_checks': {}, 'inputs': [], 'external_inputs': {'fixture': {'kind': 'file'}}, 'environment_versions': {}})
     git(seed, 'add', '.')
     git(seed, 'commit', '-qm', 'Initialized isolated knowledge and source')
@@ -148,15 +154,42 @@ def run(skill):
         states = []
         for name, value in setup['clones'].items():
             root = Path(value)
-            task = {'schema_version': 2, 'id': name, 'base': setup['base'], 'goal': name + ' validation',
+            task = {'schema_version': 5, 'design_id': name, 'section_ids': ['T1'], 'acceptance_scope': 'requirement', 'paths': [name + '.py'], 'id': name, 'base': setup['base'], 'goal': name + ' validation',
                 'kind': 'code', 'risks': [], 'non_goals': [], 'acceptance': [{'id': 'A1', 'expectation': 'Invalid values rejected', 'checks': ['unit']}]}
             write(root / '.team-workflow/task-input.json', task)
             state = json.loads(call([sys.executable, WF, 'snapshot', '--root', root, '--task', '.team-workflow/task-input.json']))
-            states.append(state['workspace'])
+            states.append(state['source_digest'])
         assert states[0] == states[1], 'Different local directories changed content identity'
         def develop(pair):
             name, directory = pair
             root = Path(directory)
+            import knowledge, validation, designs, delivery
+            from common import artifact, read
+            task = read(root / '.team-workflow/task-input.json')
+            profile = read(root / '.team-workflow.json')
+            brief = knowledge.brief(root, task, skill, task['paths'], [])
+            write(root / '.team-workflow/brief.json', brief)
+            coverage = dict(profile['checks']['unit']['coverage'])
+            coverage['entrypoints'] = [name + '.valid']
+            design = {'schema_version': 5, 'kind': 'design', 'id': name, 'revision': 1, 'task_id': name,
+                'assessment': {'complexity': 'simple', 'risks': [], 'effort': 'one function',
+                    'drivers': ['Independent scalar input validation'], 'uncertainties': [], 'required_skills': ['Python']},
+                'roles': {'design_owner': 'alice', 'implementation_owner': 'bob', 'acceptance_owner': 'carol'},
+                'issues': [], 'sections': [
+                    {'id': 'scope-global', 'type': 'global-scope', 'title': name, 'body': task['goal'], 'depends_on': [],
+                     'data': {'requirement_acceptance': ['A1'], 'impact': [{'repository': 'self', 'entrypoint': name + '.valid',
+                         'operations': ['validate'], 'producer': 'caller', 'consumer': 'caller', 'commit_owner': 'function', 'acceptance': ['A1']}]}},
+                    {'id': 'A1', 'type': 'acceptance', 'title': 'Public input journey', 'body': task['acceptance'][0]['expectation'], 'depends_on': [],
+                     'data': {'checks': ['unit'], 'scenario': {'actor': 'caller', 'initial_state': 'Fresh process',
+                         'steps': ['Call valid with accepted and rejected inputs'], 'expected': 'Only positive integers accepted',
+                         'negative_cases': ['Boolean, text and nonpositive values rejected']},
+                         'verification': {'method': 'automatic', 'coverage': coverage, 'cases': []}}},
+                    {'id': 'T1', 'type': 'task', 'title': 'Implement validator', 'body': task['goal'], 'depends_on': [],
+                     'data': {'acceptance': ['A1'], 'scope': [name + '.py', 'tests', 'docs'], 'blocked_by': []}}]}
+            write(root / '.team-workflow/design.json', design)
+            ready = json.loads(call([sys.executable, WF, 'resume', '--root', root,
+                '--task', '.team-workflow/task-input.json', '--design', '.team-workflow/design.json', '--cs-skill', skill]))
+            assert ready['ok'] and ready['implementation_ready'], ready
             (root / (name + '.py')).write_text('def valid(value):\n    return isinstance(value, int) and not isinstance(value, bool) and value > 0\n')
             (root / ('tests/test_' + name + '.py')).write_text('import unittest\nfrom ' + name + ' import valid\nclass Contract(unittest.TestCase):\n    def test_boundary(self):\n        self.assertTrue(valid(1))\n        for value in (True, False, 0, -1, "1", None):\n            self.assertFalse(valid(value))\n')
             (root / 'docs').mkdir(exist_ok=True)
@@ -165,12 +198,41 @@ def run(skill):
             args = [sys.executable, WF, 'run', '--root', root, '--task', '.team-workflow/task-input.json', '--request-id', name + '-run']
             run_result = json.loads(call(args))
             assert run_result['ok'] and run_result == json.loads(call(args))
+            run_ref = run_result['artifact']
+            approval = designs.approval_draft(design, 'carol', 'Fixture reviewer accepted actual plan and code',
+                code_digest=validation.source_digest(root, profile), run_refs=[run_ref])
+            write(root / '.team-workflow/approval.json', approval)
+            report = {'schema_version': 5, 'task_id': name, 'design': '.team-workflow/design.json',
+                'approvals': ['.team-workflow/approval.json'], 'brief': '.team-workflow/brief.json',
+                'runs': [run_ref['path']], 'review': '.team-workflow/review.json'}
+            review = delivery.review_template(root, profile, task, report)
+            review.update(reviewer='carol', knowledge_conflicts_resolved=True)
+            for axis in ('standards', 'spec'):
+                review[axis] = {'status': 'passed', 'summary': 'Inspected the public contract and actual test output', 'evidence': [run_ref]}
+            review['acceptance'] = [{'id': 'A1', 'status': 'passed', 'summary': 'Public positive and negative cases executed',
+                'evidence': [run_ref], 'observations': [{'kind': 'execution', 'run': run_ref, 'check': 'unit', 'cases': []}]}]
+            write(root / report['review'], review)
+            acceptance = delivery.verify(root, profile, task, report, skill, 'acceptance')
+            accepted_path = root / '.team-workflow/acceptance.json'
+            write(accepted_path, acceptance)
             payload = root / '.team-workflow/learn-input.json'
-            write(payload, task_payload(name))
+            learning = knowledge.completion_template(root, profile, task, skill, accepted_path)
+            supplied = task_payload(name)
+            learning['task'].update(supplied['task'])
+            learning['items'] = supplied['items']
+            write(payload, learning)
             plan = cs(skill, root, 'learn', '--file', str(payload), '--dry-run')
             applied = cs(skill, root, 'learn', '--file', str(payload), '--plan-token', plan['plan_token'])
             repeated = cs(skill, root, 'learn', '--file', str(payload), '--plan-token', plan['plan_token'])
             assert repeated['idempotent'] and applied['task_id'] == repeated['task_id']
+            final_brief = knowledge.brief(root, task, skill, task['paths'], [])
+            write(root / '.team-workflow/final-brief.json', final_brief)
+            completion = knowledge.finish_v4(root, profile, task, skill, applied['task_id'],
+                root / '.team-workflow/brief.json', 'added', 'Verified reusable validator boundary',
+                accepted_path, root / '.team-workflow/final-brief.json')
+            write(root / '.team-workflow/knowledge.json', completion)
+            report['knowledge'] = '.team-workflow/knowledge.json'
+            assert delivery.verify(root, profile, task, report, skill)['delivery_complete']
             git(root, 'add', '.')
             git(root, 'commit', '-qm', name + ' independent task and knowledge')
             assert not git(root, 'status', '--porcelain')
@@ -180,7 +242,7 @@ def run(skill):
         merged = merge_and_check(setup, skill, tasks)
         return {'ok': True, 'cs_runtime_sha256': hashlib.sha256((skill / 'scripts/cs_knowledge.py').read_bytes()).hexdigest(),
                 'tasks': tasks, **merged, 'checks': ['different-local-paths-same-content-identity', 'concurrent-real-processes',
-                'workflow-complete-retry', 'cs-lost-response-retry', 'independent-registrations-task-notes-and-experience',
+                'workflow-v5-readiness-acceptance-and-knowledge', 'workflow-complete-retry', 'cs-lost-response-retry', 'independent-registrations-task-notes-and-experience',
                 'git-merge-without-manual-conflict-resolution', 'both-tasks-and-knowledge-retrievable', 'shared-configuration-unchanged']}
 
 

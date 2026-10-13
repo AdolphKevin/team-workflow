@@ -1,4 +1,4 @@
-"""Content-bound v4 results with original CI provenance and portable paths.
+"""Content-bound v5 results with original CI provenance and portable paths.
 
 Capture happens at execution time. Imports retain the original tested commits;
 matching present-day content never rewrites a historical execution version.
@@ -30,7 +30,8 @@ def capture(directory, profile, row, before_source, after_source, started, finis
     """Publish the execution-time snapshot next to the actual command outputs."""
     directory = Path(directory)
     key = row['id']
-    require(profile.get('schema_version') == 4 and key in profile['checks'], 'Portable v4 capture needs a v4 check')
+    require(row.get('coverage') == profile['checks'].get(key, {}).get('coverage'), 'Portable coverage differs from the check')
+    require(profile.get('schema_version') == 5 and key in profile['checks'], 'Portable v5 capture needs a v5 check')
     check = profile['checks'][key]
     require(row['argv'] == [arg.replace('{output}', str(directory)) for arg in check['argv']],
             'Captured command differs from the executed check')
@@ -49,7 +50,7 @@ def capture(directory, profile, row, before_source, after_source, started, finis
         captured[name] = {'path': name, 'sha256': value['sha256']}
     execution = {**row, 'argv': list(check['argv']), 'artifacts': list(captured.values())}
     execution.pop('portable', None)
-    manifest = {'schema_version': 4, 'kind': 'portable-execution', 'project': profile['project'],
+    manifest = {'schema_version': 5, 'kind': 'portable-execution', 'project': profile['project'],
                 'execution': execution, 'source_before': before_source, 'source_after': after_source,
                 'started_at': started, 'finished_at': finished,
                 'run_context': ({'repository': os.environ.get('GITHUB_REPOSITORY'),
@@ -92,16 +93,16 @@ def validate_result(root, profile, manifest, directory, *, remote=False):
     profile_valid(profile, root)
     obj(manifest, {'schema_version', 'kind', 'project', 'execution', 'source_before', 'source_after',
                    'started_at', 'finished_at', 'run_context'})
-    require(manifest['schema_version'] == 4 and manifest['kind'] == 'portable-execution',
-            'Expected portable execution schema version 4')
-    require(profile.get('schema_version') == 4 and manifest['project'] == profile['project'], 'Portable project mismatch')
+    require(manifest['schema_version'] == 5 and manifest['kind'] == 'portable-execution',
+            'Expected portable execution schema version 5')
+    require(profile.get('schema_version') == 5 and manifest['project'] == profile['project'], 'Portable project mismatch')
     _time(manifest['started_at'], manifest['finished_at'])
     _source(manifest['source_before'])
     _source(manifest['source_after'])
     require(manifest['source_before'] == manifest['source_after'], 'Sources changed during portable execution')
     row = manifest['execution']
     obj(row, {'id', 'binding', 'source_unchanged', 'argv', 'cwd', 'repository', 'status', 'cases',
-              'detail', 'state', 'exit_code', 'seconds', 'artifacts'})
+              'detail', 'state', 'exit_code', 'seconds', 'artifacts', 'coverage'})
     key = row['id']
     require(key in profile['checks'], 'Unknown imported check')
     check = profile['checks'][key]
@@ -191,7 +192,7 @@ def import_result(root, profile, locator, directory=None):
     _provider_source(locator, receipt, manifest)
     fresh = portable.provider(locator)
     require(fresh == receipt, 'Provider run or artifact changed during import')
-    record = {'schema_version': 4, 'kind': 'imported-execution', 'project': profile['project'],
+    record = {'schema_version': 5, 'kind': 'imported-execution', 'project': profile['project'],
               'locator': locator, 'retrieved_at': now(), 'started_at': manifest['started_at'],
               'finished_at': manifest['finished_at'], 'source_unchanged': True,
               'archive': artifact(root, directory / 'archive.zip'), 'manifest': artifact(root, manifest_path),
@@ -209,7 +210,7 @@ def validate_import(root, profile, record):
     obj(record, {'schema_version', 'kind', 'project', 'locator', 'retrieved_at', 'started_at', 'finished_at',
                  'source_unchanged', 'archive', 'manifest', 'provider_digest', 'result', 'tested_source',
                  'import_source', 'assurance'})
-    require(record['schema_version'] == 4 and record['kind'] == 'imported-execution', 'Expected imported execution version 4')
+    require(record['schema_version'] == 5 and record['kind'] == 'imported-execution', 'Expected imported execution version 5')
     require(record['project'] == profile['project'] and record['source_unchanged'] is True, 'Imported execution identity changed')
     receipt = portable.provider(record['locator'])
     archive = artifact_valid(root, record['archive'])
@@ -232,14 +233,14 @@ def _joint_results(root, profile, report, required):
     found = {}
     for name in report['runs']:
         record = read(inside(root, name))
-        if record.get('schema_version') == 4 and record.get('kind') == 'imported-execution':
+        if record.get('schema_version') == 5 and record.get('kind') == 'imported-execution':
             row, manifest = validate_import(root, profile, record)
             if row['id'] not in required:
                 continue
             require(row['id'] not in found, 'Duplicate joint check evidence')
             found[row['id']] = manifest
             continue
-        require(record.get('schema_version') == 4 and record.get('kind') == 'execution', 'Joint evidence must use v4 execution')
+        require(record.get('schema_version') == 5 and record.get('kind') == 'execution', 'Joint evidence must use v5 execution')
         for row in record['results']:
             if row['id'] not in required:
                 continue
@@ -262,8 +263,8 @@ def aggregate(root, manifest, repositories, cs_skill):
     """Verify every delivery and one source-complete joint run against pinned checkouts."""
     from common import git, profile_valid
     import delivery
-    obj(manifest, {'schema_version', 'task_id', 'joint', 'participants', 'dependencies'})
-    require(manifest['schema_version'] == 4, 'Expected joint schema version 4; legacy records are not upgraded')
+    obj(manifest, {'schema_version', 'task_id', 'joint', 'participants', 'dependencies', 'requirement'})
+    require(manifest['schema_version'] == 5, 'Expected joint schema version 5; legacy records are not upgraded')
     text(manifest['task_id'])
     github.repository(manifest['joint'])
     require(isinstance(manifest['participants'], list) and len(manifest['participants']) >= 2,
@@ -299,10 +300,10 @@ def aggregate(root, manifest, repositories, cs_skill):
         paths = {name: inside(checkout, row[name]) for name in ('profile', 'task', 'report')}
         materials[repo] = [artifact(checkout, path) for path in paths.values()]
         profile = profile_valid(read(paths['profile']), checkout)
-        require(profile['schema_version'] == 4, 'Joint delivery requires explicitly adopted v4 profiles')
+        require(profile['schema_version'] == 5, 'Joint delivery requires explicitly adopted v5 profiles')
         task, report = read(paths['task']), read(paths['report'])
-        require(task.get('schema_version') == 4 and report.get('schema_version') == 4,
-                'Joint delivery requires v4 task and report records')
+        require(task.get('schema_version') == 5 and report.get('schema_version') == 5,
+                'Joint delivery requires v5 task and report records')
         if task['id'].startswith('https://github.com/'):
             from coordination import load
             platform = load(task['id'])
@@ -339,6 +340,22 @@ def aggregate(root, manifest, repositories, cs_skill):
                 # Keep original tested commits even when only commit metadata changed.
                 for identity, source in tested['repositories'].items():
                     github.commit(identity, source['commit'])
+    parent = obj(manifest['requirement'], {'repository', 'task', 'report'})
+    require(parent['repository'] == manifest['joint'] and parent['repository'] in locations,
+            'Parent business acceptance must belong to the joint owner')
+    parent_root = locations[parent['repository']]
+    parent_task_path = inside(parent_root, parent['task'])
+    parent_report_path = inside(parent_root, parent['report'])
+    parent_task = read(parent_task_path)
+    require(parent_task.get('id') == manifest['task_id'] and parent_task.get('acceptance_scope') == 'requirement'
+            and not parent_task.get('parent'), 'Joint delivery needs explicit parent business acceptance')
+    if parent_task['id'].startswith('https://github.com/'):
+        from coordination import load
+        platform_states[parent_task['id']] = load(parent_task['id'])
+    parent_profile = profile_valid(read(inside(parent_root, next(r['profile'] for r in manifest['participants']
+                                                       if r['repository'] == parent['repository']))), parent_root)
+    parent_acceptance = delivery.verify(parent_root, parent_profile, parent_task, read(parent_report_path), cs_skill, 'acceptance')
+    materials[parent['repository']] += [artifact(parent_root, parent_task_path), artifact(parent_root, parent_report_path), *parent_acceptance['materials']]
     require(bool(joint_records), 'Joint execution is missing')
     for repo, start in starts.items():
         require(portable.source_state(locations[repo], {'inputs': []}) == start, 'Sources changed during aggregation: ' + repo)
@@ -351,10 +368,10 @@ def aggregate(root, manifest, repositories, cs_skill):
         fields = ('requirements', 'history_digest', 'design_history_digest', 'owners')
         require(not after['gaps'] and all(after[key] == before[key] for key in fields),
                 'Platform requirements, assignments or progress changed during joint verification')
-    return {'schema_version': 4, 'kind': 'joint-delivery', 'ok': True, 'scope': 'joint-team-delivery',
+    return {'schema_version': 5, 'kind': 'joint-delivery', 'ok': True, 'scope': 'joint-team-delivery',
             'status': 'complete', 'task_id': manifest['task_id'], 'versions': expected,
             'tested_versions': [{'check': key, 'repositories': {repo: value['commit']
                 for repo, value in captured['source_before']['repositories'].items()}}
                 for key, captured in sorted(joint_records.items())],
-            'participants': output, 'business_accepted': True, 'delivery_complete': True, 'closable': False,
+            'participants': output, 'acceptance_scope': 'requirement', 'requirement': parent_acceptance, 'business_accepted': True, 'delivery_complete': True, 'closable': False,
             'assurance': 'original execution plus individual delivery checks; closing still needs authorization'}

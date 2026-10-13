@@ -8,6 +8,7 @@ import unittest
 from unittest.mock import patch
 
 import test_workflow as fixtures
+import v5_fixtures as v5
 from common import Invalid, artifact, create, read, write
 import delivery
 import designs
@@ -25,16 +26,16 @@ class DeliveryCases(unittest.TestCase):
     fake_cs = fixtures.WorkflowCases.fake_cs
 
     def setup_v4(self, complexity='simple', task_id=None, design_task_id=None, extra_check=False):
-        self.profile['schema_version'] = 4
+        self.profile['schema_version'] = 5
         self.check('import app; assert app.add(1,2)==3', environment={'kind': 'stateless'})
         if extra_check:
             self.profile['checks']['safety'] = copy.deepcopy(self.profile['checks']['unit'])
             self.profile['checks']['safety']['purpose'] = 'Additional required project behavior'
             self.profile['required_checks']['code'].append('safety')
-        self.task.update(schema_version=4, design_id='D-add', section_ids=['T1'], paths=['app.py'])
+        self.task.update(schema_version=5, design_id='D-add', section_ids=['T1'], paths=['app.py'], acceptance_scope='requirement')
         if task_id:
             self.task['id'] = task_id
-        self.design = {'schema_version': 4, 'kind': 'design', 'id': 'D-add', 'revision': 1,
+        self.design = {'schema_version': 5, 'kind': 'design', 'id': 'D-add', 'revision': 1,
             'task_id': design_task_id or self.task['id'], 'assessment': {'complexity': complexity, 'risks': [],
                 'effort': 'one hour', 'drivers': ['single function'], 'uncertainties': [], 'required_skills': ['Python']},
             'roles': {'design_owner': 'alice', 'implementation_owner': 'bob', 'acceptance_owner': 'carol'},
@@ -43,6 +44,9 @@ class DeliveryCases(unittest.TestCase):
                 {'id': 'A1', 'type': 'acceptance', 'title': 'Result', 'body': self.task['acceptance'][0]['expectation'], 'data': {'checks': ['unit']}, 'depends_on': []},
                 {'id': 'T1', 'type': 'task', 'title': 'Implement', 'body': 'Implement addition',
                  'data': {'acceptance': ['A1'], 'scope': ['app.py'], 'blocked_by': []}, 'depends_on': []}]}
+        v5.plan(self.design)
+        if self.task['id'] != self.design['task_id']:
+            self.task.update(acceptance_scope='task', parent=self.design['task_id'])
         self.skill = self.fake_cs()
         write(self.root / '.team-workflow.json', self.profile)
         self.write('task', self.task)
@@ -53,14 +57,14 @@ class DeliveryCases(unittest.TestCase):
         approval = designs.approval_draft(self.design, 'carol', 'Explicit plan and code approval',
                     code_digest=validation.source_digest(self.root, self.profile), run_refs=[artifact(self.root, run)])
         self.write('approval', approval)
-        self.report = {'schema_version': 4, 'task_id': self.task['id'], 'design': self.name('design'),
+        self.report = {'schema_version': 5, 'task_id': self.task['id'], 'design': self.name('design'),
             'approvals': [self.name('approval')], 'brief': self.name('brief'), 'runs': self.runs, 'review': self.name('review')}
         review = delivery.review_template(self.root, self.profile, self.task, self.report)
         ref = artifact(self.root, run)
         review.update(reviewer='carol', knowledge_conflicts_resolved=True)
         for axis in ('standards', 'spec'):
             review[axis] = {'status': 'passed', 'summary': 'Read public behavior and actual assertion output', 'evidence': [ref]}
-        review['acceptance'] = [{'id': 'A1', 'status': 'passed', 'summary': 'Executed assertion 1+2=3', 'evidence': [ref]}]
+        review['acceptance'] = [{'id': 'A1', 'status': 'passed', 'summary': 'Executed assertion 1+2=3', 'evidence': [ref], 'observations': [v5.observation(ref)]}]
         self.write('review', review)
         self.write('report', self.report)
 
@@ -137,6 +141,7 @@ class DeliveryCases(unittest.TestCase):
         self.task['kind'] = 'docs'
         self.task['acceptance'][0]['checks'] = []
         self.design['sections'][1]['data']['checks'] = []
+        self.design['sections'][1]['data']['verification'] = {'method': 'manual', 'coverage': v5.coverage('manual'), 'cases': []}
         self.write('design', self.design)
         self.write('brief', knowledge.brief(self.root, self.task, self.skill, [], []))
         self.report['runs'] = []
@@ -148,7 +153,7 @@ class DeliveryCases(unittest.TestCase):
         review.update(reviewer='carol', knowledge_conflicts_resolved=True)
         for axis in ('standards', 'spec'):
             review[axis] = {'status': 'passed', 'summary': 'Read actual content against the requirement', 'evidence': [ref]}
-        review['acceptance'] = [{'id': 'A1', 'status': 'passed', 'summary': 'Content requirement inspected', 'evidence': [ref]}]
+        review['acceptance'] = [{'id': 'A1', 'status': 'passed', 'summary': 'Content requirement inspected', 'evidence': [ref], 'observations': [{'kind': 'manual', 'observer': 'carol', 'at': '2026-01-01T00:00:00+00:00', 'steps': ['Read content against the requirement'], 'result': 'Required content present', 'coverage': v5.coverage('manual'), 'evidence': [ref]}]}]
         self.write('review', review)
         result = delivery.verify(self.root, self.profile, self.task, self.report, self.skill, 'acceptance')
         self.assertEqual(result['checks'], [])
@@ -178,10 +183,11 @@ class DeliveryCases(unittest.TestCase):
         parent = 'https://github.com/example/project/issues/1'
         child = 'https://github.com/example/project/issues/2'
         self.setup_v4(task_id=child, design_task_id=parent)
-        parent_task = {**self.task, 'id': parent}
+        parent_task = {**self.task, 'id': parent, 'acceptance_scope': 'requirement'}
+        parent_task.pop('parent', None)
         def issue(url, task, parent_url=None):
             return {'html_url': url, 'body': '```team-workflow-task\n' + json.dumps(
-                {'schema_version': 4, 'parent': parent_url, 'task': task}) + '\n```',
+                {'schema_version': 5, 'parent': parent_url, 'task': task}) + '\n```',
                 'assignees': [{'login': 'bob'}], 'comments_data': []}
         parent_issue, child_issue = issue(parent, parent_task), issue(child, self.task, parent)
         withdrawal, watching, count = None, False, 0

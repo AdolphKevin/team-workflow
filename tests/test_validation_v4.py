@@ -6,6 +6,7 @@ import sys
 import unittest
 
 import test_workflow as fixtures
+import v5_fixtures as v5
 from common import Invalid, create, read
 import validation
 
@@ -16,8 +17,8 @@ class ContentValidation(unittest.TestCase):
     check = fixtures.WorkflowCases.check
 
     def setup_v4(self):
-        self.profile['schema_version'] = 4
-        self.task.update(schema_version=4, design_id='D-add', section_ids=['T1'])
+        self.profile['schema_version'] = 5
+        self.task.update(schema_version=5, design_id='D-add', section_ids=['T1'], acceptance_scope='requirement', paths=['app.py'])
         self.check("import app; assert app.add(1,2)==3")['environment'] = {'kind': 'stateless'}
 
     def run_batch(self, tasks=None):

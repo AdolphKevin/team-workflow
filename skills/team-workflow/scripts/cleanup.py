@@ -3,6 +3,7 @@ from contextlib import contextmanager
 import os
 from pathlib import Path
 import shutil
+import time
 
 from common import Invalid, create, digest, inside, now, read, require, sha
 
@@ -10,10 +11,22 @@ from common import Invalid, create, digest, inside, now, read, require, sha
 @contextmanager
 def guard(root):
     lock = inside(root, '.team-workflow/.maintenance-lock', exists=False)
-    try:
-        create(lock, {'pid': os.getpid(), 'at': now()})
-    except FileExistsError as exc:
-        raise Invalid('Workflow maintenance is active or interrupted; inspect .team-workflow/.maintenance-lock before retrying') from exc
+    deadline = time.monotonic() + 5
+    while True:
+        try:
+            create(lock, {'pid': os.getpid(), 'at': now()})
+            break
+        except FileExistsError as exc:
+            try:
+                owner = read(lock)
+                os.kill(owner['pid'], 0)
+            except ProcessLookupError:
+                raise Invalid('Workflow maintenance was interrupted; inspect .team-workflow/.maintenance-lock') from exc
+            except (Invalid, OSError, KeyError, TypeError):
+                pass  # A competing create may not have finished writing its claim yet.
+            if time.monotonic() >= deadline:
+                raise Invalid('Workflow maintenance is active or interrupted; inspect .team-workflow/.maintenance-lock before retrying') from exc
+            time.sleep(0.02)
     try:
         yield
     finally:
@@ -64,7 +77,7 @@ def preview(root):
     claims = {p: d for p, d in documents.items() if p.endswith('/request.json') and '/requests/' in p}
     finished_tasks = set()
     for record in documents.values():
-        if not (isinstance(record, dict) and record.get('schema_version') == 4
+        if not (isinstance(record, dict) and record.get('schema_version') == 5
                 and record.get('kind') == 'delivery-verification' and record.get('ok') is True
                 and record.get('delivery_complete') is True and isinstance(record.get('covered_requests'), list)):
             continue
@@ -87,7 +100,8 @@ def preview(root):
         owned_docs = [d for p, d in documents.items() if p.startswith(relative + '/') and isinstance(d, dict)]
         preserve_kind = any(d.get('kind') in ('prepared-context', 'design-record', 'approval-record',
                                               'handoff', 'progress', 'delivery-verification') for d in owned_docs)
-        if claim.get('task_id') not in finished_tasks or referenced or preserve_kind or relative in active:
+        preserve_review = any(p.startswith(relative + '/') and p.endswith('/review-input.json') for p in documents)
+        if claim.get('task_id') not in finished_tasks or referenced or preserve_kind or preserve_review or relative in active:
             protected.append(relative)
         else:
             candidates.append(relative)

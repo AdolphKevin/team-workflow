@@ -1,5 +1,5 @@
 {
-  "schema_version": 4,
+  "schema_version": 5,
   "project": "__REPLACE__",
   "context": [
     "README.md"
@@ -26,6 +26,16 @@
       "required_env": [],
       "environment": {
         "kind": "stateless"
+      },
+      "coverage": {
+        "level": "journey",
+        "entrypoints": [
+          "__REPLACE__"
+        ],
+        "environment": "__REPLACE__",
+        "substitutes": [],
+        "isolation": "unresolved",
+        "isolation_evidence": []
       }
     }
   },
@@ -43,5 +53,6 @@
       "--version"
     ]
   },
-  "external_inputs": {}
+  "external_inputs": {},
+  "workflow_version": "0.7.0-rc.1"
 }

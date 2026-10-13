@@ -1,7 +1,7 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "team-workflow",
-  "version": "0.6.0-rc.1",
+  "version": "0.7.0-rc.1",
   "description": "基于独立 CS 的团队任务流程与 MATT 方法，支持分节评审、接力实施和真实验证。",
   "extensions": {
     "com.openai": {

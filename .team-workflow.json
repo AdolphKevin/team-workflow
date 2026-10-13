@@ -1,5 +1,5 @@
 {
-  "schema_version": 2,
+  "schema_version": 5,
   "project": "team-workflow",
   "context": [
     "AGENTS.md",
@@ -26,7 +26,22 @@
       "report": "{output}/results.xml",
       "artifacts": [
         "{output}/results.evidence.json"
-      ]
+      ],
+      "environment": {
+        "kind": "stateless"
+      },
+      "coverage": {
+        "level": "journey",
+        "entrypoints": [
+          "workflow.py"
+        ],
+        "environment": "isolated-test-repositories",
+        "substitutes": [
+          "GitHub API fixtures"
+        ],
+        "isolation": "isolated",
+        "isolation_evidence": []
+      }
     }
   },
   "required_checks": {
@@ -41,5 +56,6 @@
     ]
   },
   "inputs": [],
-  "environment_versions": {}
+  "environment_versions": {},
+  "workflow_version": "0.7.0-rc.1"
 }

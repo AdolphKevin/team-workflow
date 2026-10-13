@@ -42,11 +42,11 @@ codex plugin add team-workflow@team-workflow
 
 CS 独立安装并完成项目知识初始化。工具通过公开命令与返回字段校验能力，缺失时明确报告，不自动安装或重建。不锁定 CS 版本、提交或源码哈希。CI 获取默认分支做真实接口验证，实际提交只记录在验证材料中。源码更新不代表已创建发行标签、插件包或修改全局安装。
 
-独立 MATT 调用无需 `.team-workflow.json`。从 `team-workflow` 开始的新任务默认进入团队流程，按[接入指南](../skills/team-workflow/references/onboarding.md)采用第四版配置与任务。运行 `workflow.py schema` 可直接找到随技能安装的模板；将发现的 CS 目录传给 `--cs-skill` 或 `TEAM_WORKFLOW_CS_SKILL`，用 `project` 检查配置和必要能力。实际命令见[第四版工具约定](../skills/team-workflow/references/contracts-v4.md)。第二、三版任务保留原记录与兼容接口，不自动转换为新版完成证明。
+独立 MATT 调用无需 `.team-workflow.json`。从 `team-workflow` 开始的新任务默认进入团队流程，按[接入指南](../skills/team-workflow/references/onboarding.md)采用第五版配置与任务。运行 `workflow.py schema` 可直接找到随技能安装的模板；将发现的 CS 目录传给 `--cs-skill` 或 `TEAM_WORKFLOW_CS_SKILL`，用 `project` 检查配置和必要能力。实际命令见[第五版工具约定](../skills/team-workflow/references/contracts-v5.md)。第二、三、四版任务保留原记录，通过 `adopt` 生成草稿后补齐当前条件，不自动转换完成证明。
 
 ## 版本切换
 
-0.6.0-rc.1 是第四版流程的候选版。新任务采用新规则，在途任务继续使用其格式、配置和方案版本；显式切换时保存历史材料，列出方案、批准和证据缺项，再生成新版记录。任务开始记录实际工作流与 CS 版本，不在一次检查执行期间替换工具。新增能力不要求重建知识库。
+0.7.0-rc.1 是第五版流程的候选版。所有当前任务统一采用第五版；旧任务先保存历史材料，列出业务场景、方案、批准和证据缺项，再生成新版草稿。任务开始记录实际工作流与 CS 版本，不在一次检查执行期间替换工具。新增能力不要求重建知识库。
 
 集中升级只更新共享插件与独立 CS。项目中的业务测试、原文登记和必要配置继续由所属项目维护。每次发行核对 [MATT 来源](../upstream/matt.lock.json)、适配补丁和许可，发布升级说明与实际验收范围。
 

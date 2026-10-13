@@ -6,6 +6,7 @@ import unittest
 from unittest.mock import patch
 
 import test_workflow as fixtures
+import v5_fixtures as v5
 from common import Invalid, digest, write
 import coordination
 import github_read
@@ -20,11 +21,11 @@ class CoordinationCases(unittest.TestCase):
     def prepare(self, complexity='medium'):
         self.url = 'https://github.com/example/project/issues/1'
         self.git('remote', 'add', 'origin', 'https://github.com/example/project.git')
-        self.profile['schema_version'] = 4
+        self.profile['schema_version'] = 5
         self.check('import app; assert app.add(1, 2) == 3', environment={'kind': 'stateless'})
-        self.task.update(schema_version=4, id=self.url, design_id='addition', section_ids=['T1'])
+        self.task.update(schema_version=5, id=self.url, design_id='addition', section_ids=['T1'], acceptance_scope='requirement', paths=['app.py'])
         self.design = {
-            'schema_version': 4, 'kind': 'design', 'id': 'addition', 'revision': 1, 'task_id': self.url,
+            'schema_version': 5, 'kind': 'design', 'id': 'addition', 'revision': 1, 'task_id': self.url,
             'assessment': {'complexity': complexity, 'risks': [], 'effort': 'one day',
                            'drivers': ['One arithmetic operation'], 'uncertainties': [],
                            'required_skills': ['Python']},
@@ -37,6 +38,7 @@ class CoordinationCases(unittest.TestCase):
                 {'id': 'T1', 'type': 'task', 'title': 'Implement addition', 'body': 'Change add',
                  'data': {'acceptance': ['A1'], 'scope': ['app.py'], 'blocked_by': []},
                  'depends_on': []}]}
+        v5.plan(self.design)
         self.issue = {'html_url': self.url, 'state': 'open', 'updated_at': '2026-10-12T01:00:00Z',
                       'body': self.body(), 'assignees': [{'login': 'bob'}], 'comments_data': []}
         self.skill = self.fake_cs()
@@ -44,7 +46,7 @@ class CoordinationCases(unittest.TestCase):
 
     def body(self):
         return 'Add two inputs.\n\n```team-workflow-task\n' + json.dumps(
-            {'schema_version': 4, 'parent': None, 'task': self.task}) + '\n```\n'
+            {'schema_version': 5, 'parent': None, 'task': self.task}) + '\n```\n'
 
     def github(self, endpoint, paginate=False, binary=False):
         self.gets.append(endpoint)
@@ -64,6 +66,7 @@ class CoordinationCases(unittest.TestCase):
             'body': draft['markdown'], 'user': {'login': author}})
 
     def establish_design(self, approved=True):
+        v5.plan(self.design)
         draft = coordination.draft_design(self.url, self.design)
         self.publish_fixture(draft, 'alice')
         if approved:
@@ -314,10 +317,10 @@ class CoordinationCases(unittest.TestCase):
         with patch.object(github_read, 'api', side_effect=self.github):
             self.establish_design()
         child_url = 'https://github.com/example/project/issues/2'
-        child_task = {**self.task, 'id': child_url}
+        child_task = {**self.task, 'id': child_url, 'parent': self.url, 'acceptance_scope': 'task'}
         child = {'html_url': child_url, 'state': 'open', 'assignees': [{'login': 'bob'}],
                  'body': '```team-workflow-task\n' + json.dumps(
-                     {'schema_version': 4, 'parent': self.url, 'task': child_task}) + '\n```\n',
+                     {'schema_version': 5, 'parent': self.url, 'task': child_task}) + '\n```\n',
                  'comments_data': []}
 
         def transport(endpoint, **kwargs):

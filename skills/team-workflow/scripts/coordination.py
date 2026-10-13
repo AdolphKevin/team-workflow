@@ -1,4 +1,4 @@
-"""Version 4 platform coordination. Every network operation is a GitHub GET.
+"""Version 5 platform coordination. Every network operation is a GitHub GET.
 
 Drafts are values, never publications. Readiness concerns continuation only;
 business acceptance and permission to close belong to the delivery verifier.
@@ -18,9 +18,10 @@ def task_source(issue):
     value = handoffs.block(issue.get('body'), 'task')
     obj(value, {'schema_version', 'parent', 'task'})
     require(isinstance(value['task'], dict), 'Expected a structured task object')
-    require(value['schema_version'] == 4 and value['task'].get('schema_version') == 4,
-            'Expected explicitly adopted task-platform version 4')
+    require(value['schema_version'] == 5 and value['task'].get('schema_version') == 5,
+            'Expected explicitly adopted task-platform version 5')
     require(value['task'].get('id') == issue['html_url'], 'Task ID must be its canonical issue URL')
+    require(value['task'].get('parent') == value['parent'], 'Inner and shared task parent differ')
     if value['parent']:
         github.issue_ref(value['parent'])
         require(value['parent'] != issue['html_url'], 'Task cannot be its own parent')
@@ -61,7 +62,10 @@ def reusable_approval(entry, design_state):
 
 def validate_task_design(task, design):
     """Ensure task acceptance and its selected work match the shared design."""
+    require(design.get('schema_version') == 5, 'Current work needs a v5 plan; use adopt for historical plans')
     designs.validate_design(design)
+    from contracts_v5 import task_scope
+    task_scope(task, design)
     require(task.get('design_id') == design['id'], 'Task references another design')
     identifiers = strings(task.get('section_ids'), True)
     sections = {row['id']: row for row in design['sections']}
@@ -107,12 +111,18 @@ def _read(issue):
     rows = {'design': [], 'approval': [], 'handoff': []}
     problems = {name: [] for name in rows}
     seen = []
+    historical_issues = []
     for comment in _history(issue):
         present = [name for name in rows if '```team-workflow-' + name in comment['body']]
         for name in present:
             try:
                 require(len(present) == 1, 'One platform record is allowed per comment')
                 row = handoffs.block(comment['body'], name)
+                if name == 'handoff' and row.get('schema_version') in (3, 4):
+                    require(row.get('task') == issue['html_url'], 'Historical handoff belongs to another task')
+                    require(comment.get('author') == row.get('creator', row.get('owner')), 'Historical handoff author differs')
+                    historical_issues += historical_questions(row.get('questions', []), issue['html_url'])
+                    continue  # Keep its body in history; it cannot become the current handoff.
                 required = {'schema_version', 'kind', 'task', 'requirements', 'history_digest', 'previous'}
                 if name == 'design':
                     obj(row, required | {'creator', 'design'}, {'resolution', 'requirements_signature'})
@@ -140,7 +150,8 @@ def _read(issue):
                 else:
                     _validate_handoff(row)
                     author = row['creator']
-                require(row['schema_version'] == 4 and row['task'] == issue['html_url'],
+                require((row['schema_version'] == 5 or (row['schema_version'] == 4 and name in ('design', 'approval')))
+                        and row['task'] == issue['html_url'],
                         'Platform record version or task differs')
                 _hash(row['requirements'])
                 require(row['history_digest'] == digest(seen),
@@ -172,7 +183,7 @@ def _read(issue):
         seen.append(comment)
     return {'source': source, 'requirements': requirements, 'rows': rows,
             'gaps': [value for group in problems.values() for value in group],
-            'problems': problems,
+            'problems': problems, 'historical_issues': historical_issues,
             'history_digest': digest(seen), 'platform_history': seen}
 
 
@@ -206,8 +217,24 @@ def load(url):
     gaps += progress_gaps
     if current and current['record']['requirements'] != state['requirements']:
         gaps.append('Requirements changed after this handoff')
-    return {'schema_version': 4, 'kind': 'platform-task', 'ok': not gaps, 'issue': url,
+    from contracts_v5 import reconcile
+    known = {v['id']: v for v in state.get('historical_issues', [])}
+    known.update({v['id']: v for v in (design or {}).get('issues', [])})
+    for entry in state['rows']['handoff']:
+        for item in entry['record']['questions']:
+            if item['id'] in known:
+                reconcile([known[item['id']]], [item])
+            known[item['id']] = item
+    for entry in progress.values():
+        recorded = entry['record']['questions']
+        if entry['record'].get('schema_version') != 5:
+            recorded = historical_questions(recorded, url)
+        for item in recorded:
+            if 'id' in item and item['id'] not in known:
+                known[item['id']] = item
+    return {'schema_version': 5, 'kind': 'platform-task', 'ok': not gaps, 'issue': url,
             'assurance': 'continuation-only', 'delivery': 'not-evaluated',
+            'known_issues': list(known.values()),
             'task': state['source']['task'], 'source': state['source'], 'parent': parent,
             'requirements': state['requirements'], 'history_digest': state['history_digest'],
             'platform_history': state['platform_history'], 'design': design,
@@ -229,7 +256,7 @@ def _markdown(name, row, heading):
 
 def _draft_result(name, url, row, gaps=()):
     headings = {'design': '方案记录', 'approval': '方案评审', 'handoff': '工作交接', 'progress': '工作进度'}
-    return {'schema_version': 4, 'kind': name + '-draft', 'ok': not gaps,
+    return {'schema_version': 5, 'kind': name + '-draft', 'ok': not gaps,
             'issue': url, 'record': row, 'markdown': _markdown(name, row, headings[name]),
             'history_digest': row.get('history_digest'), 'gaps': list(gaps),
             'assurance': 'continuation-only', 'delivery': 'not-evaluated',
@@ -246,7 +273,7 @@ def draft_design(url, design, resolution=None):
     prior = state['design']
     require(design['revision'] == (prior['revision'] + 1 if prior else 1), 'Design revisions must advance by one')
     require(not prior or prior['id'] == design['id'], 'Cannot change a design identity')
-    row = {'schema_version': 4, 'kind': 'design-record', 'task': url,
+    row = {'schema_version': 5, 'kind': 'design-record', 'task': url,
            'creator': text(design['roles']['design_owner']), 'requirements': state['requirements'],
            'requirements_signature': requirements_signature(state['source']),
            'history_digest': state['history_digest'], 'previous': state['design_previous'], 'design': design}
@@ -273,7 +300,7 @@ def draft_approval(url, value):
     require(not gaps, '; '.join(gaps))
     kwargs = {key: item for key, item in value.items() if key != 'resolution'}
     approval = designs.approval_draft(state['design'], history=state['history'], **kwargs)
-    row = {'schema_version': 4, 'kind': 'approval-record', 'task': url,
+    row = {'schema_version': 5, 'kind': 'approval-record', 'task': url,
            'requirements': state['requirements'], 'history_digest': state['history_digest'],
            'previous': state['approval_previous'], 'approval': approval}
     if resolution:
@@ -287,7 +314,7 @@ def _validate_handoff(row):
               'source_digest', 'versions', 'done', 'verified', 'remaining', 'questions', 'next',
               'references', 'participants', 'contracts', 'dependencies', 'joint_owner',
               'included_progress', 'workflow_version'}, {'resolution'})
-    require(row['schema_version'] == 4 and row['kind'] == 'handoff', 'Expected version 4 handoff')
+    require(row['schema_version'] == 5 and row['kind'] == 'handoff', 'Expected version 5 handoff')
     require(row['handoff_kind'] in ('design', 'implementation'), 'Unknown handoff kind')
     github.issue_ref(row['task'])
     for name in ('creator', 'owner', 'next', 'workflow_version'):
@@ -308,13 +335,14 @@ def _validate_handoff(row):
         for value in hashes.values():
             _hash(value)
     _hash(row['source_digest'])
-    for name in ('done', 'verified', 'remaining', 'references'):
+    for name in ('done', 'remaining', 'references'):
         strings(row[name])
-    require(isinstance(row['questions'], list), 'Questions must be a list')
-    for question in row['questions']:
-        obj(question, {'question', 'owner'})
-        text(question['question'])
-        text(question['owner'])
+    from contracts_v5 import issues
+    issues(row['questions'])
+    require(isinstance(row['verified'], list), 'Verified results must be artifact references')
+    for ref in row['verified']:
+        obj(ref, {'path', 'sha256'}, {'repository'})
+        text(ref['path']); _hash(ref['sha256'])
     require(isinstance(row['versions'], list) and bool(row['versions']), 'Source versions are required')
     seen = set()
     for version in row['versions']:
@@ -423,11 +451,39 @@ def _handoff_gaps(root, profile, state, row, status, documents):
             github.commit(repo, version['commit'])
         except Invalid as exc:
             gaps.append(str(exc))
-    for url in row['references'] + row['verified']:
+    for url in row['references']:
         try:
             github.reachable(url)
         except Invalid as exc:
             gaps.append(str(exc))
+    from contracts_v5 import reconcile, unresolved
+    try:
+        reconcile(state.get('known_issues', []), row['questions'])
+        if unresolved(row['questions'], required, 'implementation'):
+            gaps.append('Handoff has unresolved implementation issues')
+        from delivery import evidence
+        checked = set()
+        for ref in row['verified']:
+            path = evidence(root, profile, ref)
+            value = read(path)
+            require(value.get('schema_version') == 5 and value.get('kind') in
+                    {'execution', 'imported-execution', 'acceptance'},
+                    'Handoff needs original execution/acceptance records, not source-file links')
+            if 'repository' not in ref:
+                checked.update(validation.inspect_record(root, profile, value))
+            else:
+                from common import external_path, profile_valid
+                entry = next(v for v in profile['external_inputs'].values() if v.get('repository') == ref['repository'])
+                target = external_path(root, ref['repository'], entry)
+                other_profile = profile_valid(read(target / '.team-workflow.json'), target)
+                validation.inspect_record(target, other_profile, value)
+        if row['handoff_kind'] == 'implementation' and not row['remaining']:
+            require(set(task_valid(state['task'], profile, root)) <= checked,
+                    'Completed handoff omits required original check results')
+    except (Invalid, ValueError, TypeError, KeyError) as exc:
+        gaps.append(str(exc))
+    if row['handoff_kind'] == 'implementation' and not row['remaining'] and not row['verified']:
+        gaps.append('Completed handoff needs original verification records')
     declared = {value['repository']: value.get('role', 'build')
                 for value in profile.get('external_inputs', {}).values() if value['kind'] == 'repository'}
     dependencies = {}
@@ -502,6 +558,9 @@ def resume(root, profile, url, cs_skill, completed_tasks=()):
     state = load(url)
     task_valid(state['task'], profile, root)
     gaps = list(state['gaps'])
+    from validation_session import active
+    if active(root):
+        gaps.append('Validation is active; keep the shared workspace unchanged')
     status, brief = None, None
     if state['design'] is None:
         gaps.append('Missing versioned design')
@@ -558,7 +617,9 @@ def draft(root, profile, url, progress, cs_skill, kind='implementation', complet
     dependencies = [{'repository': value['repository'], 'role': value.get('role', 'build'),
                      'commit': sources['repositories'][value['repository']]['commit']}
                     for value in profile.get('external_inputs', {}).values() if value['kind'] == 'repository']
-    row = {'schema_version': 4, 'kind': 'handoff', 'task': url, 'handoff_kind': kind,
+    questions = {v['id']: v for v in state.get('known_issues', [])}
+    questions.update({v['id']: v for v in progress.get('questions', [])})
+    row = {'schema_version': 5, 'kind': 'handoff', 'task': url, 'handoff_kind': kind,
            'creator': progress['creator'], 'owner': progress['owner'], 'roles': dict(state['roles']),
            'requirements': state['requirements'], 'history_digest': state['history_digest'],
            'previous': None if resolution else state['previous'], 'workflow_version': VERSION,
@@ -570,7 +631,7 @@ def draft(root, profile, url, progress, cs_skill, kind='implementation', complet
            'versions': [{'repository': repo, 'commit': value['commit'], 'content': value['content']}
                         for repo, value in sorted(sources['repositories'].items())],
            'done': progress.get('done', []), 'verified': progress.get('verified', []),
-           'remaining': progress.get('remaining', []), 'questions': progress.get('questions', []),
+           'remaining': progress.get('remaining', []), 'questions': list(questions.values()),
            'next': progress['next'], 'references': progress.get('references', []),
            'participants': progress.get('participants', []), 'contracts': progress.get('contracts', []),
            'dependencies': progress.get('dependencies', dependencies), 'joint_owner': progress.get('joint_owner', ''),
@@ -604,10 +665,24 @@ def progress_draft(root, profile, url, progress, request_id):
     source = task_source(issue)
     task_valid(source['task'], profile, root)
     obj(progress, {'author', 'done', 'verified', 'remaining', 'questions'})
-    row = {**progress, 'schema_version': 1, 'kind': 'progress', 'task': url,
+    row = {**progress, 'schema_version': 5, 'kind': 'progress', 'task': url,
            'request_id': request_id, 'requirements': digest(source)}
     handoffs.validate_progress(row)
     records, gaps = handoffs.progress_history(issue)
     if request_id in records:
         require(records[request_id]['digest'] == digest(row), 'Progress request ID already has different content')
     return _draft_result('progress', url, row, gaps)
+
+
+def historical_questions(values, task_id):
+    """Retain unstructured historical questions as unresolved, never as consent."""
+    require(isinstance(values, list), 'Historical questions must be a list')
+    result = []
+    for value in values:
+        require(isinstance(value, dict), 'Historical question must be an object')
+        summary = text(value.get('question') or value.get('summary'))
+        owner = text(value.get('owner') or 'unassigned historical owner')
+        result.append({'id': 'legacy-' + digest([task_id, owner, summary])[:16],
+            'summary': summary, 'owner': owner, 'affects': [], 'blocks': ['implementation', 'acceptance'],
+            'state': 'open', 'resolution': {}})
+    return result

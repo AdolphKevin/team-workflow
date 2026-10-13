@@ -48,6 +48,9 @@ class WorkflowCases(unittest.TestCase):
     def check(self, code, format='command', **kw):
         row = {'argv': [sys.executable, '-c', code], 'cwd': '.', 'timeout': 5, 'purpose': 'Actual behavior',
                'format': format, 'required_cases': [], 'required_env': [], **kw}
+        if self.profile['schema_version'] == 5:
+            from v5_fixtures import coverage
+            row['coverage'] = coverage()
         self.profile['checks']['unit'] = row
         self.profile['required_checks']['code'] = ['unit']
         self.task['acceptance'][0]['checks'] = ['unit']
@@ -71,8 +74,17 @@ class WorkflowCases(unittest.TestCase):
         reply = {'ok': True, 'state': '0'*64, 'kind': 'receipt-check', 'read_only': True, 'query_state': {}, 'changed': [], 'receipt': {'query_state': {}}, 'task_status': 'completed', 'canonical_task_id': 'CS-T', 'task_revision': 1,
                  'files': ['.codestable/wiki/task.md'],
                  'records': [{'id': 'CS-T', 'path': '.codestable/wiki/task.md', 'relations': ['task-note']} ]}
+        reply['scopes'] = self.task.get('scopes') or [{'repository': 'self', 'path': p} for p in self.task.get('paths', ['app.py'])]
         reply['external_refs'] = [{'system': 'github' if self.task['id'].startswith('https://github.com/') else 'team-workflow', 'id': self.task['id']}]
-        (skill / 'scripts/cs_knowledge.py').write_text('import json\nprint(' + repr(json.dumps(reply)) + ')')
+        (skill / 'scripts/cs_knowledge.py').write_text(
+            'import json,sys,hashlib\nfrom pathlib import Path\n'
+            + 'reply=' + repr(reply) + '\n'
+            + 'root=Path(sys.argv[sys.argv.index("--root")+1])\n'
+            + 'if "template" in sys.argv:\n'
+            + ' p=root/".team-workflow/acceptance.json"\n'
+            + ' source={"workflow_acceptance":{"path":str(p.relative_to(root)),"sha256":hashlib.sha256(p.read_bytes()).hexdigest()}} if p.exists() else {}\n'
+            + ' reply={"ok":True,"task":{"source":source,"status":"completed","summary":"fixture","result":"fixture","scopes":reply["scopes"]},"items":[]}\n'
+            + 'print(json.dumps(reply))\n')
         return skill
 
     def complete(self):

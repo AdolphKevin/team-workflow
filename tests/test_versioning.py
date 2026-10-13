@@ -55,7 +55,7 @@ class VersionPolicy(unittest.TestCase):
         code, preview = self.cli('upgrade')
         self.assertEqual(code, 0)
         self.assertEqual(before, (self.root / '.team-workflow.json').read_bytes())
-        self.assertEqual(preview['profile']['schema_version'], 4)
+        self.assertEqual(preview['profile']['schema_version'], 5)
         self.assertEqual(preview['profile']['workflow_version'], VERSION)
         self.assertEqual(preview['profile']['external_inputs']['shared']['role'], 'build')
         self.assertEqual(preview['assumed_stateless'], ['unit'])
@@ -93,30 +93,32 @@ class VersionPolicy(unittest.TestCase):
             self.assertEqual(result['error_code'], 'tool-outdated', args)
             self.assertIn('npx skills update -g', result['next_action'])
         self.profile.pop('workflow_version')
-        self.profile['schema_version'] = 5
+        self.profile['schema_version'] = 6
         self.save()
         code, result = self.cli('project')
         self.assertEqual((code, result['error_code']), (1, 'tool-outdated'))
         code, result = self.cli('version')
         self.assertEqual(code, 0)
 
-    def test_upgraded_project_keeps_legacy_issue_tasks_on_their_contract(self):
-        self.check("import app; assert app.add(1,2)==3", environment={'kind': 'stateless'})
-        self.profile.update(schema_version=4, workflow_version=VERSION)
+    def test_historical_tasks_require_adoption_and_status_is_read_only(self):
+        self.profile.update(schema_version=5, workflow_version=VERSION)
         self.save()
         url = 'https://github.com/acme/project/issues/7'
-
-        def issue(version):
-            block = {'schema_version': version, 'parent': None, 'task': {'schema_version': 2 if version == 3 else 4, 'id': url}}
-            return {'html_url': url, 'body': '```team-workflow-task\n' + json.dumps(block) + '\n```\n'}
-
-        args = argparse.Namespace(command='resume', issue=url, context=None, with_task=[], design=None,
-                                  evidence_repository=None, task=None, phase='delivery', profile=self.root / '.team-workflow.json')
-        for version, expected in ((3, False), (4, True)):
-            with patch.object(github_read, 'issue', return_value=issue(version)):
-                self.assertEqual(workflow_v4.handles(args, self.root), expected, version)
-        with patch.object(github_read, 'issue', return_value={'html_url': url, 'body': 'stage-only parent'}):
-            self.assertFalse(workflow_v4.handles(argparse.Namespace(**{**vars(args), 'command': 'status'}), self.root))
+        block = {'schema_version': 3, 'parent': None, 'task': {**self.task, 'id': url}}
+        issue = {'html_url': url, 'body': '```team-workflow-task\n' + json.dumps(block) + '\n```\n'}
+        with patch.object(github_read, 'issue', return_value=issue):
+            code, state = self.cli('status', '--issue', url)
+            self.assertEqual(code, 0)
+            self.assertFalse(state['implementation_ready'])
+            self.assertEqual(state['status'], 'needs-adoption')
+            code, blocked = self.cli('task-export', '--issue', url)
+            self.assertEqual(code, 1)
+            self.assertIn('adopt', blocked['problem'])
+            code, draft = self.cli('adopt', '--issue', url)
+            self.assertEqual(code, 0, draft)
+            self.assertEqual(read(self.root / draft['task']['path'])['schema_version'], 5)
+            self.assertEqual(read(self.root / draft['original']['path'])['schema_version'], 2)
+            self.assertFalse(draft['implementation_ready'])
 
 
 if __name__ == '__main__':

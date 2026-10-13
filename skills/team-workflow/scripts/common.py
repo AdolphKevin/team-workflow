@@ -9,7 +9,7 @@ import tempfile
 from contextvars import ContextVar
 from datetime import datetime, timezone
 
-VERSION = '0.6.0-rc.1'
+VERSION = '0.7.0-rc.1'
 RISKS = {'authorization', 'persistence', 'concurrency', 'messaging', 'public-contract', 'cross-service'}
 KINDS = {'code', 'docs'}
 LOCATIONS = ContextVar('workflow_locations', default={'repositories': {}, 'inputs': {}})
@@ -209,10 +209,10 @@ def snapshot(root, profile):
 
 def profile_valid(profile, root, check_context=True):
     obj(profile, {'schema_version', 'project', 'context', 'knowledge', 'checks', 'required_checks', 'risk_checks', 'inputs', 'environment_versions'}, {'external_inputs', 'workflow_version'})
-    require(type(profile['schema_version']) is int and profile['schema_version'] in (3, 4),
+    require(type(profile['schema_version']) is int and profile['schema_version'] in (3, 4, 5),
             'Unsupported project configuration; expected schema_version 3 or 4. Run `workflow.py upgrade` for supported older formats')
     if 'workflow_version' in profile:
-        require(profile['schema_version'] == 4, 'workflow_version requires schema_version 4')
+        require(profile['schema_version'] in (4, 5), 'workflow_version requires schema_version 4')
         require(bool(re.fullmatch(r'[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?', text(profile['workflow_version']))),
                 'workflow_version must be a semantic version')
     location_settings(root)
@@ -227,7 +227,7 @@ def profile_valid(profile, root, check_context=True):
     require(isinstance(profile.get('external_inputs', {}), dict), 'external_inputs must be an object')
     for name, item in profile.get('external_inputs', {}).items():
         text(name)
-        obj(item, {'kind'}, {'repository', 'role'} if profile['schema_version'] == 4 else {'repository'})
+        obj(item, {'kind'}, {'repository', 'role'} if profile['schema_version'] in (4, 5) else {'repository'})
         if 'role' in item:
             require(item['role'] in ('build', 'modified', 'joint'), 'Dependency role must be build, modified or joint')
         require(item['kind'] in ('file', 'repository'), 'External input must be a file or Git repository')
@@ -239,9 +239,12 @@ def profile_valid(profile, root, check_context=True):
     for key, check in profile['checks'].items():
         require(re.fullmatch('[a-z][a-z0-9-]*', key), f'Invalid check ID: {key}')
         optional = {'report', 'artifacts', 'review'}
-        if profile['schema_version'] == 4:
-            optional |= {'repository', 'environment', 'revision_sensitive'}
+        if profile['schema_version'] in (4, 5):
+            optional |= {'repository', 'environment', 'coverage', 'revision_sensitive'}
         obj(check, {'argv', 'purpose', 'cwd', 'timeout', 'format', 'required_cases', 'required_env'}, optional)
+        if 'coverage' in check:
+            from contracts_v5 import coverage
+            coverage(check['coverage'])
         argv = check['argv']
         require(isinstance(argv, list) and bool(argv), 'Expected argv array')
         for arg in argv:
@@ -282,7 +285,7 @@ def profile_valid(profile, root, check_context=True):
         require(check['format'] in ('command', 'go-json', 'junit'), 'Unknown result format')
         strings(check['required_cases'])
         strings(check['required_env'])
-        if profile['schema_version'] == 4 and check['required_env']:
+        if profile['schema_version'] in (4, 5) and check['required_env']:
             require(check.get('environment', {}).get('kind') == 'fixture',
                     'Required environment values need a public fixture/configuration identity')
         if check['format'] == 'command':
@@ -322,12 +325,14 @@ def profile_valid(profile, root, check_context=True):
 
 def task_valid(task, profile, root):
     version = task.get('schema_version') if isinstance(task, dict) else None
-    optional = {'design_id', 'section_ids', 'paths', 'symbols', 'scopes', 'parent'} if version == 4 else set()
+    optional = {'design_id', 'section_ids', 'paths', 'symbols', 'scopes', 'parent', 'acceptance_scope'} if version in (4, 5) else set()
     obj(task, {'schema_version', 'id', 'base', 'goal', 'non_goals', 'kind', 'risks', 'acceptance'}, optional)
-    require(type(version) is int and version in (2, 4), 'Expected task schema_version 2 or 4')
-    if version == 4:
+    require(type(version) is int and version in (2, 4, 5), 'Expected task schema_version 2 or 4')
+    if version in (4, 5):
         text(task.get('design_id'))
         strings(task.get('section_ids'), True)
+    if version == 5:
+        require(task.get('acceptance_scope') in ('task', 'requirement'), 'Task needs acceptance_scope: task or requirement')
     for key in ('id', 'goal', 'base'):
         text(task[key])
     require(re.fullmatch(r'[0-9a-f]{40}|[0-9a-f]{64}', task['base']), 'Task base must be a full commit ID')

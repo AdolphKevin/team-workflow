@@ -63,13 +63,17 @@ def progress_history(issue):
 def validate_progress(row):
     obj(row, {'schema_version', 'kind', 'task', 'request_id', 'requirements', 'author',
               'done', 'verified', 'remaining', 'questions'})
-    require(row['schema_version'] == 1 and row['kind'] == 'progress', 'Expected progress record version 1')
+    require(row['schema_version'] in (1, 5) and row['kind'] == 'progress', 'Expected progress record version 1')
     github.issue_ref(row['task'])
     for name in ('request_id', 'requirements', 'author'):
         text(row[name])
     for name in ('done', 'verified', 'remaining'):
         strings(row[name])
     require(isinstance(row['questions'], list), 'Questions must be a list')
+    if row['schema_version'] == 5:
+        from contracts_v5 import issues
+        issues(row['questions'])
+        return
     for item in row['questions']:
         obj(item, {'question', 'owner'})
         text(item['question'])

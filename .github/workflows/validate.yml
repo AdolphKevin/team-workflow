@@ -48,7 +48,7 @@ jobs:
           PY
       - name: Verify real CS public interfaces
         run: python3 scripts/check_cs.py --cs-skill "$RUNNER_TEMP/workflow-cs/skills/cs"
-      - name: Verify v4 against real CS capabilities
+      - name: Verify v5 against real CS capabilities
         run: python3 scripts/check_cs_v4.py --cs-skill "$RUNNER_TEMP/workflow-cs/skills/cs"
       - name: Verify parallel branches with real CS
         run: python3 scripts/check_parallel.py --cs-skill "$RUNNER_TEMP/workflow-cs/skills/cs"

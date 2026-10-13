@@ -1,4 +1,4 @@
-"""Version 4 CLI composition; legacy task contracts remain explicitly versioned."""
+"""Version 5 CLI composition; legacy task contracts remain explicitly versioned."""
 import json
 from pathlib import Path
 
@@ -20,31 +20,11 @@ def local(root, value):
 
 
 def handles(args, root):
-    if args.command in NEW_COMMANDS or args.context or args.with_task or args.design or args.evidence_repository:
-        return True
-    if args.command == 'aggregate':
-        return read(local(root, args.joint)).get('schema_version') == 4
-    if args.command in ('version', 'agents', 'stage-draft', 'migrate'):
-        return False
-    if args.task:
-        return read(local(root, args.task)).get('schema_version') == 4
-    if args.phase == 'acceptance':
-        return True
-    if args.issue and args.command in ('resume', 'handoff', 'progress', 'task-export', 'status'):
-        # An upgraded project keeps its in-flight legacy Issue tasks on their original contract.
-        import github_read
-        import handoffs
-        value = handoffs.block(github_read.issue(args.issue).get('body'), 'task', required=False)
-        if isinstance(value, dict) and value.get('schema_version') in (3, 4):
-            return value['schema_version'] == 4
-        if args.command == 'status':
-            return False
-    path = root / args.profile
-    return path.is_file() and read(path).get('schema_version') == 4
+    return args.command not in ('version', 'agents', 'stage-draft', 'migrate', 'upgrade', 'adopt')
 
 
 def readable(result):
-    lines = [result.get('summary') or result.get('status') or ('通过' if result.get('ok', True) else '尚未完成')]
+    lines = [result.get('summary') or result.get('status') or ('命令已完成；验收状态见下方' if result.get('ok', True) else '尚未完成')]
     for key in ('problem', 'next_action'):
         if result.get(key):
             lines.append(str(result[key]))
@@ -80,7 +60,9 @@ def references(root, values):
 
 
 def report_input(args, root, task):
-    result = {'schema_version': 4, 'task_id': task['id'], 'design': local(root, args.design).relative_to(root).as_posix(),
+    for name in ('design', 'brief'):
+        require(getattr(args, name) is not None, 'Missing --' + name + '; supply the existing artifact or use prepare with current approvals and --context')
+    result = {'schema_version': 5, 'task_id': task['id'], 'design': local(root, args.design).relative_to(root).as_posix(),
               'approvals': references(root, args.approval), 'design_history': references(root, args.design_history),
               'brief': local(root, args.brief).relative_to(root).as_posix(), 'runs': references(root, args.run),
               'review': local(root, args.review).relative_to(root).as_posix() if args.review else ''}
@@ -131,10 +113,10 @@ def cached_predecessors(args, root, profile):
 def dispatch(args, root):
     if args.command == 'schema':
         directory = Path(__file__).resolve().parents[1] / 'templates'
-        return {'ok': True, 'summary': '第四版模板与字段说明',
+        return {'ok': True, 'summary': '第五版模板与字段说明',
                 'templates': {p.stem: str(p) for p in sorted(directory.glob('*.json'))},
-                'reference': str(Path(__file__).resolve().parents[1] / 'references/contracts-v4.md'),
-                'versions': {'profile': [3, 4], 'task': [2, 4], 'new_records': 4},
+                'reference': str(Path(__file__).resolve().parents[1] / 'references/contracts-v5.md'),
+                'versions': {'profile': [5], 'task': [5], 'new_records': 5},
                 'next_action': 'Read the installed template; replace every placeholder and retain the task format version.'}
     if args.command == 'cleanup':
         import cleanup
@@ -147,7 +129,7 @@ def dispatch(args, root):
     if args.context:
         from common import artifact_valid
         context = read(local(root, args.context))
-        require(context.get('schema_version') == 4 and context.get('kind') == 'prepared-context', 'Expected prepared context')
+        require(context.get('schema_version') == 5 and context.get('kind') == 'prepared-context', 'Expected prepared context')
         for key in ('task', 'design', 'brief'):
             path = artifact_valid(root, context[key])
             if getattr(args, key) is None:
@@ -163,9 +145,14 @@ def dispatch(args, root):
         platform = coordination.load(args.issue)
     task = read(local(root, args.task)) if args.task else platform['task'] if platform else None
     if args.command == 'project':
-        skill = knowledge.skill_path(args.cs_skill)
-        knowledge.supported(knowledge.call(skill, root, ['--check'], bootstrap=True), True)
-        return {'ok': True, 'schema_version': 4, 'scope': 'project-configuration', 'summary': '项目配置与 CS 能力可用'}
+        try:
+            skill = knowledge.skill_path(args.cs_skill)
+            knowledge.supported(knowledge.call(skill, root, ['--check'], bootstrap=True), True)
+            cs = {'status': 'ready'}
+        except Invalid as exc:
+            cs = {'status': 'incomplete', 'reason': str(exc), 'problem': str(exc)}
+        return {'ok': cs['status'] == 'ready', 'schema_version': 5, 'cs': cs,
+                'scope': 'project-configuration', 'summary': '已核对项目配置与 CS 能力。'}
     if args.command == 'evidence':
         from common import external_path
         refs = []
@@ -196,17 +183,22 @@ def dispatch(args, root):
         except (Invalid, OSError, ValueError, TypeError, KeyError) as exc:
             return request.finish({'ok': False, 'problem': str(exc), 'error_code': 'import-incomplete',
                                    'next_action': 'Inspect provider identity and original reports; retry with a new request ID.'})
-    require(task is not None and task.get('schema_version') == 4, 'This operation requires an explicit v4 task; legacy tasks are not upgraded automatically')
+    require(task is not None and task.get('schema_version') == 5, 'This operation requires an explicit v5 task; legacy tasks are not upgraded automatically')
     task_valid(task, profile, root)
     if platform:
         require(platform['task'] == task, 'Local task differs from platform requirements')
     if args.command in ('status', 'resume'):
-        return status(args, root, profile, task, platform)
+        value = status(args, root, profile, task, platform)
+        from validation_session import active
+        running = active(root)
+        value['validation_active'] = running
+        if running:
+            value.update(implementation_ready=False,
+                         summary='共享目录正在执行验收检查；源码和生成输入须保持不变。',
+                         next_action='Wait for the active validation to finish before editing or changing checkouts.')
+        return value
     if args.command == 'snapshot':
         return {'ok': True, 'source_digest': validation.source_digest(root, profile), 'task_digest': digest(task)}
-    if args.command == 'verify' and not args.out:
-        import delivery
-        return delivery.verify(root, profile, task, read(local(root, args.report)), args.cs_skill, args.phase)
     from artifacts import Request
     input_files = {}
     for name in ('task', 'design', 'brief', 'review', 'report', 'knowledge', 'progress', 'record', 'acceptance', 'final_brief'):
@@ -240,9 +232,9 @@ def produce(args, root, profile, task, platform, request):
     def emit(value, name):
         return {'ok': value.get('ok', True), 'artifact': request.publish(name, value, args.out),
                 **{k: value[k] for k in ('summary', 'gaps', 'problem', 'next_action', 'implementation_ready',
-                                       'business_accepted', 'delivery_complete', 'closable') if k in value}}
+                                       'business_accepted', 'delivery_complete', 'closable', 'acceptance_scope', 'scope', 'validation_active', 'verification_gaps') if k in value}}
     if args.command == 'task-export':
-        return emit(task, 'task.json')
+        return {**emit(task, 'task.json'), 'summary': '仅导出任务；实施和交付条件尚未核对。', 'implementation_ready': False, 'business_accepted': False}
     if args.command == 'prepare':
         import designs
         import coordination
@@ -259,16 +251,21 @@ def produce(args, root, profile, task, platform, request):
         paths = args.path or task.get('paths') or sorted({path for key in task['section_ids']
                     if sections[key]['type'] == 'task' for path in sections[key]['data']['scope']})
         brief = knowledge.brief(root, task, knowledge.skill_path(args.cs_skill), paths, args.symbol)
-        context = {'schema_version': 4, 'kind': 'prepared-context', 'at': now(),
+        from contracts_v5 import execution_environment
+        from validation_session import active
+        environment_gaps = execution_environment(profile, task, design)
+        running = active(root)
+        context = {'schema_version': 5, 'kind': 'prepared-context', 'at': now(),
                    'task': request.publish('task.json', task), 'design': request.publish('design.json', design),
                    'brief': request.publish('brief.json', brief), 'source_at_start': validation.source_digest(root, profile),
                    'approvals': [request.publish(f'approval-{i}.json', v) for i, v in enumerate(approvals)],
                    'design_history': [request.publish(f'design-history-{i}.json', v) for i, v in enumerate(history)],
                    'predecessors': [request.publish(f'predecessor-{i}.json', v) for i, v in enumerate(predecessors)],
-                   'implementation_ready': readiness['implementation_ready'],
+                   'implementation_ready': readiness['implementation_ready'] and not running,
+                   'validation_active': running, 'verification_gaps': environment_gaps,
                    'ok': not platform or not platform['gaps'], 'gaps': platform['gaps'] if platform else [],
                    'summary': '任务与知识材料已准备，请实际阅读简报和方案。',
-                   'next_action': 'Implement within the approved scope.' if readiness['implementation_ready'] else 'Obtain confirmation for the named plan sections.',
+                   'next_action': 'Implement within the approved scope.' if readiness['implementation_ready'] and not running else 'Obtain confirmation for the named plan sections.',
                    'knowledge_claim': 'captured for reading; not evidence that knowledge was used'}
         return {**emit(context, 'context.json'), **{k: context[k] for k in ('task', 'design', 'brief')}}
     if args.command == 'brief':
@@ -318,9 +315,16 @@ def produce(args, root, profile, task, platform, request):
                 'artifact': request.publish('run.json', record, args.out) if args.out else artifact(root, path),
                 'checks': [{'id': r['id'], 'status': r['status'], 'detail': r['detail']} for r in record['results']],
                 **({} if ok else {'problem': 'A check failed or its source/environment changed', 'next_action': 'Inspect per-check original reports, fix the failure and use a new request ID.'})}
+    if args.command == 'knowledge-template':
+        from knowledge import completion_template
+        payload = completion_template(root, profile, task, knowledge.skill_path(args.cs_skill),
+                    local(root, args.acceptance) if args.acceptance else None, args.cs_task_id)
+        return {**emit(payload, 'cs-input.json'), 'scope': 'draft-only',
+                'completion_allowed': payload['task']['status'] == 'completed',
+                'summary': '知识草稿已生成；仍需填写实际结果并通过 CS 预览和应用。'}
     if args.command == 'knowledge':
-        require(bool(args.acceptance and args.cs_task_id and args.disposition and args.reason),
-                'knowledge requires --acceptance, --cs-task-id, --disposition and --reason')
+        require(bool(args.acceptance and args.cs_task_id and args.disposition and args.reason and args.brief),
+                'knowledge requires --acceptance, --cs-task-id, --brief, --disposition and --reason')
         value = knowledge.finish_v4(root, profile, task, knowledge.skill_path(args.cs_skill), args.cs_task_id,
                     local(root, args.brief), args.disposition, args.reason, local(root, args.acceptance),
                     local(root, args.final_brief) if args.final_brief else None)
@@ -332,8 +336,12 @@ def produce(args, root, profile, task, platform, request):
         return emit(result, 'review.json' if args.command == 'review-template' else 'delivery.json')
     if args.command == 'verify':
         import delivery
+        import issue_history
+        report = read(local(root, args.report))
+        issue_history.capture(request, task, read(local(root, report['review'])),
+            [r['id'] for r in read(local(root, report['design']))['sections']])
         return emit(delivery.verify(root, profile, task, read(local(root, args.report)), args.cs_skill, args.phase), args.phase + '.json')
-    raise Invalid('This command does not support v4 yet: ' + args.command)
+    raise Invalid('This command does not support v5: ' + args.command)
 
 
 def status(args, root, profile, task, platform=None):
@@ -350,13 +358,16 @@ def status(args, root, profile, task, platform=None):
         return {**value, 'summary': '交接材料可接续，最终交付尚未核查。' if value['ok'] else '交接仍有缺口，按下列原因补齐后接续。'}
     require(args.design is not None, 'Local task status needs --design or --context; provide --report to verify acceptance/delivery')
     import designs
-    value = designs.approval_status(read(local(root, args.design)), [read(local(root, p)) for p in args.approval],
+    from coordination import validate_task_design
+    design = read(local(root, args.design))
+    validate_task_design(task, design)
+    value = designs.approval_status(design, [read(local(root, p)) for p in args.approval],
                 history=[read(local(root, p)) for p in args.design_history], section_ids=task['section_ids'],
                 completed_tasks=cached_predecessors(args, root, profile),
                 changed_paths=validation.changed_paths(root, task), code_digest=validation.source_digest(root, profile),
                 run_refs=[artifact(root, local(root, p)) for p in args.run])
     ready = value['implementation_ready']
     summary = '可以继续实施；方案、代码与交付仍需实际验收。' if ready else '实施条件尚未满足：需补齐方案批准、决策、分派或前置任务证明。'
-    next_action = 'Run checks and prepare the actual acceptance report.' if ready else 'Resolve the named pending sections or predecessor evidence, then prepare again.'
+    next_action = 'Reuse the existing prepared context; if absent, run prepare with the same plan and approvals to capture the brief, without requesting consent again. Then run checks.' if ready else 'Resolve the named pending sections or predecessor evidence, then prepare again.'
     return {**value, 'summary': summary, 'delivery': 'not-evaluated', 'business_accepted': False,
             'delivery_complete': False, 'closable': False, 'next_action': next_action}

@@ -1,8 +1,8 @@
-# 第四版跨机器结果与联合验收
+# 第五版跨机器结果与联合验收
 
-第四版把实际执行结果、业务评审和知识收尾分别记录。此处只处理执行来源和多仓
+第五版把实际执行结果、业务评审和知识收尾分别记录。此处只处理执行来源和多仓
 联合核对；任务关闭、日志链接可访问或远端显示成功，都不能代替原始执行报告。
-第三版结果保持原格式，不自动转换成第四版完成证明。
+第三版结果保持原格式，不自动转换成第五版完成证明。
 
 ## 在执行时保存原始结果
 
@@ -11,7 +11,7 @@
 需要把结果用于其他机器时，通过现有 CI 发布该检查目录的内容，保持
 `result.json` 位于产物压缩包的根目录。工具不会替用户发布产物。
 
-这份文件使用 `schema_version: 4`、`kind: portable-execution`，记录：
+这份文件使用 `schema_version: 5`、`kind: portable-execution`，记录：
 
 - 检查编号、定义、命令、执行目录、实际运行仓库及原始用例结果。
 - 实际源码内容、执行器版本和环境的指纹，以及运行前后是否一致。
@@ -45,7 +45,7 @@
 摘要和实际下载内容，再从原始报告重新计算用例结果。来源不明、零用例、必要用例
 跳过、失败、环境缺失、执行期间源码变化或未共享改动，均不能通过。
 
-导入生成 `kind: imported-execution` 的第四版记录。后续每次验证都会重新检查
+导入生成 `kind: imported-execution` 的第五版记录。后续每次验证都会重新检查
 平台来源、压缩包、解包内容和当前检查要求；本地成功摘要无法替换原始报告。
 产物引用使用项目内相对路径，整个项目换目录后可以继续核对。
 
@@ -69,13 +69,14 @@
 
 ## 多仓联合交付
 
-第四版联合清单使用仓库身份与项目内相对路径，本机目录通过现有仓库映射提供：
+第五版联合清单使用仓库身份与项目内相对路径，本机目录通过现有仓库映射提供：
 
 ```json
 {
-  "schema_version": 4,
+  "schema_version": 5,
   "task_id": "共同的总任务编号或 Issue URL",
   "joint": "example/core",
+  "requirement": {"repository":"example/core","task":".team-workflow/requirement.json","report":".team-workflow/requirement-report.json"},
   "participants": [
     {"repository":"example/core","commit":"完整提交编号","profile":".team-workflow/profile.json","task":".team-workflow/task.json","report":".team-workflow/report.json"},
     {"repository":"example/gateway","commit":"完整提交编号","profile":".team-workflow/profile.json","task":".team-workflow/task.json","report":".team-workflow/report.json"}
@@ -95,10 +96,18 @@
 修改或联合验证的仓库，必须列为参与方并完成自身交付。联合运行须在执行时覆盖
 清单中的所有参与方和构建依赖；本机外部文件不能充当共享仓库版本。
 
-`aggregate(root, manifest, repositories, cs_skill)` 逐仓调用第四版交付核对，再核对
+`aggregate(root, manifest, repositories, cs_skill)` 逐仓调用第五版交付核对，再核对
 联合检查的实际来源、全部输入、运行时间和原始结果。输入、任务、交付材料或平台
 进度在核对期间变化时不能通过。结果分别返回清单当前固定的 `versions` 和实际
 运行所用的 `tested_versions`；相同内容的新提交不会抹去原始执行版本。
 
 通过联合核对表示所列材料支持本次交付，`closable` 仍为 `false`。关闭任务继续
 使用已有授权，工具不自动关闭、提交或发布任何内容。
+
+
+## 主需求验收
+
+第五版联合清单必须包含 `requirement: {repository, task, report}`，指向联合负责仓库中的
+主需求任务和业务验收输入。该任务编号必须等于清单的 `task_id`，`acceptance_scope` 为
+`requirement`，且没有更上层 `parent`。聚合会实际核对主需求场景，不能仅由各参与子任务
+通过推导主需求通过；实现任务的知识与最终交付仍逐仓核对。历史第四版清单先补齐此项。

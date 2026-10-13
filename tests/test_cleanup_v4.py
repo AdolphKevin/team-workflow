@@ -3,6 +3,7 @@ from pathlib import Path
 import unittest
 
 import test_workflow as fixtures
+import v5_fixtures as v5
 from common import Invalid, artifact, create
 import cleanup
 
@@ -22,7 +23,7 @@ class CleanupCases(unittest.TestCase):
         abandoned = self.request('old')
         retained = self.request('referenced')
         self.assertEqual(cleanup.preview(self.root)['candidates'], [])
-        create(self.root / '.team-workflow/final.json', {'schema_version': 4, 'kind': 'delivery-verification',
+        create(self.root / '.team-workflow/final.json', {'schema_version': 5, 'kind': 'delivery-verification',
             'task_id': 'T', 'ok': True, 'delivery_complete': True,
             'covered_requests': [artifact(self.root, p) for p in self.root.glob('.team-workflow/tasks/*/requests/*/request.json')],
             'materials': [{'path': str((retained / 'response.json').relative_to(self.root))}]})
@@ -35,7 +36,7 @@ class CleanupCases(unittest.TestCase):
 
     def test_changed_references_and_active_requests_refuse_application(self):
         self.request('old')
-        create(self.root / '.team-workflow/final.json', {'schema_version': 4, 'kind': 'delivery-verification',
+        create(self.root / '.team-workflow/final.json', {'schema_version': 5, 'kind': 'delivery-verification',
             'task_id': 'T', 'ok': True, 'delivery_complete': True,
             'covered_requests': [artifact(self.root, p) for p in self.root.glob('.team-workflow/tasks/*/requests/*/request.json')]})
         plan = cleanup.preview(self.root)
@@ -55,9 +56,20 @@ class CleanupCases(unittest.TestCase):
 
     def test_old_completion_does_not_make_a_reopened_task_deletable(self):
         self.request('first')
-        create(self.root / '.team-workflow/final.json', {'schema_version': 4, 'kind': 'delivery-verification',
+        create(self.root / '.team-workflow/final.json', {'schema_version': 5, 'kind': 'delivery-verification',
             'task_id': 'T', 'ok': True, 'delivery_complete': True,
             'covered_requests': [artifact(self.root, p) for p in self.root.glob('.team-workflow/tasks/*/requests/*/request.json')]})
         self.assertEqual(len(cleanup.preview(self.root)['candidates']), 1)
         self.request('later-failed')
         self.assertEqual(cleanup.preview(self.root)['candidates'], [])
+
+    def test_completed_task_keeps_submitted_issue_history(self):
+        old = self.request('review-failure')
+        create(old / 'review-input.json', {'schema_version': 5, 'task_id': 'T', 'at': '2026-10-13T00:00:00Z',
+            'issues': [{'id': 'Q1', 'summary': 'A business decision was unresolved'}]})
+        create(self.root / '.team-workflow/final.json', {'schema_version': 5, 'kind': 'delivery-verification',
+            'task_id': 'T', 'ok': True, 'delivery_complete': True,
+            'covered_requests': [artifact(self.root, old / 'request.json')]})
+        plan = cleanup.preview(self.root)
+        self.assertEqual(plan['candidates'], [])
+        self.assertIn(str(old.relative_to(self.root)), plan['protected'])
