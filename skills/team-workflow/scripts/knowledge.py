@@ -5,7 +5,7 @@ import subprocess
 import sys
 import json
 
-from common import Invalid, artifact, artifact_valid, digest, inside, now, read, require, sha, write
+from common import Invalid, artifact, artifact_valid, digest, inside, now, read, require
 
 
 def skill_path(value=None):
@@ -31,10 +31,8 @@ def call(skill, root, command, bootstrap=False, input_data=None):
         raise Invalid(f'CS command unavailable/incomplete: {label}: {exc}') from exc
 
 
-def supported(preflight, modern=False):
-    required = {'documents', 'receipt-check', 'task-files'}
-    if modern:
-        required |= {'task-external-refs', 'exclusive-plan-file', 'review-actions'}
+def supported(preflight):
+    required = {'documents', 'receipt-check', 'task-files', 'task-external-refs', 'exclusive-plan-file', 'review-actions'}
     missing = required - set(preflight.get('capabilities', []))
     require(not missing, 'CS interface missing: ' + ', '.join(sorted(missing)))
 
@@ -49,8 +47,7 @@ def receipt_check(skill, root, brief):
 
 def brief(root, task, skill, paths, symbols):
     preflight = call(skill, root, ['--check'], bootstrap=True)
-    modern = task.get('schema_version') == 5
-    supported(preflight, modern)
+    supported(preflight)
     paths = paths or task.get('paths', [])
     symbols = symbols or task.get('symbols', [])
     command = ['brief', '--task', task['goal'], '--format', 'json']
@@ -65,7 +62,7 @@ def brief(root, task, skill, paths, symbols):
         command += ['--scope', scope]
     data = call(skill, root, command)
     require(isinstance(data.get('receipt', {}).get('query_state'), dict), 'CS brief must include scoped source state')
-    record = {'schema_version': 5 if modern else 2, 'kind': 'knowledge-brief', 'task_id': task['id'],
+    record = {'schema_version': 5, 'kind': 'knowledge-brief', 'task_id': task['id'],
               'at': now(), 'cs_version': preflight.get('skill_version'),
               'task_digest': digest(task), 'paths': paths, 'symbols': symbols,
               'query_state': data['receipt']['query_state'], 'brief': data}
@@ -80,13 +77,13 @@ def external_ref(task):
     return {'system': 'team-workflow', 'id': task['id']}
 
 
-def finish_v4(root, profile, task, skill, task_id, brief_path, disposition, reason,
+def finish(root, profile, task, skill, task_id, brief_path, disposition, reason,
               acceptance_path, final_brief_path=None):
     """Capture actual CS completion after business acceptance, without writing knowledge."""
     from common import artifact_valid
     from validation import source_digest
     require(disposition in ('none', 'reused', 'updated', 'added') and reason.strip(), 'Describe actual knowledge disposition')
-    supported(call(skill, root, ['--check'], bootstrap=True), True)
+    supported(call(skill, root, ['--check'], bootstrap=True))
     acceptance = read(acceptance_path)
     require(acceptance.get('schema_version') == 5 and acceptance.get('kind') == 'acceptance'
             and acceptance.get('ok') is True and acceptance.get('task_digest') == digest(task)
@@ -124,31 +121,6 @@ def finish_v4(root, profile, task, skill, task_id, brief_path, disposition, reas
             'final_brief': artifact(root, latest_path), 'acceptance': artifact(root, acceptance_path),
             'cs_task_id': task_id, 'cs_task_revision': files['task_revision'],
             'external_refs': files['external_refs'], 'files': related, 'query_state': sources,
-            'disposition': disposition, 'reason': reason}
-
-
-def finish(root, task, skill, task_id, brief_path, disposition, reason):
-    require(disposition in ('none', 'reused', 'updated', 'added'), 'Unknown knowledge disposition')
-    require(bool(reason.strip()), 'Knowledge disposition needs a concrete reason')
-    preflight = call(skill, root, ['--check'], bootstrap=True)
-    supported(preflight)
-    previous = read(brief_path)
-    sources = receipt_check(skill, root, previous['brief'])
-    files = call(skill, root, ['task-files', '--task-id', task_id, '--format', 'json'])
-    require(files.get('task_status') == 'completed', 'CS task must be completed')
-    require(files.get('canonical_task_id') == task_id, 'Use the canonical CS task ID')
-    related = [artifact(root, inside(root, name)) for name in files['files']]
-    task_rows = [row for row in files['records'] if row['id'] == task_id and 'task-note' in row['relations']]
-    require(len(task_rows) == 1, 'CS task record not found')
-    # CS owns note parsing and semantics. Require a concrete backlink to this logical workflow task.
-    note = inside(root, task_rows[0]['path']).read_text(encoding='utf-8')
-    require(task['id'] in note, 'CS task note must reference this workflow task ID or issue URL')
-    require(receipt_check(skill, root, previous['brief']) == sources, 'Relevant sources changed while capturing completion')
-    return {'schema_version': 2, 'kind': 'knowledge-completion', 'task_id': task['id'],
-            'task_digest': digest(task), 'at': now(), 'cs_version': preflight.get('skill_version'),
-            'brief': artifact(root, brief_path),
-            'cs_task_id': task_id, 'cs_task_revision': files['task_revision'],
-            'files': related, 'query_state': sources,
             'disposition': disposition, 'reason': reason}
 
 

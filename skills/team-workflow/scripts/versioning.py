@@ -1,11 +1,9 @@
-"""Compare the installed tool with the project configuration and upgrade older projects."""
-import copy
+"""Refuse to interpret a project configured by a newer team-workflow."""
 import re
 
-from common import Invalid, VERSION, profile_valid, require
+from common import Invalid, VERSION, require
 
 PROFILE_SCHEMA = 5
-UPGRADABLE_SCHEMAS = (3, 4, 5)
 SEMVER = re.compile(r'(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?')
 UPDATE_TOOL = 'npx skills update -g'
 
@@ -47,9 +45,6 @@ def status(profile):
     if newer_schema or newer_version:
         return {**info, 'status': 'tool-outdated',
                 'next_action': f'The project uses a newer team-workflow; run `{UPDATE_TOOL}`, start a new session and retry.'}
-    if schema < PROFILE_SCHEMA or project is None or compare(project, VERSION) < 0:
-        return {**info, 'status': 'project-outdated',
-                'next_action': 'Run `workflow.py upgrade` to preview, then `workflow.py upgrade --apply`, and rerun `project`.'}
     return {**info, 'status': 'current'}
 
 
@@ -60,50 +55,3 @@ def ensure_tool_current(profile):
                        f"({info['project'] or 'schema ' + str(info['profile_schema'])})",
                        'tool-outdated', info['next_action'], info)
     return info
-
-
-def upgrade(root, profile, record=None):
-    """Return the latest-format profile; never invent environments that need project commands."""
-    info = ensure_tool_current(profile)
-    schema = profile['schema_version']
-    require(schema in UPGRADABLE_SCHEMAS,
-            f'Profile schema_version {schema} cannot be upgraded directly; run `workflow.py migrate` first')
-    profile_valid(profile, root)
-    record = record or {}
-    require(isinstance(record, dict) and record.keys() <= {'environment'}, 'Upgrade input only accepts environment')
-    environments = record.get('environment', {})
-    require(isinstance(environments, dict) and environments.keys() <= profile['checks'].keys(),
-            'Upgrade environment input must name existing checks')
-    result = copy.deepcopy(profile)
-    changes, assumed, gaps = [], [], []
-    if schema != PROFILE_SCHEMA:
-        result['schema_version'] = PROFILE_SCHEMA
-        changes.append(f'schema_version: {schema} -> {PROFILE_SCHEMA}')
-    for name, item in result.get('external_inputs', {}).items():
-        if item['kind'] == 'repository' and 'role' not in item:
-            item['role'] = 'build'
-            changes.append(f'external_inputs.{name}.role: build (build input only; adds no collaborator)')
-    for key, check in result['checks'].items():
-        if key in environments:
-            check['environment'] = copy.deepcopy(environments[key])
-            changes.append(f'checks.{key}.environment: {check["environment"]["kind"]} (from upgrade input)')
-        elif 'environment' in check:
-            continue
-        elif check['required_env']:
-            gaps.append({'check': key, 'required_env': check['required_env'],
-                         'problem': 'Checks reading environment values need a fixture identity command from this project',
-                         'input': {'environment': {key: {'kind': 'fixture', 'identity': ['<read-only command printing the fixture identity>']}}}})
-        else:
-            check['environment'] = {'kind': 'stateless'}
-            assumed.append(key)
-            changes.append(f'checks.{key}.environment: stateless (assumed; review)')
-    if info['project'] != VERSION:
-        result['workflow_version'] = VERSION
-        changes.append(f"workflow_version: {info['project'] or 'unset'} -> {VERSION}")
-    if gaps:
-        return {'ok': False, 'status': 'needs-input', 'version': info, 'changes': changes, 'assumed_stateless': assumed,
-                'gaps': gaps, 'problem': 'Some checks need a project-provided fixture identity before upgrading',
-                'next_action': 'Add a read-only identity command for each gap, pass it with `upgrade --record <file>`, and retry.'}
-    profile_valid(result, root)
-    return {'ok': True, 'status': 'ready' if changes else 'current', 'version': info, 'changes': changes,
-            'assumed_stateless': assumed, 'gaps': [], 'profile': result}

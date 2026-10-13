@@ -1,14 +1,11 @@
-"""Version 5 CLI composition; legacy task contracts remain explicitly versioned."""
+"""Command composition for the workflow CLI."""
 import json
 from pathlib import Path
 
-from common import (Invalid, artifact, create, digest, inside, location_settings, now,
-                    profile_valid, read, require, task_valid, text)
+from common import (Invalid, artifact, digest, inside, location_settings, now,
+                    profile_valid, read, require, task_valid)
 import knowledge
 import validation
-
-NEW_COMMANDS = {'prepare', 'design-draft', 'approval-draft', 'design-diff', 'schema', 'cleanup'}
-
 
 def local(root, value):
     require(value is not None, 'Missing input path')
@@ -17,10 +14,6 @@ def local(root, value):
         require(path.resolve().is_relative_to(root), 'Input must be inside the project')
         path = path.relative_to(root)
     return inside(root, path.as_posix())
-
-
-def handles(args, root):
-    return args.command not in ('version', 'agents', 'stage-draft', 'migrate', 'upgrade', 'adopt')
 
 
 def readable(result):
@@ -120,7 +113,7 @@ def dispatch(args, root):
         directory = Path(__file__).resolve().parents[1] / 'templates'
         return {'ok': True, 'summary': '第五版模板与字段说明',
                 'templates': {p.stem: str(p) for p in sorted(directory.glob('*.json'))},
-                'reference': str(Path(__file__).resolve().parents[1] / 'references/contracts-v5.md'),
+                'reference': str(Path(__file__).resolve().parents[1] / 'references/contracts.md'),
                 'versions': {'profile': [5], 'task': [5], 'new_records': 5},
                 'next_action': 'Read the installed template; replace every placeholder and retain the task format version.'}
     if args.command == 'cleanup':
@@ -128,9 +121,9 @@ def dispatch(args, root):
         require(not (args.apply and args.dry_run), 'Choose cleanup preview or apply')
         return cleanup.apply(root, read(args.plan)) if args.apply else cleanup.preview(root)
     if args.command == 'aggregate':
-        import portable_v4
+        import portable
         mappings = {key: (root / Path(path).expanduser()).resolve() for key, path in location_settings(root)['repositories'].items()}
-        return portable_v4.aggregate(root, read(local(root, args.joint)), mappings, args.cs_skill)
+        return portable.aggregate(root, read(local(root, args.joint)), mappings, args.cs_skill)
     if args.context:
         from common import artifact_valid
         context = read(local(root, args.context))
@@ -152,11 +145,12 @@ def dispatch(args, root):
     if args.command == 'project':
         try:
             skill = knowledge.skill_path(args.cs_skill)
-            knowledge.supported(knowledge.call(skill, root, ['--check'], bootstrap=True), True)
+            knowledge.supported(knowledge.call(skill, root, ['--check'], bootstrap=True))
             cs = {'status': 'ready'}
         except Invalid as exc:
             cs = {'status': 'incomplete', 'reason': str(exc), 'problem': str(exc)}
-        return {'ok': cs['status'] == 'ready', 'schema_version': 5, 'cs': cs,
+        import versioning
+        return {'ok': cs['status'] == 'ready', 'schema_version': 5, 'cs': cs, 'version': versioning.status(profile),
                 'scope': 'project-configuration', 'summary': '已核对项目配置与 CS 能力。'}
     if args.command == 'evidence':
         from common import external_path
@@ -171,7 +165,7 @@ def dispatch(args, root):
                 refs.append(artifact(root, local(root, name)))
         return {'ok': True, 'artifacts': refs}
     if args.command == 'import-result':
-        import portable_v4
+        import portable
         from artifacts import Request
         from cleanup import guard
         locator_path = local(root, args.result)
@@ -182,13 +176,13 @@ def dispatch(args, root):
         if request.cached is not None:
             return request.cached
         try:
-            path, record = portable_v4.import_result(root, profile, read(locator_path), request.directory / 'import')
+            path, record = portable.import_result(root, profile, read(locator_path), request.directory / 'import')
             ref = request.publish('import.json', record, args.out) if args.out else artifact(root, path)
             return request.finish({'ok': True, 'artifact': ref, 'scope': 'execution-only'})
         except (Invalid, OSError, ValueError, TypeError, KeyError) as exc:
             return request.finish({'ok': False, 'problem': str(exc), 'error_code': 'import-incomplete',
                                    'next_action': 'Inspect provider identity and original reports; retry with a new request ID.'})
-    require(task is not None and task.get('schema_version') == 5, 'This operation requires an explicit v5 task; legacy tasks are not upgraded automatically')
+    require(task is not None and task.get('schema_version') == 5, 'This operation requires a schema_version 5 task')
     task_valid(task, profile, root)
     if platform:
         require(platform['task'] == task, 'Local task differs from platform requirements')
@@ -256,7 +250,7 @@ def produce(args, root, profile, task, platform, request):
         paths = args.path or task.get('paths') or sorted({path for key in task['section_ids']
                     if sections[key]['type'] == 'task' for path in sections[key]['data']['scope']})
         brief = knowledge.brief(root, task, knowledge.skill_path(args.cs_skill), paths, args.symbol)
-        from contracts_v5 import execution_environment
+        from contracts import execution_environment
         from validation_session import active
         environment_gaps = execution_environment(profile, task, design)
         running = active(root)
@@ -330,7 +324,7 @@ def produce(args, root, profile, task, platform, request):
     if args.command == 'knowledge':
         require(bool(args.acceptance and args.cs_task_id and args.disposition and args.reason and args.brief),
                 'knowledge requires --acceptance, --cs-task-id, --brief, --disposition and --reason')
-        value = knowledge.finish_v4(root, profile, task, knowledge.skill_path(args.cs_skill), args.cs_task_id,
+        value = knowledge.finish(root, profile, task, knowledge.skill_path(args.cs_skill), args.cs_task_id,
                     local(root, args.brief), args.disposition, args.reason, local(root, args.acceptance),
                     local(root, args.final_brief) if args.final_brief else None)
         return emit(value, 'knowledge.json')
@@ -346,7 +340,7 @@ def produce(args, root, profile, task, platform, request):
         issue_history.capture(request, task, read(local(root, report['review'])),
             [r['id'] for r in read(local(root, report['design']))['sections']])
         return emit(delivery.verify(root, profile, task, read(local(root, args.report)), args.cs_skill, args.phase), args.phase + '.json')
-    raise Invalid('This command does not support v5: ' + args.command)
+    raise Invalid('Unsupported command: ' + args.command)
 
 
 def status(args, root, profile, task, platform=None):

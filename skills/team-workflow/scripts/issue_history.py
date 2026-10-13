@@ -1,7 +1,7 @@
 """Retain issues actually submitted for review, including failed verification attempts."""
 from artifacts import directory
 from common import artifact_valid, now, read, require
-from contracts_v5 import issues, reconcile
+from contracts import issues, reconcile
 
 
 def known(root, task_id):

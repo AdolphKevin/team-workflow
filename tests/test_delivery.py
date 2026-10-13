@@ -3,13 +3,12 @@ import contextlib
 import copy
 import io
 import json
-from pathlib import Path
 import unittest
 from unittest.mock import patch
 
 import test_workflow as fixtures
-import v5_fixtures as v5
-from common import Invalid, artifact, create, read, write
+import plan_fixtures as plans
+from common import Invalid, artifact, read, write
 import delivery
 import designs
 import knowledge
@@ -25,14 +24,12 @@ class DeliveryCases(unittest.TestCase):
     check = fixtures.WorkflowCases.check
     fake_cs = fixtures.WorkflowCases.fake_cs
 
-    def setup_v4(self, complexity='simple', task_id=None, design_task_id=None, extra_check=False):
-        self.profile['schema_version'] = 5
-        self.check('import app; assert app.add(1,2)==3', environment={'kind': 'stateless'})
+    def setup_task(self, complexity='simple', task_id=None, design_task_id=None, extra_check=False):
+        self.check('import app; assert app.add(1,2)==3')
         if extra_check:
             self.profile['checks']['safety'] = copy.deepcopy(self.profile['checks']['unit'])
             self.profile['checks']['safety']['purpose'] = 'Additional required project behavior'
             self.profile['required_checks']['code'].append('safety')
-        self.task.update(schema_version=5, design_id='D-add', section_ids=['T1'], paths=['app.py'], acceptance_scope='requirement')
         if task_id:
             self.task['id'] = task_id
         self.design = {'schema_version': 5, 'kind': 'design', 'id': 'D-add', 'revision': 1,
@@ -44,7 +41,7 @@ class DeliveryCases(unittest.TestCase):
                 {'id': 'A1', 'type': 'acceptance', 'title': 'Result', 'body': self.task['acceptance'][0]['expectation'], 'data': {'checks': ['unit']}, 'depends_on': []},
                 {'id': 'T1', 'type': 'task', 'title': 'Implement', 'body': 'Implement addition',
                  'data': {'acceptance': ['A1'], 'scope': ['app.py'], 'blocked_by': []}, 'depends_on': []}]}
-        v5.plan(self.design)
+        plans.plan(self.design)
         if self.task['id'] != self.design['task_id']:
             self.task.update(acceptance_scope='task', parent=self.design['task_id'])
         self.skill = self.fake_cs()
@@ -64,7 +61,7 @@ class DeliveryCases(unittest.TestCase):
         review.update(reviewer='carol', knowledge_conflicts_resolved=True)
         for axis in ('standards', 'spec'):
             review[axis] = {'status': 'passed', 'summary': 'Read public behavior and actual assertion output', 'evidence': [ref]}
-        review['acceptance'] = [{'id': 'A1', 'status': 'passed', 'summary': 'Executed assertion 1+2=3', 'evidence': [ref], 'observations': [v5.observation(ref)]}]
+        review['acceptance'] = [{'id': 'A1', 'status': 'passed', 'summary': 'Executed assertion 1+2=3', 'evidence': [ref], 'observations': [plans.observation(ref)]}]
         self.write('review', review)
         self.write('report', self.report)
 
@@ -75,7 +72,7 @@ class DeliveryCases(unittest.TestCase):
         write(self.root / self.name(name), value)
 
     def test_acceptance_needs_no_completed_knowledge_and_final_delivery_does(self):
-        self.setup_v4()
+        self.setup_task()
         result = delivery.verify(self.root, self.profile, self.task, self.report, self.skill, 'acceptance')
         self.assertTrue(result['business_accepted'])
         self.assertFalse(result['delivery_complete'])
@@ -83,7 +80,7 @@ class DeliveryCases(unittest.TestCase):
         with self.assertRaisesRegex(Invalid, 'Knowledge completion'):
             delivery.verify(self.root, self.profile, self.task, self.report, self.skill)
         self.write('acceptance', result)
-        completion = knowledge.finish_v4(self.root, self.profile, self.task, self.skill, 'CS-T',
+        completion = knowledge.finish(self.root, self.profile, self.task, self.skill, 'CS-T',
             self.root / self.name('brief'), 'none', 'Existing source owns the requirement', self.root / self.name('acceptance'))
         self.write('knowledge', completion)
         self.report['knowledge'] = self.name('knowledge')
@@ -94,7 +91,7 @@ class DeliveryCases(unittest.TestCase):
         self.assertTrue(delivery.verify(self.root, self.profile, self.task, self.report, self.skill)['closable'])
 
     def test_missing_or_stale_combined_approval_cannot_accept(self):
-        self.setup_v4()
+        self.setup_task()
         self.report['approvals'] = []
         with self.assertRaisesRegex(Invalid, 'approval|review'):
             delivery.verify(self.root, self.profile, self.task, self.report, self.skill, 'acceptance')
@@ -104,7 +101,7 @@ class DeliveryCases(unittest.TestCase):
             delivery.verify(self.root, self.profile, self.task, self.report, self.skill, 'acceptance')
 
     def test_late_brief_does_not_backdate_reading(self):
-        self.setup_v4()
+        self.setup_task()
         value = read(self.root / self.name('brief'))
         value['at'] = '2099-01-01T00:00:00+00:00'
         self.write('brief', value)
@@ -112,7 +109,7 @@ class DeliveryCases(unittest.TestCase):
             delivery.verify(self.root, self.profile, self.task, self.report, self.skill, 'acceptance')
 
     def test_weakening_required_checks_does_not_reuse_old_review(self):
-        self.setup_v4(extra_check=True)
+        self.setup_task(extra_check=True)
         self.profile['checks']['unrelated'] = copy.deepcopy(self.profile['checks']['unit'])
         self.assertTrue(delivery.verify(self.root, self.profile, self.task, self.report, self.skill, 'acceptance')['business_accepted'])
         self.profile['required_checks']['code'] = ['unit']
@@ -120,7 +117,7 @@ class DeliveryCases(unittest.TestCase):
             delivery.verify(self.root, self.profile, self.task, self.report, self.skill, 'acceptance')
 
     def test_prepare_context_and_verify_cli_roundtrip(self):
-        self.setup_v4()
+        self.setup_task()
         def cli(*args):
             output = io.StringIO()
             with contextlib.redirect_stdout(output):
@@ -137,11 +134,11 @@ class DeliveryCases(unittest.TestCase):
         self.assertTrue(result['business_accepted'])
 
     def manual_acceptance(self, observer='carol'):
-        self.setup_v4()
+        self.setup_task()
         self.task['kind'] = 'docs'
         self.task['acceptance'][0]['checks'] = []
         self.design['sections'][1]['data']['checks'] = []
-        self.design['sections'][1]['data']['verification'] = {'method': 'manual', 'coverage': v5.coverage('manual'), 'cases': []}
+        self.design['sections'][1]['data']['verification'] = {'method': 'manual', 'coverage': plans.coverage('manual'), 'cases': []}
         self.write('design', self.design)
         self.write('brief', knowledge.brief(self.root, self.task, self.skill, [], []))
         self.report['runs'] = []
@@ -153,7 +150,7 @@ class DeliveryCases(unittest.TestCase):
         review.update(reviewer='carol', knowledge_conflicts_resolved=True)
         for axis in ('standards', 'spec'):
             review[axis] = {'status': 'passed', 'summary': 'Read actual content against the requirement', 'evidence': [ref]}
-        review['acceptance'] = [{'id': 'A1', 'status': 'passed', 'summary': 'Content requirement inspected', 'evidence': [ref], 'observations': [{'kind': 'manual', 'observer': observer, 'at': '2026-01-01T00:00:00+00:00', 'steps': ['Read content against the requirement'], 'result': 'Required content present', 'coverage': v5.coverage('manual'), 'evidence': [ref]}]}]
+        review['acceptance'] = [{'id': 'A1', 'status': 'passed', 'summary': 'Content requirement inspected', 'evidence': [ref], 'observations': [{'kind': 'manual', 'observer': observer, 'at': '2026-01-01T00:00:00+00:00', 'steps': ['Read content against the requirement'], 'result': 'Required content present', 'coverage': plans.coverage('manual'), 'evidence': [ref]}]}]
         self.write('review', review)
 
     def test_document_only_acceptance_does_not_invent_execution(self):
@@ -167,7 +164,7 @@ class DeliveryCases(unittest.TestCase):
             delivery.verify(self.root, self.profile, self.task, self.report, self.skill, 'acceptance')
 
     def test_reviewer_must_not_be_the_implementer(self):
-        self.setup_v4()
+        self.setup_task()
         review = read(self.root / self.name('review'))
         review['reviewer'] = 'Bob'
         self.write('review', review)
@@ -175,24 +172,24 @@ class DeliveryCases(unittest.TestCase):
             delivery.verify(self.root, self.profile, self.task, self.report, self.skill, 'acceptance')
 
     def test_acceptance_needs_recorded_implementer_to_check_independence(self):
-        self.setup_v4()
+        self.setup_task()
         self.design['roles']['implementation_owner'] = ''
         self.write('design', self.design)
         with self.assertRaisesRegex(Invalid, 'approval is missing|recorded implementation owner'):
             delivery.verify(self.root, self.profile, self.task, self.report, self.skill, 'acceptance')
 
     def test_acceptance_needs_confirmed_business_sources(self):
-        self.setup_v4()
+        self.setup_task()
         del self.design['sections'][1]['data']['scenario']['sources']
         self.write('design', self.design)
-        from contracts_v5 import execution_environment
+        from contracts import execution_environment
         self.assertIn('Acceptance scenario needs confirmed business sources: A1',
                       execution_environment(self.profile, self.task, self.design))
         with self.assertRaisesRegex(Invalid, 'confirmed business sources: A1'):
             delivery.verify(self.root, self.profile, self.task, self.report, self.skill, 'acceptance')
 
     def test_scenario_sources_are_explicit_and_unique(self):
-        self.setup_v4()
+        self.setup_task()
         scenario = self.design['sections'][1]['data']['scenario']
         valid = copy.deepcopy(scenario['sources'])
         for value, message in (([], 'non-empty'), ([{'ref': 'SOP#1', 'version': '1'}], 'Missing fields: confirmed_by'),
@@ -204,7 +201,7 @@ class DeliveryCases(unittest.TestCase):
         scenario['sources'] = valid
 
     def test_readable_pending_status_and_report_status_execute_no_project_commands(self):
-        self.setup_v4(complexity='medium')
+        self.setup_task(complexity='medium')
         output = io.StringIO()
         with contextlib.redirect_stdout(output):
             code = workflow.main(['status', '--root', str(self.root), '--task', self.name('task'),
@@ -243,13 +240,13 @@ class DeliveryCases(unittest.TestCase):
         self.write('report', self.report)
 
     def test_undeclared_automation_keeps_previous_result(self):
-        self.setup_v4()
+        self.setup_task()
         result = delivery.verify(self.root, self.profile, self.task, self.report, self.skill, 'acceptance')
         self.assertEqual(result['automation_status'], 'not-declared')
         self.assertFalse(result['regression_pending'])
 
     def test_pending_automation_stays_visible_after_delivery(self):
-        self.setup_v4()
+        self.setup_task()
         self.declare_pending_automation()
         accepted = delivery.verify(self.root, self.profile, self.task, self.report, self.skill, 'acceptance')
         self.assertTrue(accepted['business_accepted'])
@@ -257,7 +254,7 @@ class DeliveryCases(unittest.TestCase):
         self.assertEqual([r['id'] for r in accepted['automation_status']['pending_automation']], ['S2'])
         self.assertEqual([r['id'] for r in accepted['automation_status']['manual_only']], ['S3'])
         self.write('acceptance', accepted)
-        completion = knowledge.finish_v4(self.root, self.profile, self.task, self.skill, 'CS-T',
+        completion = knowledge.finish(self.root, self.profile, self.task, self.skill, 'CS-T',
             self.root / self.name('brief'), 'none', 'Existing source owns the requirement', self.root / self.name('acceptance'))
         self.write('knowledge', completion)
         self.report['knowledge'] = self.name('knowledge')
@@ -275,7 +272,7 @@ class DeliveryCases(unittest.TestCase):
         self.assertIn('自动化待建设：S2 → Q-auto-S2，期限 2026-11-15', output.getvalue())
 
     def test_pending_automation_needs_deferred_issue_and_due_date(self):
-        self.setup_v4()
+        self.setup_task()
         self.declare_pending_automation()
         pending = self.report['automation']['scenarios'][1]
         for field, value, message in (('finding', 'unknown', 'deferred issue'), ('due', 'soon', 'due date')):
@@ -289,7 +286,7 @@ class DeliveryCases(unittest.TestCase):
             delivery.verify(self.root, self.profile, self.task, self.report, self.skill, 'acceptance')
 
     def test_automation_entries_reference_actual_scope_and_results(self):
-        self.setup_v4()
+        self.setup_task()
         self.declare_pending_automation()
         automated, _, manual = self.report['automation']['scenarios']
         cases = (
@@ -311,20 +308,20 @@ class DeliveryCases(unittest.TestCase):
             delivery.verify(self.root, self.profile, self.task, self.report, self.skill, 'acceptance')
 
     def test_automated_regression_level_must_be_covered_by_the_check(self):
-        import contracts_v5
+        import contracts
         profile = {'checks': {'rules': {'coverage': {'level': 'unit'}}}}
         execution = {'results': {'rules': {'cases': {}}}}
         value = {'scenarios': [{'id': 'S1', 'acceptance': ['A1'], 'guarantee': 'Row is persisted', 'status': 'automated',
                                 'level': 'interface', 'check': 'rules', 'cases': []}]}
         with self.assertRaisesRegex(Invalid, 'does not cover the declared regression level'):
-            contracts_v5.automation(value, {'acceptance': [{'id': 'A1'}]}, [], profile, execution)
+            contracts.automation(value, {'acceptance': [{'id': 'A1'}]}, [], profile, execution)
         value['scenarios'][0]['level'] = 'unit'
-        self.assertEqual(contracts_v5.automation(value, {'acceptance': [{'id': 'A1'}]}, [], profile, execution)['automated'][0]['check'], 'rules')
+        self.assertEqual(contracts.automation(value, {'acceptance': [{'id': 'A1'}]}, [], profile, execution)['automated'][0]['check'], 'rules')
 
     def test_parent_withdrawal_during_child_acceptance_is_rejected(self):
         parent = 'https://github.com/example/project/issues/1'
         child = 'https://github.com/example/project/issues/2'
-        self.setup_v4(task_id=child, design_task_id=parent)
+        self.setup_task(task_id=child, design_task_id=parent)
         parent_task = {**self.task, 'id': parent, 'acceptance_scope': 'requirement'}
         parent_task.pop('parent', None)
         def issue(url, task, parent_url=None):

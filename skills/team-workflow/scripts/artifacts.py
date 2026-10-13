@@ -1,6 +1,5 @@
 """Task-local request claims and complete, immutable output publication."""
 import os
-from pathlib import Path
 import re
 import uuid
 

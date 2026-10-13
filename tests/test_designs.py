@@ -8,6 +8,7 @@ SCRIPTS = Path(__file__).resolve().parents[1] / 'skills/team-workflow/scripts'
 sys.path.insert(0, str(SCRIPTS))
 from common import Invalid
 import designs
+import plan_fixtures as plans
 
 
 def section(identifier, kind, depends=(), data=None):
@@ -16,8 +17,8 @@ def section(identifier, kind, depends=(), data=None):
 
 
 def example(complexity='medium'):
-    return {
-        'schema_version': 4, 'kind': 'design', 'id': 'D-orders', 'revision': 1,
+    return plans.plan({
+        'kind': 'design', 'id': 'D-orders', 'revision': 1,
         'task_id': 'https://github.com/example/orders/issues/10',
         'assessment': {'complexity': complexity, 'risks': ['public-contract'], 'effort': 'One day',
                        'drivers': ['Two independent interfaces'], 'uncertainties': [],
@@ -29,7 +30,13 @@ def example(complexity='medium'):
                      section('A2', 'acceptance', ['api-2'], {'checks': ['refunds']}),
                      section('T1', 'task', data={'acceptance': ['A1'], 'scope': ['src/orders'], 'blocked_by': []}),
                      section('T2', 'task', data={'acceptance': ['A2'], 'scope': ['src/refunds'], 'blocked_by': []})],
-    }
+    })
+
+
+def question(state='open'):
+    resolution = {} if state == 'open' else {'reason': 'Keep refunds open for 30 days', 'evidence': ['Product confirmation']}
+    return {'id': 'D1', 'summary': 'Which refund policy?', 'owner': 'alice', 'affects': ['api-2'],
+            'blocks': ['implementation'], 'state': state, 'resolution': resolution}
 
 
 def changed(design, identifier, body='Changed required behavior.'):
@@ -127,6 +134,9 @@ class DesignCases(unittest.TestCase):
         after = copy.deepcopy(before)
         after['revision'] = 2
         after['sections'] = [row for row in after['sections'] if row['id'] not in {'api-2', 'A2', 'T2'}]
+        scope = after['sections'][0]['data']
+        scope['requirement_acceptance'] = ['A1']
+        scope['impact'][0]['acceptance'] = ['A1']
         runs = [{'path': 'results/run-2.json', 'sha256': 'e' * 64}]
         combined = designs.approval_draft(after, 'alice', 'Reviewed all current code and sections',
                                          section_ids=[row['id'] for row in after['sections']],
@@ -242,25 +252,24 @@ class DesignCases(unittest.TestCase):
 
     def test_pending_decisions_block_only_affected_tasks_even_when_simple(self):
         design = example('simple')
-        design['assessment']['uncertainties'] = ['Measure expected traffic before deployment']
-        design['decisions'] = [{'id': 'D1', 'question': 'Which refund policy?', 'status': 'pending', 'affects': ['api-2']}]
+        design['issues'] = [question()]
+        design['assessment']['uncertainties'] = ['D1']
         status = designs.approval_status(design, [], changed_paths=[])
         self.assertEqual(status['tasks']['T2']['pending_decisions'], ['D1'])
         self.assertFalse(status['tasks']['T2']['ready'])
         self.assertTrue(status['tasks']['T1']['ready'])
-        self.assertEqual(status['uncertainties'], ['Measure expected traffic before deployment'])
+        self.assertEqual(status['uncertainties'], ['D1'])
         selected = designs.approval_status(design, [], changed_paths=[], section_ids=['T1'])
         self.assertEqual(selected['required_pending_decisions'], [])
         self.assertTrue(selected['implementation_ready'])
 
     def test_confirming_a_business_answer_requires_review_of_affected_sections(self):
         before = example()
-        before['decisions'] = [{'id': 'D1', 'question': 'Which refund policy?',
-                                'status': 'pending', 'affects': ['api-2']}]
+        before['issues'] = [question()]
         accepted = designs.approval_draft(before, 'alice', 'Known requirements reviewed')
         after = copy.deepcopy(before)
         after['revision'] = 2
-        after['decisions'][0].update(status='confirmed', answer='Keep refunds open for 30 days')
+        after['issues'] = [question('resolved')]
         status = designs.approval_status(after, [accepted], previous=before, changed_paths=[])
         self.assertEqual(status['stale'], ['A2', 'T2', 'api-2'])
         change = designs.impact(before, after, changed_paths=[])
@@ -294,7 +303,7 @@ class DesignCases(unittest.TestCase):
     def test_stale_format_or_forged_fingerprints_fail_closed(self):
         design = example()
         accepted = designs.approval_draft(design, 'alice', 'Plan approved')
-        for field, value in (('schema_version', 3), ('fingerprint_version', 0)):
+        for field, value in (('schema_version', 4), ('fingerprint_version', 0)):
             with self.subTest(field=field):
                 stale = copy.deepcopy(accepted)
                 stale[field] = value
@@ -327,7 +336,7 @@ class DesignCases(unittest.TestCase):
         duplicate['sections'].append(copy.deepcopy(duplicate['sections'][1]))
         cases.append(duplicate)
         old = example()
-        old['schema_version'] = 3
+        old['schema_version'] = 4
         cases.append(old)
         for value in cases:
             with self.subTest(value=value):

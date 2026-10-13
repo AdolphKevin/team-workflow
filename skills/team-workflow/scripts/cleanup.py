@@ -1,7 +1,6 @@
-"""Explicit cleanup of unreferenced requests belonging to completed v4 tasks."""
+"""Explicit cleanup of unreferenced requests belonging to completed tasks."""
 from contextlib import contextmanager
 import os
-from pathlib import Path
 import shutil
 import time
 

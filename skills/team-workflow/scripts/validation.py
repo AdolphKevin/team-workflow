@@ -6,7 +6,7 @@ import sys
 import uuid
 
 from common import (Invalid, artifact, artifact_valid, create, digest, external_path, git,
-                    inside, now, read, require, sha, snapshot, task_valid)
+                    inside, now, read, require, sha, snapshot, task_valid, text)
 from execution import decode, execute, output_path, redact
 
 
@@ -106,7 +106,7 @@ def check_binding(root, profile, check, remote=False):
 
 def capture(root, profile, key, directory, portable=False):
     check = profile['checks'][key]
-    from contracts_v5 import coverage
+    from contracts import coverage
     coverage(check.get('coverage', {}))
     require(check['coverage']['isolation'] != 'unresolved', 'Environment isolation unresolved: ' + key)
     directory.mkdir(parents=True, exist_ok=False)
@@ -146,8 +146,8 @@ def capture(root, profile, key, directory, portable=False):
             'status': status, 'cases': cases, 'detail': detail, 'state': result['state'],
             'exit_code': result['exit_code'], 'seconds': result['seconds'], 'artifacts': artifacts}
     if portable:
-        import portable_v4
-        portable_v4.capture(directory, profile, row, portable_before, source_state(root, profile), started, now())
+        import portable
+        portable.capture(directory, profile, row, portable_before, source_state(root, profile), started, now())
         row['portable'] = artifact(root, directory / 'result.json')
     return row
 
@@ -162,7 +162,7 @@ def _run_batch(root, profile, tasks, selected=None, directory=None, portable=Fal
     require(bool(tasks), 'Batch requires at least one task')
     require(len({t['id'] for t in tasks}) == len(tasks), 'Duplicate batch task')
     required = {t['id']: task_valid(t, profile, root) for t in tasks}
-    require(all(t['schema_version'] == 5 for t in tasks), 'Batch execution requires explicitly adopted v5 tasks')
+    require(all(t['schema_version'] == 5 for t in tasks), 'Batch execution requires schema_version 5 tasks')
     checks = sorted(set(selected) if selected is not None else {c for ids in required.values() for c in ids})
     require(set(checks) <= profile['checks'].keys(), 'Unknown selected check')
     identifier = uuid.uuid4().hex
@@ -193,9 +193,10 @@ def verify_runs(root, profile, task, paths):
     results, records = {}, []
     for name in paths:
         record = read(inside(root, name))
+        require(isinstance(record, dict), 'Invalid execution record: ' + str(name))
         if record.get('schema_version') == 5 and record.get('kind') == 'imported-execution':
-            import portable_v4
-            row, manifest = portable_v4.validate_import(root, profile, record)
+            import portable
+            row, manifest = portable.validate_import(root, profile, record)
             key = row['id']
             if key in required:
                 require(key not in results, 'Duplicate result; select one current result for each check')
@@ -236,7 +237,6 @@ def verify_runs(root, profile, task, paths):
                                     'stdout': (out / 'stdout.txt').read_text()}, native)
             require(decoded[0] == 'passed' and decoded[1] == row.get('cases'), 'Original report does not confirm result')
             if check.get('review'):
-                from verification import scenario_review
                 scenario_review(root, out, check, captured)
             results[key] = row
         records.append(record)
@@ -295,3 +295,27 @@ def inspect_record(root, profile, record, seen=None):
         require(decoded[0] == 'passed' and decoded[1] == row.get('cases'), 'Original report does not confirm the result')
         checked.add(key)
     return checked
+
+
+def scenario_review(root, out_path, check, captured):
+    """Respect the project's separate, evidence-bound Codex scenario verdict."""
+    contract = check['review']
+    report_path = inside(out_path, contract['path'][len('{output}/'):])
+    review = read(report_path)
+    require(isinstance(review, dict), 'Invalid scenario review')
+    require(review.get('schema_version') == 1 and review.get('reviewer') == 'codex', 'Unknown scenario review contract')
+    require(review.get('status') == 'PASS' and review.get('scenario_run_status') == 'COMPLETED', 'Scenario review not passed')
+    text(review.get('summary'))
+    require(review.get('findings') == [], 'Scenario review has unresolved findings')
+    reviewed = review.get('reviewed_artifacts')
+    require(isinstance(reviewed, dict), 'Scenario review needs artifact hashes')
+    for name in contract['required_artifacts']:
+        path = inside(out_path, name)
+        current = sha(path)
+        require(captured.get(path.relative_to(root).as_posix()) == current, 'Scenario artifact changed after execution')
+        require(reviewed.get(name) == 'sha256:' + current, 'Scenario review artifact mismatch')
+    # Additional evidence cited by the reviewer must also remain current.
+    for name, value in reviewed.items():
+        require(value == 'sha256:' + sha(inside(out_path, name)), 'Scenario review has stale additional evidence')
+    manifest = read(inside(out_path, 'manifest.json'))
+    require(bool(review.get('run_id')) and review['run_id'] == manifest.get('run_id'), 'Scenario run identity mismatch')

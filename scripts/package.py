@@ -20,7 +20,7 @@ def main():
     manifest = json.loads((root / 'plugin.json').read_text())
     files = [root / name for name in ('plugin.json', '.claude-plugin/plugin.json', '.claude-plugin/marketplace.json',
                                       'README.md', 'LICENSE', 'VERSION')]
-    for name in ('skills', 'assets', 'licenses', 'examples', 'docs', 'upstream'):
+    for name in ('skills', 'assets', 'licenses', 'docs', 'upstream'):
         files.extend(p for p in (root / name).rglob('*') if p.is_file() and '__pycache__' not in p.parts and p.suffix != '.pyc')
     if any(p.is_symlink() for p in files):
         parser.error('Do not package symlinks')

@@ -1,9 +1,7 @@
 import os
-from pathlib import Path
 import unittest
 
 import test_workflow as fixtures
-import v5_fixtures as v5
 from common import Invalid, artifact, create
 import cleanup
 

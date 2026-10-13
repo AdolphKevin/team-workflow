@@ -228,7 +228,7 @@ def run(skill):
             assert repeated['idempotent'] and applied['task_id'] == repeated['task_id']
             final_brief = knowledge.brief(root, task, skill, task['paths'], [])
             write(root / '.team-workflow/final-brief.json', final_brief)
-            completion = knowledge.finish_v4(root, profile, task, skill, applied['task_id'],
+            completion = knowledge.finish(root, profile, task, skill, applied['task_id'],
                 root / '.team-workflow/brief.json', 'added', 'Verified reusable validator boundary',
                 accepted_path, root / '.team-workflow/final-brief.json')
             write(root / '.team-workflow/knowledge.json', completion)
@@ -243,7 +243,7 @@ def run(skill):
         merged = merge_and_check(setup, skill, tasks)
         return {'ok': True, 'cs_runtime_sha256': hashlib.sha256((skill / 'scripts/cs_knowledge.py').read_bytes()).hexdigest(),
                 'tasks': tasks, **merged, 'checks': ['different-local-paths-same-content-identity', 'concurrent-real-processes',
-                'workflow-v5-readiness-acceptance-and-knowledge', 'workflow-complete-retry', 'cs-lost-response-retry', 'independent-registrations-task-notes-and-experience',
+                'workflow-readiness-acceptance-and-knowledge', 'workflow-complete-retry', 'cs-lost-response-retry', 'independent-registrations-task-notes-and-experience',
                 'git-merge-without-manual-conflict-resolution', 'both-tasks-and-knowledge-retrievable', 'shared-configuration-unchanged']}
 
 

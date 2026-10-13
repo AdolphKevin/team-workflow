@@ -70,7 +70,7 @@ Work the **frontier**: tickets whose execution dependencies and applicable plan/
 
 Do NOT close or modify any parent issue.
 
-For a team task, use the [current contracts](../team-workflow/references/contracts-v5.md): associate each actual child with its parent, plan ID and task sections, retaining its own assessment, scope, acceptance and execution prerequisites. Approval concerns named plan sections; confirmed decomposition need not be approved again. A handoff or verification link alone does not authorize closure: actual acceptance, knowledge completion, final delivery checks and existing closure authorization are required.
+For a team task, use the [current contracts](../team-workflow/references/contracts.md): associate each actual child with its parent, plan ID and task sections, retaining its own assessment, scope, acceptance and execution prerequisites. Approval concerns named plan sections; confirmed decomposition need not be approved again. A handoff or verification link alone does not authorize closure: actual acceptance, knowledge completion, final delivery checks and existing closure authorization are required.
 
 <local-ticket-template>
 

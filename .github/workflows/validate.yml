@@ -46,10 +46,10 @@ jobs:
           subprocess.run(['git', 'clone', '--depth', '1', 'https://github.com/AdolphKevin/codestable-compact.git', str(target)], check=True)
           subprocess.run(['git', '-C', str(target), 'rev-parse', 'HEAD'], check=True)
           PY
-      - name: Verify real CS public interfaces
-        run: python3 scripts/check_cs.py --cs-skill "$RUNNER_TEMP/workflow-cs/skills/cs"
-      - name: Verify v5 against real CS capabilities
-        run: python3 scripts/check_cs_v4.py --cs-skill "$RUNNER_TEMP/workflow-cs/skills/cs"
+      - name: Verify the knowledge bridge with real CS
+        run: python3 scripts/check_cs_knowledge.py --cs-skill "$RUNNER_TEMP/workflow-cs/skills/cs"
+      - name: Verify acceptance and delivery with real CS
+        run: python3 scripts/check_cs_delivery.py --cs-skill "$RUNNER_TEMP/workflow-cs/skills/cs"
       - name: Verify parallel branches with real CS
         run: python3 scripts/check_parallel.py --cs-skill "$RUNNER_TEMP/workflow-cs/skills/cs"
       - name: Build the distributable plugin

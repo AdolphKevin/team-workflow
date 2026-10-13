@@ -8,9 +8,9 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'skills/team-workflow/scripts'))
-from common import git, read, write
+from common import git, read
 import validation
-import portable_v4 as portable
+import portable
 
 
 def profile():

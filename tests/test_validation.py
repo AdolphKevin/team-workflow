@@ -1,13 +1,10 @@
 """Execute checks against real temporary Git trees; verify content and environment reuse."""
 import copy
-import json
-from pathlib import Path
 import sys
 import unittest
 
 import test_workflow as fixtures
-import v5_fixtures as v5
-from common import Invalid, create, read
+from common import Invalid
 import validation
 
 
@@ -16,16 +13,14 @@ class ContentValidation(unittest.TestCase):
     git = fixtures.WorkflowCases.git
     check = fixtures.WorkflowCases.check
 
-    def setup_v4(self):
-        self.profile['schema_version'] = 5
-        self.task.update(schema_version=5, design_id='D-add', section_ids=['T1'], acceptance_scope='requirement', paths=['app.py'])
-        self.check("import app; assert app.add(1,2)==3")['environment'] = {'kind': 'stateless'}
+    def setup_task(self):
+        self.check("import app; assert app.add(1,2)==3")
 
     def run_batch(self, tasks=None):
         return validation.run_batch(self.root, self.profile, tasks or [self.task])
 
     def test_knowledge_commit_and_index_do_not_expire_execution(self):
-        self.setup_v4()
+        self.setup_task()
         path, record = self.run_batch()
         (self.root / '.codestable').mkdir()
         (self.root / '.codestable/note.md').write_text('actual completed knowledge')
@@ -38,7 +33,7 @@ class ContentValidation(unittest.TestCase):
         validation.verify_runs(self.root, self.profile, self.task, [str(path.relative_to(self.root))])
 
     def test_five_tasks_execute_seven_checks_once(self):
-        self.setup_v4()
+        self.setup_task()
         base = self.profile['checks'].pop('unit')
         self.profile['required_checks']['code'] = []
         for i in range(7):
@@ -60,7 +55,7 @@ class ContentValidation(unittest.TestCase):
             self.assertEqual(set(result['checks']), set(task['acceptance'][0]['checks']))
 
     def test_source_check_and_environment_changes_expire_only_affected_results(self):
-        self.setup_v4()
+        self.setup_task()
         path, _ = self.run_batch()
         names = [str(path.relative_to(self.root))]
         self.profile['checks']['unrelated'] = copy.deepcopy(self.profile['checks']['unit'])
@@ -74,7 +69,7 @@ class ContentValidation(unittest.TestCase):
             validation.verify_runs(self.root, self.profile, self.task, names)
 
     def test_mutable_environment_identity_and_source_changes_during_execution(self):
-        self.setup_v4()
+        self.setup_task()
         marker = self.root / '.team-workflow/environment.txt'
         marker.parent.mkdir(exist_ok=True)
         marker.write_text('fixture-1')
@@ -88,7 +83,7 @@ class ContentValidation(unittest.TestCase):
         self.assertFalse(record['source_unchanged'])
 
     def test_revision_sensitive_check_rejects_knowledge_commit(self):
-        self.setup_v4()
+        self.setup_task()
         self.profile['checks']['unit']['revision_sensitive'] = True
         path, _ = self.run_batch()
         self.git('commit', '--allow-empty', '-qm', 'revision changes')
@@ -96,7 +91,7 @@ class ContentValidation(unittest.TestCase):
             validation.verify_runs(self.root, self.profile, self.task, [str(path.relative_to(self.root))])
 
     def test_staging_a_deletion_keeps_the_same_executed_content(self):
-        self.setup_v4()
+        self.setup_task()
         (self.root / 'obsolete.txt').write_text('unused input')
         self.git('add', 'obsolete.txt')
         self.git('commit', '-qm', 'add obsolete input')
@@ -106,7 +101,7 @@ class ContentValidation(unittest.TestCase):
         validation.verify_runs(self.root, self.profile, self.task, [str(path.relative_to(self.root))])
 
     def test_repository_identity_is_not_just_a_reusable_project_label(self):
-        self.setup_v4()
+        self.setup_task()
         self.git('remote', 'add', 'origin', 'https://github.com/example/first.git')
         path, _ = self.run_batch()
         self.git('remote', 'set-url', 'origin', 'https://github.com/example/other.git')

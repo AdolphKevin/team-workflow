@@ -6,8 +6,8 @@ import unittest
 from unittest.mock import patch
 
 import test_workflow as fixtures
-import v5_fixtures as v5
-from common import Invalid, digest, write
+import plan_fixtures as plans
+from common import Invalid, write
 import coordination
 import github_read
 
@@ -21,9 +21,8 @@ class CoordinationCases(unittest.TestCase):
     def prepare(self, complexity='medium'):
         self.url = 'https://github.com/example/project/issues/1'
         self.git('remote', 'add', 'origin', 'https://github.com/example/project.git')
-        self.profile['schema_version'] = 5
-        self.check('import app; assert app.add(1, 2) == 3', environment={'kind': 'stateless'})
-        self.task.update(schema_version=5, id=self.url, design_id='addition', section_ids=['T1'], acceptance_scope='requirement', paths=['app.py'])
+        self.check('import app; assert app.add(1, 2) == 3')
+        self.task.update(id=self.url, design_id='addition')
         self.design = {
             'schema_version': 5, 'kind': 'design', 'id': 'addition', 'revision': 1, 'task_id': self.url,
             'assessment': {'complexity': complexity, 'risks': [], 'effort': 'one day',
@@ -38,7 +37,7 @@ class CoordinationCases(unittest.TestCase):
                 {'id': 'T1', 'type': 'task', 'title': 'Implement addition', 'body': 'Change add',
                  'data': {'acceptance': ['A1'], 'scope': ['app.py'], 'blocked_by': []},
                  'depends_on': []}]}
-        v5.plan(self.design)
+        plans.plan(self.design)
         self.issue = {'html_url': self.url, 'state': 'open', 'updated_at': '2026-10-12T01:00:00Z',
                       'body': self.body(), 'assignees': [{'login': 'bob'}], 'comments_data': []}
         self.skill = self.fake_cs()
@@ -66,7 +65,7 @@ class CoordinationCases(unittest.TestCase):
             'body': draft['markdown'], 'user': {'login': author}})
 
     def establish_design(self, approved=True):
-        v5.plan(self.design)
+        plans.plan(self.design)
         draft = coordination.draft_design(self.url, self.design)
         self.publish_fixture(draft, 'alice')
         if approved:
@@ -434,6 +433,15 @@ class CoordinationCases(unittest.TestCase):
             self.publish_fixture(draft, 'alice')
             resumed = coordination.resume(self.root, self.profile, self.url, self.skill, completed_tasks=['T0'])
         self.assertTrue(resumed['ready_to_implement'], resumed)
+
+
+class ReadClient(unittest.TestCase):
+    def test_read_client_rejects_other_hosts_and_prs(self):
+        with self.assertRaises(Invalid):
+            github_read.issue_ref('https://other.invalid/example/repo/issues/1')
+        with patch.object(github_read, 'api', return_value={'pull_request': {}}):
+            with self.assertRaises(Invalid):
+                github_read.issue('https://github.com/example/project/issues/1')
 
 
 if __name__ == '__main__':

@@ -106,11 +106,10 @@ def task_assessments(design, section_ids):
 
 
 def validate_design(design):
-    """Read historical v4 and current v5 plans without upgrading or mutating them."""
-    obj(design, {'schema_version', 'kind', 'id', 'revision', 'task_id', 'assessment', 'roles', 'sections'},
-        {'decisions', 'issues'})
-    require(type(design['schema_version']) is int and design['schema_version'] in (4, SCHEMA_VERSION)
-            and design['kind'] == 'design', 'Expected historical v4 or current v5 design')
+    """Validate a plan without mutating it; implementation-blocking questions are shared issues."""
+    obj(design, {'schema_version', 'kind', 'id', 'revision', 'task_id', 'assessment', 'roles', 'sections', 'issues'})
+    require(type(design['schema_version']) is int and design['schema_version'] == SCHEMA_VERSION
+            and design['kind'] == 'design', 'Expected a schema_version 5 design')
     text(design['id'])
     text(design['task_id'])
     require(type(design['revision']) is int and design['revision'] > 0, 'Design revision must be a positive integer')
@@ -161,24 +160,8 @@ def validate_design(design):
                     'Execution dependency must reference a task section: ' + identifier)
     _ancestors(_dependencies(design))
     _ancestors({row['id']: set(row['data']['blocked_by']) for row in rows.values() if row['type'] == 'task'})
-    decisions = design.get('decisions', [])
-    require(isinstance(decisions, list), 'Decisions must be a list')
-    seen = set()
-    for decision in decisions:
-        obj(decision, {'id', 'question', 'status', 'affects'}, {'answer'})
-        _identifier(decision['id'])
-        require(decision['id'] not in seen, 'Duplicate decision identifier')
-        seen.add(decision['id'])
-        text(decision['question'])
-        require(isinstance(decision['status'], str) and decision['status'] in {'pending', 'confirmed'},
-                'Decision must be pending or confirmed')
-        strings(decision['affects'])
-        require(set(decision['affects']) <= identifiers, 'Decision references a missing section')
-        if decision['status'] == 'confirmed':
-            text(decision.get('answer'))
-    if design['schema_version'] == 5:
-        from contracts_v5 import design as validate_business
-        validate_business(design)
+    from contracts import design as validate_business
+    validate_business(design)
     _normalized(design)
     return design
 
@@ -191,7 +174,8 @@ def fingerprints(design):
     own = {row['id']: _hash({'fingerprint_version': FINGERPRINT_VERSION,
                             **row, 'depends_on': sorted(dependencies[row['id']])})
            for row in design['sections']}
-    decisions = sorted(design.get('decisions', []) + [v for v in design.get('issues', []) if 'implementation' in v['blocks']], key=lambda row: row['id'])
+    # The key stays "decisions" so fingerprints of existing plans keep their values.
+    decisions = sorted((v for v in design['issues'] if 'implementation' in v['blocks']), key=lambda row: row['id'])
     return {'fingerprint_version': FINGERPRINT_VERSION,
             'sections': {identifier: {'own': own[identifier],
                                      'effective': _hash({'fingerprint_version': FINGERPRINT_VERSION,
@@ -247,17 +231,16 @@ def _transition(previous, current, changed_paths=None):
     require(previous['id'] == current['id'] and previous['task_id'] == current['task_id'],
             'Cannot compare different designs or tasks')
     require(previous['revision'] < current['revision'], 'Design revisions must increase')
-    if current['schema_version'] == 5:
-        from contracts_v5 import reconcile
-        reconcile(previous.get('issues', []), current['issues'])
+    from contracts import reconcile
+    reconcile(previous['issues'], current['issues'])
     old, new = _sections(previous), _sections(current)
     before, after = fingerprints(previous)['sections'], fingerprints(current)['sections']
     added, removed = set(new) - set(old), set(old) - set(new)
     changed = {key for key in set(old) & set(new) if before[key]['own'] != after[key]['own']}
     assessment_changed = _hash(previous['assessment']) != _hash(current['assessment'])
     seeds = set(old) | set(new) if assessment_changed else added | removed | changed
-    old_decisions = {row['id']: row for row in previous.get('decisions', []) + [v for v in previous.get('issues', []) if 'implementation' in v['blocks']]}
-    new_decisions = {row['id']: row for row in current.get('decisions', []) + [v for v in current.get('issues', []) if 'implementation' in v['blocks']]}
+    old_decisions = {row['id']: row for row in previous['issues'] if 'implementation' in row['blocks']}
+    new_decisions = {row['id']: row for row in current['issues'] if 'implementation' in row['blocks']}
     decision_changes = {key for key in old_decisions.keys() | new_decisions.keys()
                         if _decision_hash(old_decisions.get(key)) != _decision_hash(new_decisions.get(key))}
     for key in decision_changes:
@@ -266,7 +249,7 @@ def _transition(previous, current, changed_paths=None):
                 seeds.update(row['affects'] or set(old) | set(new))
     affected = _closure([_dependencies(previous), _dependencies(current)], seeds)
     scope = scope_coverage(current, changed_paths)
-    return {'schema_version': current['schema_version'], 'kind': 'design-impact', 'ok': True,
+    return {'schema_version': SCHEMA_VERSION, 'kind': 'design-impact', 'ok': True,
             'fingerprint_version': FINGERPRINT_VERSION, 'design_id': current['id'],
             'previous_revision': previous['revision'], 'revision': current['revision'],
             'assessment_changed': assessment_changed,
@@ -353,7 +336,7 @@ def approval_draft(design, reviewer, confirmation, decision='approved', section_
         require(set(deletion_ids) <= {row['id'] for row in deletions}, 'Unknown deleted section')
         deletions = [row for row in deletions if row['id'] in deletion_ids]
     require(bool(identifiers) or bool(deletions), 'Review must cover sections or explicit deletions')
-    result = {'schema_version': design['schema_version'], 'kind': 'approval',
+    result = {'schema_version': SCHEMA_VERSION, 'kind': 'approval',
               'fingerprint_version': FINGERPRINT_VERSION,
               'design_id': design['id'], 'task_id': design['task_id'], 'design_revision': design['revision'],
               'assessment_hash': _hash(design['assessment']), 'reviewer': reviewer, 'confirmation': confirmation,
@@ -373,8 +356,8 @@ def _validate_approval(row):
     obj(row, {'schema_version', 'kind', 'fingerprint_version', 'design_id', 'task_id', 'design_revision',
               'assessment_hash', 'reviewer', 'confirmation', 'decision', 'mode', 'sections', 'deletions'},
         {'code_digest', 'run_refs'})
-    require(type(row['schema_version']) is int and row['schema_version'] in (4, SCHEMA_VERSION)
-            and row['kind'] == 'approval', 'Expected historical v4 or current v5 approval')
+    require(type(row['schema_version']) is int and row['schema_version'] == SCHEMA_VERSION
+            and row['kind'] == 'approval', 'Expected a schema_version 5 approval')
     require(type(row['fingerprint_version']) is int and row['fingerprint_version'] == FINGERPRINT_VERSION,
             'Unsupported fingerprint version; review again using the current format')
     for key in ('design_id', 'task_id', 'reviewer', 'confirmation'):
@@ -487,10 +470,8 @@ def approval_status(design, approvals, previous=None, changed_paths=None, code_d
         deletions.append({**value, 'state': latest['decision'] if latest else 'unreviewed',
                           'combined_current': _combined_matches(latest, code_digest, current_runs),
                           'affected': sorted(affected), 'required': section_ids is None or bool(affected & required)})
-    pending = [dict(row) for row in design.get('decisions', []) if row['status'] == 'pending']
-    if design['schema_version'] == 5:
-        pending += [{**v, 'question': v['summary'], 'status': 'pending'} for v in design['issues']
-                    if v['state'] == 'open' and 'implementation' in v['blocks']]
+    pending = [{**v, 'question': v['summary'], 'status': 'pending'} for v in design['issues']
+               if v['state'] == 'open' and 'implementation' in v['blocks']]
     blocked = {}
     for row in pending:
         for key in _closure([_dependencies(design)], row['affects'] or current.keys()):
@@ -552,14 +533,13 @@ def approval_status(design, approvals, previous=None, changed_paths=None, code_d
         if needed:
             combined_deletions.append(row)
     combined_complete = combined_required <= set(combined) and all(row['combined_current'] for row in combined_deletions)
-    if design['schema_version'] == 5:
-        from contracts_v5 import unresolved
-        required_pending += unresolved(design['issues'], required, 'acceptance')
+    from contracts import unresolved
+    required_pending += unresolved(design['issues'], required, 'acceptance')
     assigned = all(value.strip() for value in design['roles'].values())
     acceptance_ready = (fully_approved and combined_complete and not required_pending and assigned
                         and scope['complete'] and all(not tasks[key]['waiting_for_tasks'] for key in required_tasks))
     affected = set(transitions[-1]['affected']) & required if transitions else set()
-    return {'schema_version': design['schema_version'], 'kind': 'design-approval-status', 'ok': not gaps,
+    return {'schema_version': SCHEMA_VERSION, 'kind': 'design-approval-status', 'ok': not gaps,
             'fingerprint_version': FINGERPRINT_VERSION, 'design_id': design['id'], 'revision': design['revision'],
             'history_complete': history_complete, 'review_mode': 'combined' if simple else 'mixed' if required_tasks & simple_tasks else 'design-first',
             'task_assessments': assessments,

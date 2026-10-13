@@ -37,6 +37,11 @@ def design_material(root, profile, task, report, completed_tasks=()):
     return design, approvals, status, selected
 
 
+def passed(row, label):
+    require(isinstance(row, dict) and row.get('status') == 'passed', f'{label} has not passed')
+    text(row.get('summary'))
+
+
 def review_template(root, profile, task, report):
     design, _, _, selected = design_material(root, profile, task, report)
     import issue_history
@@ -65,18 +70,17 @@ def check_review(root, profile, task, review, selected, design, status, executio
     require(review.get('sections') == selected, 'Review does not cover current approved sections')
     require(review.get('validation_policy') == review_policy(root, profile, task), 'Review must cover current validation policy')
     text(review.get('reviewer'))
-    from verification import passed
     for label in ('standards', 'spec'):
         row = review.get(label)
         passed(row, label)
         require(bool(row.get('evidence')), 'Review needs actual evidence')
         for ref in row['evidence']:
             evidence(root, profile, ref)
-    from contracts_v5 import independent
+    from contracts import independent
     independent(design, review['reviewer'], 'Reviewer')
     require(review.get('risks') == task['risks'], 'Review must assess the current risks')
     require(review.get('knowledge_conflicts_resolved') is True, 'Knowledge conflicts need review')
-    from contracts_v5 import reconcile, unresolved, issues
+    from contracts import reconcile, unresolved, issues
     import issue_history
     issues(review.get('findings', []), [r['id'] for r in design['sections']])
     reconcile(design['issues'], review.get('findings', []))
@@ -114,7 +118,7 @@ def verify(root, profile, task, report, cs_skill=None, phase='delivery', _seen=N
         require(not platform_state['gaps'], 'Platform records are incomplete: ' + '; '.join(platform_state['gaps']))
         require(platform_state['task'] == task, 'Platform task changed; read current requirements')
     if platform_state is not None:
-        from contracts_v5 import reconcile
+        from contracts import reconcile
         reconcile(platform_state.get('known_issues', []), read(inside(root, report['review'])).get('findings', []))
     seen = set(_seen or ())
     identity = (task['id'], tuple(sorted(task['section_ids'])))
@@ -136,7 +140,7 @@ def verify(root, profile, task, report, cs_skill=None, phase='delivery', _seen=N
     if platform_state is not None:
         require(platform_state['design'] == design, 'Local design differs from the shared plan')
         require(all(a in platform_state['approvals'] for a in approvals), 'Approval has not been shared on the task')
-    from contracts_v5 import unsourced
+    from contracts import unsourced
     missing = unsourced(task, design)
     require(not missing, 'Acceptance scenario needs confirmed business sources: ' + ', '.join(missing))
     require(status.get('local_review_valid') is True, 'Design coverage/history needs review: ' + str(status))
@@ -156,7 +160,7 @@ def verify(root, profile, task, report, cs_skill=None, phase='delivery', _seen=N
                            'reason': 'Existing result independently checked against current inputs; not a claim of earlier knowledge reading'})
     review = read(inside(root, report['review']))
     check_review(root, profile, task, review, selected, design, status, execution, report['runs'])
-    from contracts_v5 import automation
+    from contracts import automation
     regression = automation(report['automation'], task, review['findings'], profile, execution) if 'automation' in report else 'not-declared'
     materials = [artifact(root, inside(root, report[p])) for p in ('design', 'brief', 'review')]
     materials += [artifact(root, inside(root, p)) for p in report['approvals'] + report['runs'] + report.get('design_history', [])]
@@ -189,7 +193,7 @@ def verify(root, profile, task, report, cs_skill=None, phase='delivery', _seen=N
         for ref in prior_acceptance.get('materials', []):
             artifact_valid(root, ref)
         latest_path = artifact_valid(root, completed['final_brief'])
-        fresh = knowledge.finish_v4(root, profile, task, knowledge.skill_path(cs_skill), completed['cs_task_id'],
+        fresh = knowledge.finish(root, profile, task, knowledge.skill_path(cs_skill), completed['cs_task_id'],
                                      initial_path, completed['disposition'], completed['reason'], acceptance_path, latest_path)
         for field in ('cs_task_revision', 'query_state', 'files', 'external_refs'):
             require(fresh[field] == completed.get(field), 'Knowledge completion changed: ' + field)
@@ -197,7 +201,7 @@ def verify(root, profile, task, report, cs_skill=None, phase='delivery', _seen=N
             continuation = coordination.resume(root, profile, task['id'], knowledge.skill_path(cs_skill), completed_tasks=completed_tasks)
             require(continuation.get('ok') is True, 'Delivery handoff incomplete: ' + str(continuation.get('gaps')))
             current = continuation.get('current')
-            from contracts_v5 import reconcile, unresolved
+            from contracts import reconcile, unresolved
             reconcile(review['findings'], current.get('questions', []) if current else [])
             require(not unresolved(current.get('questions', []), status['required_sections'], 'acceptance'),
                     'Handoff still has unresolved issues')
@@ -227,7 +231,7 @@ def verify(root, profile, task, report, cs_skill=None, phase='delivery', _seen=N
 
 def check_observations(root, profile, design, row, execution, run_paths):
     """Source citations alone cannot satisfy a behavioral acceptance claim."""
-    from contracts_v5 import match_coverage, material
+    from contracts import match_coverage, material
     section = next((s for s in design['sections'] if s['id'] == row['id']), None)
     require(section is not None, 'Unknown acceptance observation')
     requirement = section['data']['verification']
@@ -255,7 +259,7 @@ def check_observations(root, profile, design, row, execution, run_paths):
         else:
             obj(observation, {'kind', 'observer', 'at', 'steps', 'result', 'coverage', 'evidence'})
             require(observation['kind'] == 'manual', 'Manual acceptance needs actual observations')
-            from contracts_v5 import independent
+            from contracts import independent
             independent(design, observation['observer'], 'Manual observer')
             material(observation['result'])
             observed_at = datetime.fromisoformat(observation['at'])

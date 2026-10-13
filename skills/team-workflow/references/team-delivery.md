@@ -1,11 +1,10 @@
 # 团队协作与交付
 
-从主技能开始或接手团队任务时使用本页。工具输入和字段见 [第五版约定](contracts-v5.md)。
+从主技能开始或接手团队任务时使用本页。工具输入和字段见 [工具约定](contracts.md)。
 首次独立验收、有效回归、端到端链路、运行环境和交付记录，统一按
 [业务验收与质量改进标准](business-acceptance.md)执行。处理缺陷或每周复盘时也读取该标准
 第 7、8 节及其引用；记录使用[交付验收](../templates/business-delivery.md)、
 [缺陷复验与保护](../templates/defect-protection.md)、[每周质量复盘](../templates/weekly-quality-review.md)模板。
-旧材料通过 `adopt` 保留历史并补齐当前条件；仅调整版本号不会得到新的通过证明。
 
 ## 准备与影响调查
 

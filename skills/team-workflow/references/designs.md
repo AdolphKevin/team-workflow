@@ -1,7 +1,7 @@
 # 分节方案与逐节批准
 
-第五版沿用稳定章节编号、依赖内容指纹和完整历史。业务场景、问题处置及输入格式以
-[第五版记录约定](contracts-v5.md)为准。工具不从自由文本推断批准。
+方案使用稳定章节编号、依赖内容指纹和完整历史。业务场景、问题处置及输入格式以
+[工具约定](contracts.md)为准。工具不从自由文本推断批准。
 
 ## 内容与依赖
 
@@ -41,4 +41,3 @@
 `designs.py` 继续提供 `validate_design`、`fingerprints`、`scope_coverage`、`impact`、
 `approval_draft` 和 `approval_status`。局部核对使用 `section_ids`，自动纳入上游依据。
 `history` 保留完整旧版本，`changed_paths=None` 表示未知，空列表表示已经核实没有变更。
-第四版原始方案可以作为历史输入供指纹核对；当前实施入口只接受第五版方案。

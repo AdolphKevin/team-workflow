@@ -1,4 +1,4 @@
-"""Business coverage and issue dispositions shared by preparation and delivery.
+"""Business coverage, scenarios and issue dispositions shared by preparation and delivery.
 
 These checks establish declared coverage, not the truth of a reviewer's prose.
 """
@@ -104,13 +104,11 @@ def design(value):
         strings(row['operations'], True)
         strings(row['acceptance'], True)
         require(all(k in rows and rows[k]['type'] == 'acceptance' for k in row['acceptance']), 'Impact needs actual acceptance references')
-    require('issues' in value, 'Plan needs an explicit known-issues list')
     issues(value['issues'], rows)
     identifiers = {row['id'] for row in value['issues']}
     assessments = [value['assessment']] + [r['data']['assessment'] for r in rows.values() if r['type'] == 'task' and 'assessment' in r['data']]
     for assessment in assessments:
         require(set(assessment['uncertainties']) <= identifiers, 'Assessment uncertainties must reference shared issue IDs')
-    require(not value.get('decisions'), 'Use shared issue IDs for v5 decisions')
     for row in rows.values():
         material(row['title']); material(row['body'])
         if row['type'] != 'acceptance':

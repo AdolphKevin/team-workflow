@@ -27,7 +27,7 @@ npx skills add AdolphKevin/codestable-compact -g --skill '*' --agent claude-code
 npx skills add AdolphKevin/team-workflow -g --skill '*' --agent claude-code codex cursor
 ```
 
-新项目使用第五版配置与任务格式。从已安装技能获得模板和字段说明：
+项目使用 `schema_version: 5` 的配置与任务格式。从已安装技能获得模板和字段说明：
 
 ```bash
 python3 <team-workflow技能目录>/scripts/workflow.py schema --root <项目目录>
@@ -39,13 +39,12 @@ python3 <team-workflow技能目录>/scripts/workflow.py guidance --root <项目�
 引用，项目规则统一在 AGENTS.md 维护；再把“需求交付与验收”写入本机 `~/.claude/CLAUDE.md` 与 `~/.codex/AGENTS.md`。
 只维护标记块，每位成员安装后得到相同内容。
 
-首次接入读[接入指南](skills/team-workflow/references/onboarding.md)，日常任务读[团队协作与交付](skills/team-workflow/references/team-delivery.md)。团队任务、业务验收、自动回归、缺陷处理、每周质量复盘及多代理派遣均读取[业务验收与质量改进标准](skills/team-workflow/references/business-acceptance.md)，按其中相应章节和模板执行；正文统一维护，不在各入口复制。实际命令和记录格式读[第五版工具约定](skills/team-workflow/references/contracts-v5.md)。旧任务保留原记录，先通过 `adopt` 补齐当前条件后继续；历史通过标记不会转换为新版通过证明。
+首次接入读[接入指南](skills/team-workflow/references/onboarding.md)，日常任务读[团队协作与交付](skills/team-workflow/references/team-delivery.md)。团队任务、业务验收、自动回归、缺陷处理、每周质量复盘及多代理派遣均读取[业务验收与质量改进标准](skills/team-workflow/references/business-acceptance.md)，按其中相应章节和模板执行；正文统一维护，不在各入口复制。实际命令和记录格式读[工具约定](skills/team-workflow/references/contracts.md)。
 
 ## 0.7.0-rc.1 候选版
 
-第五版把主需求业务场景、具体验证范围、已知问题处置和知识验收引用纳入工具核对。
-旧任务先用 `adopt` 保留原材料并补齐当前条件；`knowledge-template` 通过 CS 的公开接口
-生成进度或完成草稿。工具继续只读连接 CS，实际写入遵循 CS 的预览与应用流程。
+工具核对主需求业务场景及其业务来源、具体验证范围、验收人独立性、已知问题处置、回归
+自动化状态和知识验收引用。`knowledge-template` 通过 CS 的公开接口生成进度或完成草稿。工具继续只读连接 CS，实际写入遵循 CS 的预览与应用流程。
 
 检查仍可在多任务间复用，业务验收与知识完成分开。实现前核对实际准备状态，交接保留
 原始验证材料及未决问题，报告明确区分子任务与主需求。自动化和隔离代理试用用于工程
@@ -58,8 +57,8 @@ MATT 基于 [mattpocock/skills](https://github.com/mattpocock/skills) 1.3.1，�
 ```bash
 python3 -m unittest discover -s tests -v
 python3 scripts/check_release.py
-python3 scripts/check_cs.py --cs-skill <独立CS源码目录>/skills/cs
-python3 scripts/check_cs_v4.py --cs-skill <独立CS源码目录>/skills/cs
+python3 scripts/check_cs_knowledge.py --cs-skill <独立CS源码目录>/skills/cs
+python3 scripts/check_cs_delivery.py --cs-skill <独立CS源码目录>/skills/cs
 python3 scripts/check_parallel.py --cs-skill <独立CS源码目录>/skills/cs
 python3 scripts/package.py --output <仓库外目录>/team-workflow-0.7.0-rc.1.zip
 ```

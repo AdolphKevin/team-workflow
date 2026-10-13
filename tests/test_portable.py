@@ -1,4 +1,4 @@
-"""Portable v4 execution from real commands and provider-bound original archives."""
+"""Portable execution from real commands and provider-bound original archives."""
 import copy
 from datetime import datetime, timedelta, timezone
 import hashlib
@@ -16,14 +16,13 @@ import uuid
 import zipfile
 
 import test_workflow as fixtures
-import v5_fixtures as v5
+import plan_fixtures as plans
 from common import Invalid, artifact, now, read, write
 import delivery
 import designs
 import github_read
 import knowledge
 import portable
-import portable_v4
 import validation
 
 
@@ -35,8 +34,7 @@ class PortableCases(unittest.TestCase):
 
     def prepare(self, xml=None, **options):
         self.git('remote', 'add', 'origin', 'https://github.com/example/project.git')
-        self.profile['schema_version'] = 5
-        self.task.update(schema_version=5, design_id='addition', section_ids=['T1'], acceptance_scope='requirement', paths=['app.py'])
+        self.task['design_id'] = 'addition'
         self.configure_check(xml, **options)
 
     def configure_check(self, xml=None, **options):
@@ -57,7 +55,7 @@ class PortableCases(unittest.TestCase):
             row = validation.capture(self.root, self.profile, 'unit', self.directory)
             finish = now()
             after = portable.source_state(self.root, self.profile)
-            manifest = portable_v4.capture(self.directory, self.profile, row, before, after, start, finish)
+            manifest = portable.capture(self.directory, self.profile, row, before, after, start, finish)
         self.archive_manifest = manifest
         self.pack()
         return manifest
@@ -95,7 +93,7 @@ class PortableCases(unittest.TestCase):
 
     def import_result(self):
         with patch.object(github_read, 'api', side_effect=self.api):
-            return portable_v4.import_result(self.root, self.profile, self.locator)
+            return portable.import_result(self.root, self.profile, self.locator)
 
     def test_capture_and_import_redecode_original_case_with_portable_paths(self):
         self.prepare()
@@ -103,7 +101,7 @@ class PortableCases(unittest.TestCase):
         self.assertNotIn(str(self.directory), json.dumps(manifest))
         path, record = self.import_result()
         with patch.object(github_read, 'api', side_effect=self.api):
-            result, original = portable_v4.validate_import(self.root, self.profile, read(path))
+            result, original = portable.validate_import(self.root, self.profile, read(path))
         self.assertEqual(record['kind'], 'imported-execution')
         self.assertEqual(result['cases'], {'Arithmetic::adds': 'passed'})
         self.assertEqual(result['status'], 'passed')
@@ -120,7 +118,7 @@ class PortableCases(unittest.TestCase):
             relocated = Path(temporary) / 'relocated'
             shutil.copytree(self.root, relocated)
             with patch.object(github_read, 'api', side_effect=self.api):
-                result, _ = portable_v4.validate_import(relocated, self.profile, read(relocated / path.relative_to(self.root)))
+                result, _ = portable.validate_import(relocated, self.profile, read(relocated / path.relative_to(self.root)))
             self.assertEqual(result['cases'], {'Arithmetic::adds': 'passed'})
 
     def test_same_content_new_commit_preserves_actually_tested_commit(self):
@@ -285,10 +283,10 @@ class AggregateCases(unittest.TestCase):
             fixture.setUp()
             self.addCleanup(fixture.doCleanups)
             fixture.git('remote', 'add', 'origin', 'https://github.com/example/' + name + '.git')
-            fixture.profile.update(schema_version=5, project=name)
-            fixture.task.update(schema_version=5, id='TASK-' + name, parent='JOINT-fixture',
+            fixture.profile['project'] = name
+            fixture.task.update(id='TASK-' + name, parent='JOINT-fixture',
                                 design_id='design-' + name, section_ids=['T1'], paths=['app.py'], acceptance_scope='task')
-            fixture.check('import app; assert app.add(1,2)==3', environment={'kind': 'stateless'})
+            fixture.check('import app; assert app.add(1,2)==3')
             fixture.skill = fixture.fake_cs()
             self.fixtures[name] = fixture
             self.roots['example/' + name] = fixture.root
@@ -352,7 +350,7 @@ class AggregateCases(unittest.TestCase):
                  'data': {'checks': ['unit']}, 'depends_on': []},
                 {'id': 'T1', 'type': 'task', 'title': 'Work', 'body': 'Check public behavior',
                  'data': {'acceptance': ['A1'], 'scope': ['app.py'], 'blocked_by': []}, 'depends_on': []}]}
-        v5.plan(design)
+        plans.plan(design)
         def save(name, value):
             write(root / '.team-workflow' / (prefix + name + '.json'), value)
             return '.team-workflow/' + prefix + name + '.json'
@@ -369,14 +367,14 @@ class AggregateCases(unittest.TestCase):
         review.update(reviewer='carol', knowledge_conflicts_resolved=True)
         for axis in ('standards', 'spec'):
             review[axis] = {'status': 'passed', 'summary': 'Read actual public behavior and executed results', 'evidence': [ref]}
-        review['acceptance'] = [{'id': 'A1', 'status': 'passed', 'summary': 'Observed the declared arithmetic result', 'evidence': [ref], 'observations': [v5.observation(ref)]}]
+        review['acceptance'] = [{'id': 'A1', 'status': 'passed', 'summary': 'Observed the declared arithmetic result', 'evidence': [ref], 'observations': [plans.observation(ref)]}]
         save('review', review)
         accepted = delivery.verify(root, profile, task, report, self.skill, 'acceptance')
         save('acceptance', accepted)
         if not knowledge_complete:
             save('report', report)
             return
-        completion = knowledge.finish_v4(root, profile, task, self.skill, 'CS-T', root / brief,
+        completion = knowledge.finish(root, profile, task, self.skill, 'CS-T', root / brief,
             'none', 'Existing requirement remains sufficient', root / '.team-workflow/acceptance.json')
         report['knowledge'] = save('knowledge', completion)
         save('report', report)
@@ -390,7 +388,7 @@ class AggregateCases(unittest.TestCase):
 
     def aggregate(self, manifest=None):
         with patch.object(github_read, 'api', side_effect=self.api):
-            return portable_v4.aggregate(self.root, manifest or self.manifest, self.roots, self.skill)
+            return portable.aggregate(self.root, manifest or self.manifest, self.roots, self.skill)
 
     def test_joint_execution_covers_both_deliveries_and_build_dependency(self):
         result = self.aggregate()
@@ -467,6 +465,28 @@ class AggregateCases(unittest.TestCase):
         result = self.aggregate()
         self.assertEqual(result['versions']['example/common'], current)
         self.assertEqual(result['tested_versions'][0]['repositories']['example/common'], tested)
+
+
+class PortableHelpers(unittest.TestCase):
+    setUp = fixtures.WorkflowCases.setUp
+    git = fixtures.WorkflowCases.git
+
+    def test_moving_workspace_preserves_portable_source_identity(self):
+        self.git('remote', 'add', 'origin', 'https://github.com/example/project.git')
+        before = portable.source_state(self.root, self.profile)
+        with tempfile.TemporaryDirectory() as temp:
+            import shutil
+            destination = Path(temp) / 'different-directory'
+            shutil.copytree(self.root, destination)
+            self.assertEqual(before, portable.source_state(destination, self.profile))
+
+    def test_archive_cannot_write_outside_import_directory(self):
+        for name in ('../escaped', '/absolute', 'a/../../escaped'):
+            output = io.BytesIO()
+            with zipfile.ZipFile(output, 'w') as archive:
+                archive.writestr(name, 'bad')
+            with self.assertRaises(Invalid):
+                portable.unpack(output.getvalue(), self.root / '.team-workflow/imports/test')
 
 
 if __name__ == '__main__':

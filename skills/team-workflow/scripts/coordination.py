@@ -9,17 +9,76 @@ import re
 from common import Invalid, VERSION, digest, obj, require, strings, task_valid, text
 import designs
 import github_read as github
-import handoffs
 import knowledge
 import validation
 
 
+def block(body, name, required=True):
+    matches = re.findall(r'^```team-workflow-' + name + r'\s*\n(.*?)^```\s*$', body or '', re.M | re.S)
+    require(len(matches) <= 1, 'Multiple structured ' + name + ' records')
+    if not matches and not required:
+        return None
+    require(bool(matches), 'Missing team-workflow-' + name + ' block; keep the MATT spec and add its structured record')
+    try:
+        value = json.loads(matches[0])
+    except ValueError as exc:
+        raise Invalid('Invalid ' + name + ' JSON') from exc
+    require(isinstance(value, dict), 'Expected a ' + name + ' object')
+    return value
+
+
+def validate_progress(row):
+    obj(row, {'schema_version', 'kind', 'task', 'request_id', 'requirements', 'author',
+              'done', 'verified', 'remaining', 'questions'})
+    require(row['schema_version'] == 5 and row['kind'] == 'progress', 'Expected progress record version 5')
+    github.issue_ref(row['task'])
+    for name in ('request_id', 'requirements', 'author'):
+        text(row[name])
+    for name in ('done', 'verified', 'remaining'):
+        strings(row[name])
+    from contracts import issues
+    issues(row['questions'])
+
+
+def progress_history(issue):
+    records, gaps = {}, []
+    for comment in issue['comments_data']:
+        try:
+            row = block(comment.get('body'), 'progress', required=False)
+            if row is None:
+                continue
+            validate_progress(row)
+            require(row['task'] == issue['html_url'], 'Progress belongs to another task')
+            author = comment.get('user', {}).get('login')
+            require(not author or author == row['author'], 'Progress author differs from comment author')
+            identifier = row['request_id']
+            fingerprint = digest(row)
+            require(identifier not in records or records[identifier]['digest'] == fingerprint,
+                    'Progress request ID reused with different content')
+            records.setdefault(identifier, {'id': identifier, 'digest': fingerprint,
+                                            'url': comment['html_url'], 'record': row})
+        except (Invalid, ValueError, KeyError, TypeError) as exc:
+            gaps.append('Invalid progress ' + comment['html_url'] + ': ' + str(exc))
+    return records, gaps
+
+
+def pending_progress(issue, row):
+    records, gaps = progress_history(issue)
+    incorporated = {}
+    for item in (row or {}).get('included_progress', []):
+        require(item['id'] not in incorporated, 'Duplicate included progress')
+        incorporated[item['id']] = item['digest']
+        if item['id'] not in records or records[item['id']]['digest'] != item['digest']:
+            gaps.append('Included progress missing or changed: ' + item['id'])
+    return records, [value for key, value in records.items() if key not in incorporated], gaps
+
+
 def task_source(issue):
-    value = handoffs.block(issue.get('body'), 'task')
+    value = block(issue.get('body'), 'task')
     obj(value, {'schema_version', 'parent', 'task'})
     require(isinstance(value['task'], dict), 'Expected a structured task object')
     require(value['schema_version'] == 5 and value['task'].get('schema_version') == 5,
-            'Expected explicitly adopted task-platform version 5')
+            'Expected task-platform version 5')
     require(value['task'].get('id') == issue['html_url'], 'Task ID must be its canonical issue URL')
     require(value['task'].get('parent') == value['parent'], 'Inner and shared task parent differ')
     if value['parent']:
@@ -62,9 +121,9 @@ def reusable_approval(entry, design_state):
 
 def validate_task_design(task, design):
     """Ensure task acceptance and its selected work match the shared design."""
-    require(design.get('schema_version') == 5, 'Current work needs a v5 plan; use adopt for historical plans')
+    require(design.get('schema_version') == 5, 'Current work needs a v5 plan')
     designs.validate_design(design)
-    from contracts_v5 import task_scope
+    from contracts import task_scope
     task_scope(task, design)
     require(task.get('design_id') == design['id'], 'Task references another design')
     identifiers = strings(task.get('section_ids'), True)
@@ -111,18 +170,12 @@ def _read(issue):
     rows = {'design': [], 'approval': [], 'handoff': []}
     problems = {name: [] for name in rows}
     seen = []
-    historical_issues = []
     for comment in _history(issue):
         present = [name for name in rows if '```team-workflow-' + name in comment['body']]
         for name in present:
             try:
                 require(len(present) == 1, 'One platform record is allowed per comment')
-                row = handoffs.block(comment['body'], name)
-                if name == 'handoff' and row.get('schema_version') in (3, 4):
-                    require(row.get('task') == issue['html_url'], 'Historical handoff belongs to another task')
-                    require(comment.get('author') == row.get('creator', row.get('owner')), 'Historical handoff author differs')
-                    historical_issues += historical_questions(row.get('questions', []), issue['html_url'])
-                    continue  # Keep its body in history; it cannot become the current handoff.
+                row = block(comment['body'], name)
                 required = {'schema_version', 'kind', 'task', 'requirements', 'history_digest', 'previous'}
                 if name == 'design':
                     obj(row, required | {'creator', 'design'}, {'resolution', 'requirements_signature'})
@@ -150,8 +203,7 @@ def _read(issue):
                 else:
                     _validate_handoff(row)
                     author = row['creator']
-                require((row['schema_version'] == 5 or (row['schema_version'] == 4 and name in ('design', 'approval')))
-                        and row['task'] == issue['html_url'],
+                require(row['schema_version'] == 5 and row['task'] == issue['html_url'],
                         'Platform record version or task differs')
                 _hash(row['requirements'])
                 require(row['history_digest'] == digest(seen),
@@ -183,7 +235,7 @@ def _read(issue):
         seen.append(comment)
     return {'source': source, 'requirements': requirements, 'rows': rows,
             'gaps': [value for group in problems.values() for value in group],
-            'problems': problems, 'historical_issues': historical_issues,
+            'problems': problems,
             'history_digest': digest(seen), 'platform_history': seen}
 
 
@@ -213,24 +265,20 @@ def load(url):
     approvals = [item['record']['approval'] for item in design_state['rows']['approval']
                  if reusable_approval(item, design_state)]
     current = state['rows']['handoff'][-1] if state['rows']['handoff'] else None
-    progress, pending, progress_gaps = handoffs.pending_progress(issue, current['record'] if current else None)
+    progress, pending, progress_gaps = pending_progress(issue, current['record'] if current else None)
     gaps += progress_gaps
     if current and current['record']['requirements'] != state['requirements']:
         gaps.append('Requirements changed after this handoff')
-    from contracts_v5 import reconcile
-    known = {v['id']: v for v in state.get('historical_issues', [])}
-    known.update({v['id']: v for v in (design or {}).get('issues', [])})
+    from contracts import reconcile
+    known = {v['id']: v for v in (design or {}).get('issues', [])}
     for entry in state['rows']['handoff']:
         for item in entry['record']['questions']:
             if item['id'] in known:
                 reconcile([known[item['id']]], [item])
             known[item['id']] = item
     for entry in progress.values():
-        recorded = entry['record']['questions']
-        if entry['record'].get('schema_version') != 5:
-            recorded = historical_questions(recorded, url)
-        for item in recorded:
-            if 'id' in item and item['id'] not in known:
+        for item in entry['record']['questions']:
+            if item['id'] not in known:
                 known[item['id']] = item
     return {'schema_version': 5, 'kind': 'platform-task', 'ok': not gaps, 'issue': url,
             'assurance': 'continuation-only', 'delivery': 'not-evaluated',
@@ -337,7 +385,7 @@ def _validate_handoff(row):
     _hash(row['source_digest'])
     for name in ('done', 'remaining', 'references'):
         strings(row[name])
-    from contracts_v5 import issues
+    from contracts import issues
     issues(row['questions'])
     require(isinstance(row['verified'], list), 'Verified results must be artifact references')
     for ref in row['verified']:
@@ -456,7 +504,7 @@ def _handoff_gaps(root, profile, state, row, status, documents):
             github.reachable(url)
         except Invalid as exc:
             gaps.append(str(exc))
-    from contracts_v5 import reconcile, unresolved
+    from contracts import reconcile, unresolved
     try:
         reconcile(state.get('known_issues', []), row['questions'])
         if unresolved(row['questions'], required, 'implementation'):
@@ -667,22 +715,8 @@ def progress_draft(root, profile, url, progress, request_id):
     obj(progress, {'author', 'done', 'verified', 'remaining', 'questions'})
     row = {**progress, 'schema_version': 5, 'kind': 'progress', 'task': url,
            'request_id': request_id, 'requirements': digest(source)}
-    handoffs.validate_progress(row)
-    records, gaps = handoffs.progress_history(issue)
+    validate_progress(row)
+    records, gaps = progress_history(issue)
     if request_id in records:
         require(records[request_id]['digest'] == digest(row), 'Progress request ID already has different content')
     return _draft_result('progress', url, row, gaps)
-
-
-def historical_questions(values, task_id):
-    """Retain unstructured historical questions as unresolved, never as consent."""
-    require(isinstance(values, list), 'Historical questions must be a list')
-    result = []
-    for value in values:
-        require(isinstance(value, dict), 'Historical question must be an object')
-        summary = text(value.get('question') or value.get('summary'))
-        owner = text(value.get('owner') or 'unassigned historical owner')
-        result.append({'id': 'legacy-' + digest([task_id, owner, summary])[:16],
-            'summary': summary, 'owner': owner, 'affects': [], 'blocks': ['implementation', 'acceptance'],
-            'state': 'open', 'resolution': {}})
-    return result

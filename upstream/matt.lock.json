@@ -20,7 +20,7 @@
       "source": "skills/engineering/to-tickets/SKILL.md",
       "path": "skills/matt-to-tickets/SKILL.md",
       "upstream_sha256": "56ec23c5b2782785d4e65bff9e315b6d3aeb4ef977c174a219e99489fada1995",
-      "sha256": "c3080be778959bd91430f6d72042b0562f9caf9f9f67819c509953e085ba9b8c"
+      "sha256": "4c7474d7566a26f88d337b658faee02dc54d301dc241e9ee2998f7f70253913e"
     },
     {
       "source": "skills/engineering/to-tickets/agents/openai.yaml",
