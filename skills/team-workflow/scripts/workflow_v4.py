@@ -36,6 +36,8 @@ def readable(result):
             lines.append(key + ': ' + item['path'])
     for name, path in result.get('templates', {}).items():
         lines.append('模板 ' + name + ': ' + path)
+    for target in result.get('targets', []):
+        lines.append(f"{target.get('action')}: {target['path']}" + (f" ({target['reason']})" if target.get('reason') else ''))
     if result.get('reference'):
         lines.append('字段说明: ' + result['reference'])
     pending = set(result.get('missing', [])) | set(result.get('stale', []))

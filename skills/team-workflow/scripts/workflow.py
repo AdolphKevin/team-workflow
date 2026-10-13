@@ -15,7 +15,8 @@ def parser():
                                       'verify', 'aggregate', 'migrate', 'evidence', 'version',
                                       'resume', 'handoff', 'progress', 'task-export', 'delivery-template', 'import-result',
                                       'status', 'stage-draft', 'agents', 'prepare', 'design-draft',
-                                      'approval-draft', 'design-diff', 'schema', 'cleanup', 'upgrade', 'adopt', 'knowledge-template'])
+                                      'approval-draft', 'design-diff', 'schema', 'cleanup', 'upgrade', 'adopt', 'knowledge-template',
+                                      'guidance'])
     p.add_argument('--root', type=Path, default=Path.cwd())
     p.add_argument('--profile', type=Path, default=Path('.team-workflow.json'))
     p.add_argument('--task', type=Path)
@@ -30,7 +31,7 @@ def parser():
     p.add_argument('--phase', choices=['acceptance', 'delivery'], default='delivery')
     p.add_argument('--kind', choices=['design', 'implementation'], default='implementation')
     p.add_argument('--format', choices=['json', 'text'], default='json')
-    p.add_argument('--apply', action='store_true', help='Apply an explicitly reviewed cleanup plan or project upgrade')
+    p.add_argument('--apply', action='store_true', help='Apply an explicitly reviewed cleanup plan, project upgrade or guidance blocks')
     p.add_argument('--dry-run', action='store_true', help='Preview only (cleanup default)')
     p.add_argument('--evidence-repository', help='Declared external repository for --path evidence')
     p.add_argument('--out', help='New file under .team-workflow; existing files are never overwritten')
@@ -59,6 +60,9 @@ def parser():
     p.add_argument('--plan', type=Path, help='Sub-agent plan [{id, purpose}] that creates a new ledger')
     p.add_argument('--mark', help='Sub-agent ID whose ledger status changes')
     p.add_argument('--status', dest='agent_status', help='New sub-agent status')
+    p.add_argument('--scope', choices=['project', 'global', 'all'], default='all', help='guidance targets')
+    p.add_argument('--home', type=Path, help='Home directory holding per-user agent files (default: current user)')
+    p.add_argument('--file', help='Project-relative rules file for guidance (default: AGENTS.md); CLAUDE.md imports it')
     return p
 
 
@@ -96,16 +100,19 @@ def main(argv=None):
         LOCATIONS.set(mappings)
         profile_path = root / args.profile
         version_info = None
-        if args.command not in ('version', 'schema', 'migrate') and profile_path.is_file():
+        if args.command not in ('version', 'schema', 'migrate', 'guidance') and profile_path.is_file():
             version_info = versioning.ensure_tool_current(read(profile_path))
         import adoption
         historical = adoption.historical_input(args, root)
-        if args.command not in ('adopt', 'status', 'schema', 'version', 'upgrade', 'migrate', 'project'):
+        if args.command not in ('adopt', 'status', 'schema', 'version', 'upgrade', 'migrate', 'project', 'guidance'):
             require(historical is None, 'Historical task requires adopt before current execution')
             require(not profile_path.is_file() or read(profile_path).get('schema_version') == 5,
                     'Upgrade the project and adopt its tasks before current execution')
         if args.command == 'version':
             result = tool_identity()
+        elif args.command == 'guidance':
+            import guidance
+            result = guidance.run(root, args.scope, args.apply, args.home, args.file)
         elif args.command == 'adopt':
             result = adoption.draft(args, root)
         elif args.command == 'status' and historical is not None:

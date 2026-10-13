@@ -13,13 +13,19 @@ Python 3.10+、Git 和项目自身的测试依赖。通用工具只使用标准�
 python3 "$WF" schema --root "$PROJECT"
 python3 "$WF" project --root "$PROJECT" --cs-skill "$CS_SKILL"
 python3 "$WF" upgrade --root "$PROJECT" [--record "$UPGRADE_INPUT"] [--apply]
+python3 "$WF" guidance --root "$PROJECT" [--scope project|global|all] [--file AGENTS.md] [--apply]
 ```
 
 `project` 的 `version.status` 为 `current`、`project-outdated` 或 `tool-outdated`。
 项目较旧时用 `upgrade` 预览、`--apply` 写入；项目较新时返回 `tool-outdated`，先更新
 已安装技能。规则见[接入指南](onboarding.md#升级与回退)。
 
-`schema` 返回随技能安装的[配置模板](../templates/profile.json)、[任务模板](../templates/task.json)
+`guidance` 默认预览，`--apply` 只写入标记块：项目指令文件得到[项目指引](../templates/guidance-project.md)，
+本机 Claude Code 与 Codex 的用户级文件得到[全局指引](../templates/guidance-global.md)。项目规则只写
+`AGENTS.md`（没有则新建）；`CLAUDE.md` 没有则新建并只放 `@AGENTS.md` 引用（[引用模板](../templates/guidance-claude.md)），
+已含 `@AGENTS.md` 或 `@./AGENTS.md` 的保持不动；`--file` 只接受仓内相对路径，引用随之指向该文件。每个目标的
+`action` 为 `create`、`append`、`update`、`unchanged`、`skipped`（该客户端目录不存在）或 `blocked`（标记损坏，
+整次拒绝写入）。写入保留原文件的换行风格、权限和符号链接。`--home` 只用于试验，指向替代的用户目录。`schema` 返回随技能安装的[配置模板](../templates/profile.json)、[任务模板](../templates/task.json)
 和[方案模板](../templates/design.json)。模板需要按实际项目填写；配置放在根目录
 `.team-workflow.json`，手工任务输入及运行材料放在被 Git 忽略的 `.team-workflow/`。
 

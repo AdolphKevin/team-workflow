@@ -10,6 +10,7 @@
 | --- | --- |
 | 开发方法 | 15 个 MATT 技能及配套资源 |
 | 任务流程与验证工具 | `skills/team-workflow` |
+| 业务验收门槛、派遣协议、SOP 到回归流水线 | `skills/team-workflow/references/business-acceptance.md` |
 | 术语、架构决策和项目规则 | 所属项目已有原文，通过独立 CS 登记与读取 |
 | 方案、职责、进度和交接 | 共享任务材料，首批支持 GitHub Issues |
 | 最终任务记录与可复用经验 | 所属项目的 CS 知识库 |
@@ -29,9 +30,14 @@ npx skills add AdolphKevin/team-workflow -g --skill '*' --agent claude-code code
 ```bash
 python3 <team-workflow技能目录>/scripts/workflow.py schema --root <项目目录>
 python3 <team-workflow技能目录>/scripts/workflow.py project --root <项目目录> --cs-skill <CS技能目录>
+python3 <team-workflow技能目录>/scripts/workflow.py guidance --root <项目目录> --apply
 ```
 
-首次接入读[接入指南](skills/team-workflow/references/onboarding.md)，日常任务读[团队协作与交付](skills/team-workflow/references/team-delivery.md)，实际命令和记录格式读[第五版工具约定](skills/team-workflow/references/contracts-v5.md)。旧任务保留原记录，先通过 `adopt` 补齐当前条件后继续；历史通过标记不会转换为新版通过证明。
+`guidance` 把“团队开发流程、需求完成门槛、安全边界”写入项目的 AGENTS.md，CLAUDE.md 只保留一行 `@AGENTS.md`
+引用，项目规则统一在 AGENTS.md 维护；再把“需求交付与验收”写入本机 `~/.claude/CLAUDE.md` 与 `~/.codex/AGENTS.md`。
+只维护标记块，每位成员安装后得到相同内容。
+
+首次接入读[接入指南](skills/team-workflow/references/onboarding.md)，日常任务读[团队协作与交付](skills/team-workflow/references/team-delivery.md)，派遣子代理与业务验收读[业务验收与真实验证](skills/team-workflow/references/business-acceptance.md)，实际命令和记录格式读[第五版工具约定](skills/team-workflow/references/contracts-v5.md)。旧任务保留原记录，先通过 `adopt` 补齐当前条件后继续；历史通过标记不会转换为新版通过证明。
 
 ## 0.7.0-rc.1 候选版
 

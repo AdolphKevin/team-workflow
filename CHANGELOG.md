@@ -1,5 +1,7 @@
 # 未发布
 
+- 新增随技能分发的[业务验收与真实验证](skills/team-workflow/references/business-acceptance.md)：需求完成门槛、主代理与子代理派遣协议、从 SOP 到自动回归的四步流水线、交付报告最低内容、项目真实验证操作手册的最低内容。主技能、团队交付和接入指南引用该页；项目文件只保留本仓专属补充。
+- 新增 `guidance`：默认预览，`--apply` 在项目 AGENTS.md（没有则新建，CLAUDE.md 只放 `@AGENTS.md` 引用）与本机 `~/.claude/CLAUDE.md`、`~/.codex/AGENTS.md` 写入标记块，内容来自随技能分发的 `templates/guidance-*.md`；只维护标记之间的内容，未安装的客户端跳过，标记损坏时拒绝写入。
 - `project` 比较已安装工具与项目配置的 `workflow_version`：项目较旧返回 `project-outdated`，项目较新时所有命令返回 `tool-outdated` 并提示 `npx skills update -g`。
 - 新增 `upgrade`：把第三、四版配置升级到最新格式并记录工具版本；默认预览，`--apply` 写入；需要夹具身份的检查列为缺项，不代写环境。
 - 配置升级后，Issue 中的第三版任务仍按自身格式走原兼容接口。
