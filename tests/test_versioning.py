@@ -3,6 +3,7 @@ import argparse
 import contextlib
 import io
 import json
+from pathlib import Path
 import sys
 import unittest
 from unittest.mock import patch
@@ -68,6 +69,17 @@ class VersionPolicy(unittest.TestCase):
         self.assertEqual(result['version']['status'], 'current')
         code, again = self.cli('upgrade', '--apply')
         self.assertEqual((code, again['status']), (0, 'current'))
+
+    def test_onboarding_matches_current_profile_and_task_adoption(self):
+        guide = (Path(__file__).resolve().parents[1] /
+                 'skills/team-workflow/references/onboarding.md').read_text()
+        self.assertIn(f'格式为 {versioning.PROFILE_SCHEMA}', guide)
+        self.assertIn(f'`upgrade --apply` 写入格式 {versioning.PROFILE_SCHEMA}', guide)
+        self.assertIn('第二、三、四版任务只保留为历史输入', guide)
+        self.assertIn('通过 `adopt` 生成第五版草稿', guide)
+        for stale in ('格式为 4', '`upgrade --apply` 写入格式 4',
+                      '第三版任务按自身格式继续走原兼容接口'):
+            self.assertNotIn(stale, guide)
 
     def test_fixture_identity_is_never_invented(self):
         self.check("import app; assert app.add(1,2)==3", required_env=['TEST_DSN'])
