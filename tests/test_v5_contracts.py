@@ -119,7 +119,8 @@ class BusinessEvidence(unittest.TestCase):
         self.design['sections'][1]['body'] = self.task['acceptance'][0]['expectation']
         self.design['sections'][1]['data']['scenario'] = {'actor': 'buyer', 'initial_state': 'No installed shop',
             'steps': ['Install through the public CLI', 'Send the first message'],
-            'expected': 'Message accepted after installation', 'negative_cases': ['A missing channel prevents accepting the message']}
+            'expected': 'Message accepted after installation', 'negative_cases': ['A missing channel prevents accepting the message'],
+            'sources': v5.sources()}
         self.design['sections'][1]['data']['verification']['coverage'] = journey['coverage']
         self.design['sections'][1]['data']['checks'] = ['journey']
         self.refresh()

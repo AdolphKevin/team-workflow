@@ -2,10 +2,13 @@
 
 These checks establish declared coverage, not the truth of a reviewer's prose.
 """
-from common import obj, require, strings, text
+from common import Invalid, obj, require, strings, text
 
 LEVELS = {'unit', 'interface', 'journey', 'manual'}
 STATES = {'open', 'resolved', 'accepted', 'deferred'}
+COVERS = {'unit': {'unit', 'interface', 'journey'}, 'interface': {'interface', 'journey'}, 'journey': {'journey'}, 'manual': {'manual'}}
+AUTOMATION = {'automated': {'check', 'cases'}, 'manual-only': {'reason', 'owner', 'trigger'},
+              'pending-automation': {'reason', 'finding', 'due'}}
 
 
 def material(value):
@@ -114,9 +117,11 @@ def design(value):
             continue
         data = row['data']
         require({'scenario', 'verification'} <= data.keys(), 'Acceptance needs a business scenario and verification requirements: ' + row['id'])
-        scenario = obj(data['scenario'], {'actor', 'initial_state', 'steps', 'expected', 'negative_cases'})
+        scenario = obj(data['scenario'], {'actor', 'initial_state', 'steps', 'expected', 'negative_cases'}, {'sources'})
         for key in ('actor', 'initial_state', 'expected'):
             material(scenario[key])
+        if 'sources' in scenario:
+            sources(scenario['sources'])
         for key in ('steps', 'negative_cases'):
             strings(scenario[key], True)
             for item in scenario[key]:
@@ -142,11 +147,40 @@ def design(value):
             strings(row['data']['assessment']['drivers'], True)
 
 
+def sources(values):
+    """Confirmed business origins of a scenario's expectations; the tool checks presence, not truth."""
+    require(isinstance(values, list) and bool(values), 'Scenario sources must be a non-empty list')
+    seen = set()
+    for value in values:
+        obj(value, {'ref', 'version', 'confirmed_by'})
+        for key in ('ref', 'version', 'confirmed_by'):
+            material(value[key])
+        require((value['ref'], value['version']) not in seen, 'Duplicate scenario source: ' + value['ref'])
+        seen.add((value['ref'], value['version']))
+    return values
+
+
+def unsourced(task, plan):
+    rows = {v['id']: v for v in plan['sections']}
+    return sorted(a['id'] for a in task['acceptance'] if not rows[a['id']]['data']['scenario'].get('sources'))
+
+
+def identity(value):
+    return ' '.join(value.split()).casefold()
+
+
+def independent(plan, actor, label):
+    """Recorded identities must differ; the tool cannot prove two names are different people."""
+    owner = plan['roles']['implementation_owner']
+    require(bool(owner.strip()), 'Acceptance needs the recorded implementation owner to check independence')
+    material(actor)
+    require(identity(actor) != identity(owner), label + ' must not be the implementation owner: ' + actor)
+
+
 def match_coverage(required, actual):
     coverage(required); coverage(actual)
     require(actual['isolation'] != 'unresolved', 'Verification environment isolation is unresolved')
-    allowed = {'unit': {'unit', 'interface', 'journey'}, 'interface': {'interface', 'journey'}, 'journey': {'journey'}, 'manual': {'manual'}}
-    require(actual['level'] in allowed[required['level']], 'Verification level does not cover the declared acceptance')
+    require(actual['level'] in COVERS[required['level']], 'Verification level does not cover the declared acceptance')
     require(set(required['entrypoints']) <= set(actual['entrypoints']), 'Verification omits a required business entrypoint')
     require(required['environment'] == actual['environment'], 'Verification environment differs from the plan')
     require(set(actual['substitutes']) <= set(required['substitutes']), 'Verification substituted an undeclared dependency')
@@ -166,7 +200,7 @@ def task_scope(task, plan):
 def execution_environment(profile, task, plan):
     """Preparation is read-only: inspect declarations without running environment commands."""
     rows = {v['id']: v for v in plan['sections']}
-    gaps = []
+    gaps = ['Acceptance scenario needs confirmed business sources: ' + key for key in unsourced(task, plan)]
     for a in task['acceptance']:
         required = rows[a['id']]['data']['verification']
         if required['coverage']['isolation'] == 'unresolved':
@@ -179,3 +213,47 @@ def execution_environment(profile, task, plan):
                 elif actual['isolation'] == 'unresolved':
                     gaps.append('Unresolved verification isolation: ' + key)
     return sorted(set(gaps))
+
+
+def automation(value, task, findings, profile, execution):
+    """Declared regression state per scenario; structure and references only, not proof of protection."""
+    from datetime import date
+    obj(value, {'scenarios'})
+    require(isinstance(value['scenarios'], list) and bool(value['scenarios']), 'Automation needs declared scenarios')
+    acceptance = {a['id'] for a in task['acceptance']}
+    deferred = {f['id'] for f in findings if f['state'] == 'deferred'}
+    status, seen = {'automated': [], 'manual_only': [], 'pending_automation': []}, set()
+    for entry in value['scenarios']:
+        require(isinstance(entry, dict) and entry.get('status') in AUTOMATION, 'Unknown automation status')
+        obj(entry, {'id', 'acceptance', 'guarantee', 'status', 'level'} | AUTOMATION[entry['status']])
+        material(entry['id']); material(entry['guarantee'])
+        require(entry['id'] not in seen, 'Duplicate automation scenario: ' + entry['id'])
+        seen.add(entry['id'])
+        strings(entry['acceptance'], True)
+        require(set(entry['acceptance']) <= acceptance, 'Automation references an unknown acceptance')
+        require(entry['level'] in LEVELS, 'Unknown verification level')
+        require((entry['level'] == 'manual') == (entry['status'] == 'manual-only'),
+                'Only manual-only scenarios use the manual level')
+        if entry['status'] == 'automated':
+            key = entry['check']
+            require(key in profile['checks'] and key in execution['results'], 'Automated scenario needs an executed check: ' + key)
+            require(profile['checks'][key].get('coverage', {}).get('level') in COVERS[entry['level']],
+                    'Automated check level does not cover the declared regression level')
+            strings(entry['cases'])
+            require(all(execution['results'][key].get('cases', {}).get(c) == 'passed' for c in entry['cases']),
+                    'Automated case is missing, failed or skipped')
+            status['automated'].append({'id': entry['id'], 'acceptance': entry['acceptance'], 'level': entry['level'], 'check': key})
+        elif entry['status'] == 'manual-only':
+            for key in ('reason', 'owner', 'trigger'):
+                material(entry[key])
+            status['manual_only'].append({'id': entry['id'], 'acceptance': entry['acceptance'], 'owner': entry['owner']})
+        else:
+            material(entry['reason'])
+            require(entry['finding'] in deferred, 'Pending automation needs a deferred issue with follow-up: ' + entry['id'])
+            try:
+                date.fromisoformat(entry['due'])
+            except (TypeError, ValueError):
+                raise Invalid('Pending automation needs an ISO due date: ' + entry['id'])
+            status['pending_automation'].append({'id': entry['id'], 'acceptance': entry['acceptance'], 'level': entry['level'],
+                                                 'finding': entry['finding'], 'due': entry['due']})
+    return status

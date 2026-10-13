@@ -182,7 +182,8 @@ def run(skill):
                     {'id': 'A1', 'type': 'acceptance', 'title': 'Public input journey', 'body': task['acceptance'][0]['expectation'], 'depends_on': [],
                      'data': {'checks': ['unit'], 'scenario': {'actor': 'caller', 'initial_state': 'Fresh process',
                          'steps': ['Call valid with accepted and rejected inputs'], 'expected': 'Only positive integers accepted',
-                         'negative_cases': ['Boolean, text and nonpositive values rejected']},
+                         'negative_cases': ['Boolean, text and nonpositive values rejected'],
+                         'sources': [{'ref': 'Validator SOP#positive-integers', 'version': '1', 'confirmed_by': 'carol'}]},
                          'verification': {'method': 'automatic', 'coverage': coverage, 'cases': []}}},
                     {'id': 'T1', 'type': 'task', 'title': 'Implement validator', 'body': task['goal'], 'depends_on': [],
                      'data': {'acceptance': ['A1'], 'scope': [name + '.py', 'tests', 'docs'], 'blocked_by': []}}]}

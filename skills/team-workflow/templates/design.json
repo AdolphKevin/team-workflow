@@ -65,6 +65,13 @@
           "expected": "__REPLACE__",
           "negative_cases": [
             "__REPLACE__"
+          ],
+          "sources": [
+            {
+              "ref": "__REPLACE__",
+              "version": "__REPLACE__",
+              "confirmed_by": "__REPLACE__"
+            }
           ]
         },
         "verification": {

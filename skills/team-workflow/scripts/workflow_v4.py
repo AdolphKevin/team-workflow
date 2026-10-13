@@ -51,9 +51,12 @@ def readable(result):
             lines.append('任务 ' + name + '：' + labels.get(value.get('state'), str(value.get('state'))))
     if result.get('checks'):
         lines.append('检查：' + json.dumps(result['checks'], ensure_ascii=False))
-    for key in ('implementation_ready', 'business_accepted', 'delivery_complete', 'closable'):
+    for key in ('implementation_ready', 'business_accepted', 'delivery_complete', 'regression_pending', 'closable'):
         if key in result:
             lines.append(key + ': ' + str(result[key]))
+    if isinstance(result.get('automation_status'), dict):
+        for row in result['automation_status']['pending_automation']:
+            lines.append(f"自动化待建设：{row['id']} → {row['finding']}，期限 {row['due']}")
     return '\n'.join(lines)
 
 
@@ -234,7 +237,7 @@ def produce(args, root, profile, task, platform, request):
     def emit(value, name):
         return {'ok': value.get('ok', True), 'artifact': request.publish(name, value, args.out),
                 **{k: value[k] for k in ('summary', 'gaps', 'problem', 'next_action', 'implementation_ready',
-                                       'business_accepted', 'delivery_complete', 'closable', 'acceptance_scope', 'scope', 'validation_active', 'verification_gaps') if k in value}}
+                                       'business_accepted', 'delivery_complete', 'regression_pending', 'automation_status', 'closable', 'acceptance_scope', 'scope', 'validation_active', 'verification_gaps') if k in value}}
     if args.command == 'task-export':
         return {**emit(task, 'task.json'), 'summary': '仅导出任务；实施和交付条件尚未核对。', 'implementation_ready': False, 'business_accepted': False}
     if args.command == 'prepare':

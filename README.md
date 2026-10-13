@@ -10,7 +10,9 @@
 | --- | --- |
 | 开发方法 | 15 个 MATT 技能及配套资源 |
 | 任务流程与验证工具 | `skills/team-workflow` |
-| 业务验收门槛、派遣协议、SOP 到回归流水线 | `skills/team-workflow/references/business-acceptance.md` |
+| 业务验收、有效回归、缺陷关联与每周质量复盘 | [共同标准](skills/team-workflow/references/business-acceptance.md) |
+| 为各项目设计匹配的验收方式、过渡状态与按需建设 | [项目验收方式与测试能力建设](skills/team-workflow/references/test-capability.md) |
+| 可填写的团队记录 | [项目验收方案](skills/team-workflow/templates/project-verification.md)、[交付验收](skills/team-workflow/templates/business-delivery.md)、[缺陷复验与保护](skills/team-workflow/templates/defect-protection.md)、[每周质量复盘](skills/team-workflow/templates/weekly-quality-review.md) |
 | 术语、架构决策和项目规则 | 所属项目已有原文，通过独立 CS 登记与读取 |
 | 方案、职责、进度和交接 | 共享任务材料，首批支持 GitHub Issues |
 | 最终任务记录与可复用经验 | 所属项目的 CS 知识库 |
@@ -37,7 +39,7 @@ python3 <team-workflow技能目录>/scripts/workflow.py guidance --root <项目�
 引用，项目规则统一在 AGENTS.md 维护；再把“需求交付与验收”写入本机 `~/.claude/CLAUDE.md` 与 `~/.codex/AGENTS.md`。
 只维护标记块，每位成员安装后得到相同内容。
 
-首次接入读[接入指南](skills/team-workflow/references/onboarding.md)，日常任务读[团队协作与交付](skills/team-workflow/references/team-delivery.md)，派遣子代理与业务验收读[业务验收与真实验证](skills/team-workflow/references/business-acceptance.md)，实际命令和记录格式读[第五版工具约定](skills/team-workflow/references/contracts-v5.md)。旧任务保留原记录，先通过 `adopt` 补齐当前条件后继续；历史通过标记不会转换为新版通过证明。
+首次接入读[接入指南](skills/team-workflow/references/onboarding.md)，日常任务读[团队协作与交付](skills/team-workflow/references/team-delivery.md)。团队任务、业务验收、自动回归、缺陷处理、每周质量复盘及多代理派遣均读取[业务验收与质量改进标准](skills/team-workflow/references/business-acceptance.md)，按其中相应章节和模板执行；正文统一维护，不在各入口复制。实际命令和记录格式读[第五版工具约定](skills/team-workflow/references/contracts-v5.md)。旧任务保留原记录，先通过 `adopt` 补齐当前条件后继续；历史通过标记不会转换为新版通过证明。
 
 ## 0.7.0-rc.1 候选版
 

@@ -28,7 +28,7 @@
         "kind": "stateless"
       },
       "coverage": {
-        "level": "journey",
+        "level": "unit",
         "entrypoints": [
           "__REPLACE__"
         ],

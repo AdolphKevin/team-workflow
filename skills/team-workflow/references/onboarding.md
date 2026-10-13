@@ -12,7 +12,10 @@
 3. 将配置保存为项目根的 `.team-workflow.json`，格式为 5；把运行目录 `.team-workflow/`
    加入项目忽略规则。业务检查和环境脚本继续由业务仓库维护，通用脚本直接从技能目录运行。
    项目的真实验证操作手册与本仓专属验收补充登记到 `context`，最低内容见
-   [业务验收与真实验证](business-acceptance.md)；通用规则不复制进项目文件。
+   [业务验收与质量改进标准](business-acceptance.md)第 6 节。手册按
+   [项目验收方式与测试能力建设](test-capability.md)第 2 节为本项目设计，使用
+   [项目验收方案](../templates/project-verification.md)模板，经项目开发与测试同事确认；
+   尚无自动化入口的部分按该页记录过渡状态。通用规则不复制进项目文件。
 4. 运行 `project --root <项目> --cs-skill <CS技能目录>` 检查配置和公开能力，再按
    [第五版工具约定](contracts-v5.md)准备任务及开工材料。模板和环境声明不代表已执行验证。
 5. 运行 `guidance --root <项目>` 预览，确认后 `guidance --apply`：在项目的 AGENTS.md 写入

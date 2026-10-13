@@ -194,6 +194,38 @@ python3 "$WF" verify --root "$PROJECT" --context "$CONTEXT" \
 交付完整还需要当前交接无剩余事项、未决问题及未确认进度。关闭另需明确授权：报告可
 记录 `close_authorization: {confirmed_by, reference}`；工具仅报告状态，不执行关闭。
 
+### 回归自动化状态
+
+`delivery_complete` 只表示验收、知识回写和交接记录齐全，不表示应沉淀的回归已经自动化。
+报告可在 `delivery-template` 生成后手工加入可选的 `automation`，按场景声明回归状态；
+每次重新生成模板后需再次加入。未声明时结果为 `automation_status: "not-declared"`。
+
+```json
+"automation": {"scenarios": [
+  {"id": "S1", "acceptance": ["A1"], "guarantee": "<要保护的业务结果>", "status": "automated",
+   "level": "interface", "check": "<已执行的检查>", "cases": ["<用例>"]},
+  {"id": "S2", "acceptance": ["A2"], "guarantee": "<要保护的业务结果>", "status": "pending-automation",
+   "level": "journey", "reason": "<尚无相应入口>", "finding": "<延期问题编号>", "due": "2026-11-15"},
+  {"id": "S3", "acceptance": ["A3"], "guarantee": "<要保护的业务结果>", "status": "manual-only",
+   "level": "manual", "reason": "<无法自动化的原因>", "owner": "<执行人>", "trigger": "<执行时机>"}
+]}
+```
+
+每个条目只允许示例中对应状态列出的字段，缺项或多余字段都会被拒绝：
+
+- `automated`：必填 `check`、`cases`。检查已在本次运行中执行，用例全部通过；检查的覆盖
+  层次不低于声明的 `level`，`journey` 检查可覆盖 `interface` 或 `unit` 声明。
+- `pending-automation`：必填 `reason`、`finding`、`due`。`finding` 必须是评审中 `deferred`
+  的问题，由它携带确认人、确认依据、跟进任务和范围调整；`blocks` 写 `acceptance`，记录
+  它若重新打开时阻塞的阶段。多个场景可引用同一问题；同一需求缺多类入口时，可合并为
+  一个建设任务，也可分开登记。`due` 为 ISO 日期，过期仍可记录。
+- `manual-only`：必填 `reason`、`owner`、`trigger`，`level` 为 `manual`。它声明后续人工执行
+  责任，不证明已经观察过；本次人工观察的证据写在交付验收记录，尚未观察的列为未验证。
+
+结果中的 `regression_pending` 在存在待建设条目时为真，文本输出逐条列出。工具只核对结构与
+引用，不证明业务保证已被自动回归保护；状态的业务含义见
+[项目验收方式与测试能力建设](test-capability.md)第 4 节。
+
 ## 平台草稿、跨仓和外部结果
 
 `design-draft --issue ... --record ...`、`approval-draft --issue ... --record ...`、
@@ -248,7 +280,11 @@ python3 "$WF" cleanup --root "$PROJECT" --apply --plan "$CLEANUP_PLAN"
 
 每个验收节的 `data` 除 `checks` 外必须包含：
 
-- `scenario`：`actor`、`initial_state`、非空 `steps`、`expected`、非空 `negative_cases`。
+- `scenario`：`actor`、`initial_state`、非空 `steps`、`expected`、非空 `negative_cases`，以及
+  `sources`：预期所依据的业务原文，每项 `{ref, version, confirmed_by}`，分别为 SOP 或需求原文
+  的位置、版本和确认人。历史方案可以没有该字段；`prepare` 在 `verification_gaps` 中列出缺少
+  来源的验收项，`verify` 拒绝本任务任一验收项缺少来源。工具只核对字段齐全，不判断来源是否
+  真实、是否独立于实现；补充来源会改变方案指纹，需要重新批准。
 - `verification`：`method` 为 `automatic` 或 `manual`，`coverage` 说明实际范围，`cases`
   列出必须在原始运行中通过的准确用例编号。普通命令不能编造用例编号。
 
@@ -265,6 +301,10 @@ python3 "$WF" cleanup --root "$PROJECT" --apply --plan "$CLEANUP_PLAN"
 `{kind:"manual",observer,at,steps,result,coverage,evidence:[{path,sha256}]}`，时间含时区，
 步骤和证据非空。纯文档可使用人工观察，不能把只有源码链接的描述当成已经运行。
 
+评审的 `reviewer` 和每个人工观察的 `observer` 不能与方案 `roles.implementation_owner` 相同，
+比较时忽略大小写和多余空格；实施者为空时不能验收。工具只比较记录的身份，无法证明两个不同
+名称属于不同的人或会话，团队应为成员和代理使用稳定、可区分的身份名称。
+
 ## 问题处置与交接
 
 方案 `issues`、评审 `findings`、进度与交接 `questions` 使用同一对象：
@@ -276,7 +316,7 @@ python3 "$WF" cleanup --root "$PROJECT" --apply --plan "$CLEANUP_PLAN"
 
 `affects` 为空表示全局；`blocks` 明确阻塞实施、验收或两者。评估中的 `uncertainties` 只引用这些问题编号，具体问题正文保存在 `issues`。`state` 为 `open`、`resolved`、
 `accepted`、`deferred`。关闭问题的 `resolution` 含非空 `reason` 与 `evidence` 来源列表；
-接受限制另需 `confirmed_by`、`confirmation`，延期还需 `follow_up`、`scope_change`。
+接受限制另需 `confirmed_by`、`confirmation`；延期同样需要这两项，并另需 `follow_up`、`scope_change`。
 已记录问题的编号、责任和影响不能在后续记录中悄然改变或删除；若原记录有误，明确处置
 原问题再记录新的问题。验收方面的问题无需重新批准无关方案，但其处置仍须明确。
 

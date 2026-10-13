@@ -7,6 +7,10 @@ def coverage(level='journey'):
             'substitutes': [], 'isolation': 'isolated', 'isolation_evidence': []}
 
 
+def sources():
+    return [{'ref': 'SOP arithmetic#addition', 'version': '2026-01-01', 'confirmed_by': 'carol'}]
+
+
 def plan(value):
     value['schema_version'] = 5
     value.setdefault('issues', [])
@@ -19,7 +23,7 @@ def plan(value):
     for row in acceptance:
         row['data'].setdefault('scenario', {'actor': 'caller', 'initial_state': 'Fresh process',
             'steps': ['Call the public function with 1 and 2'], 'expected': row['body'],
-            'negative_cases': ['Incorrect sums are rejected by the assertion']})
+            'negative_cases': ['Incorrect sums are rejected by the assertion'], 'sources': sources()})
         row['data'].setdefault('verification', {'method': 'automatic', 'coverage': coverage(), 'cases': []})
     return value
 

@@ -72,6 +72,8 @@ def check_review(root, profile, task, review, selected, design, status, executio
         require(bool(row.get('evidence')), 'Review needs actual evidence')
         for ref in row['evidence']:
             evidence(root, profile, ref)
+    from contracts_v5 import independent
+    independent(design, review['reviewer'], 'Reviewer')
     require(review.get('risks') == task['risks'], 'Review must assess the current risks')
     require(review.get('knowledge_conflicts_resolved') is True, 'Knowledge conflicts need review')
     from contracts_v5 import reconcile, unresolved, issues
@@ -99,7 +101,7 @@ def verify(root, profile, task, report, cs_skill=None, phase='delivery', _seen=N
     require(phase in ('acceptance', 'delivery'), 'Unknown verification phase')
     task_valid(task, profile, root)
     obj(report, {'schema_version', 'task_id', 'design', 'approvals', 'brief', 'runs', 'review'},
-        {'knowledge', 'design_history', 'close_authorization', 'dependencies'})
+        {'knowledge', 'design_history', 'close_authorization', 'dependencies', 'automation'})
     require(report['schema_version'] == 5 and report['task_id'] == task['id'], 'Expected v5 delivery for this task')
     strings(report['runs'])
     strings(report['approvals'])
@@ -134,6 +136,9 @@ def verify(root, profile, task, report, cs_skill=None, phase='delivery', _seen=N
     if platform_state is not None:
         require(platform_state['design'] == design, 'Local design differs from the shared plan')
         require(all(a in platform_state['approvals'] for a in approvals), 'Approval has not been shared on the task')
+    from contracts_v5 import unsourced
+    missing = unsourced(task, design)
+    require(not missing, 'Acceptance scenario needs confirmed business sources: ' + ', '.join(missing))
     require(status.get('local_review_valid') is True, 'Design coverage/history needs review: ' + str(status))
     require(status.get('acceptance_ready') is True, 'Current design/code approval is missing: ' + str(status))
     execution = validation.verify_runs(root, profile, task, report['runs'])
@@ -151,6 +156,8 @@ def verify(root, profile, task, report, cs_skill=None, phase='delivery', _seen=N
                            'reason': 'Existing result independently checked against current inputs; not a claim of earlier knowledge reading'})
     review = read(inside(root, report['review']))
     check_review(root, profile, task, review, selected, design, status, execution, report['runs'])
+    from contracts_v5 import automation
+    regression = automation(report['automation'], task, review['findings'], profile, execution) if 'automation' in report else 'not-declared'
     materials = [artifact(root, inside(root, report[p])) for p in ('design', 'brief', 'review')]
     materials += [artifact(root, inside(root, p)) for p in report['approvals'] + report['runs'] + report.get('design_history', [])]
     materials += dependency_materials
@@ -161,8 +168,11 @@ def verify(root, profile, task, report, cs_skill=None, phase='delivery', _seen=N
               'acceptance_scope': task['acceptance_scope'], 'report': dict(report), 'issues': review['findings'],
               'observations': {r['id']: r['observations'] for r in review['acceptance']},
               'business_accepted': True, 'delivery_complete': False, 'closable': False,
-              'reused_execution': reused,
-              'assurance': 'content-bound records and explicit reviews; not signed or exhaustive business proof'}
+              'reused_execution': reused, 'automation_status': regression,
+              'regression_pending': regression != 'not-declared' and bool(regression['pending_automation']),
+              'assurance': 'content-bound records and explicit reviews; delivery_complete covers acceptance, knowledge '
+                           'and handoff records, not regression automation (see automation_status); '
+                           'not signed or exhaustive business proof'}
     if phase == 'delivery':
         require(bool(report.get('knowledge')), 'Knowledge completion is required after business acceptance')
         completed_path = inside(root, report['knowledge'])
@@ -245,7 +255,9 @@ def check_observations(root, profile, design, row, execution, run_paths):
         else:
             obj(observation, {'kind', 'observer', 'at', 'steps', 'result', 'coverage', 'evidence'})
             require(observation['kind'] == 'manual', 'Manual acceptance needs actual observations')
-            material(observation['observer']); material(observation['result'])
+            from contracts_v5 import independent
+            independent(design, observation['observer'], 'Manual observer')
+            material(observation['result'])
             observed_at = datetime.fromisoformat(observation['at'])
             require(observed_at.tzinfo is not None, 'Manual observation needs a timezone')
             from datetime import timezone

@@ -136,7 +136,7 @@ class DeliveryCases(unittest.TestCase):
         self.assertEqual(code, 0, result)
         self.assertTrue(result['business_accepted'])
 
-    def test_document_only_acceptance_does_not_invent_execution(self):
+    def manual_acceptance(self, observer='carol'):
         self.setup_v4()
         self.task['kind'] = 'docs'
         self.task['acceptance'][0]['checks'] = []
@@ -153,10 +153,55 @@ class DeliveryCases(unittest.TestCase):
         review.update(reviewer='carol', knowledge_conflicts_resolved=True)
         for axis in ('standards', 'spec'):
             review[axis] = {'status': 'passed', 'summary': 'Read actual content against the requirement', 'evidence': [ref]}
-        review['acceptance'] = [{'id': 'A1', 'status': 'passed', 'summary': 'Content requirement inspected', 'evidence': [ref], 'observations': [{'kind': 'manual', 'observer': 'carol', 'at': '2026-01-01T00:00:00+00:00', 'steps': ['Read content against the requirement'], 'result': 'Required content present', 'coverage': v5.coverage('manual'), 'evidence': [ref]}]}]
+        review['acceptance'] = [{'id': 'A1', 'status': 'passed', 'summary': 'Content requirement inspected', 'evidence': [ref], 'observations': [{'kind': 'manual', 'observer': observer, 'at': '2026-01-01T00:00:00+00:00', 'steps': ['Read content against the requirement'], 'result': 'Required content present', 'coverage': v5.coverage('manual'), 'evidence': [ref]}]}]
         self.write('review', review)
+
+    def test_document_only_acceptance_does_not_invent_execution(self):
+        self.manual_acceptance()
         result = delivery.verify(self.root, self.profile, self.task, self.report, self.skill, 'acceptance')
         self.assertEqual(result['checks'], [])
+
+    def test_manual_observer_must_not_be_the_implementer(self):
+        self.manual_acceptance(observer=' BOB ')
+        with self.assertRaisesRegex(Invalid, 'Manual observer must not be the implementation owner'):
+            delivery.verify(self.root, self.profile, self.task, self.report, self.skill, 'acceptance')
+
+    def test_reviewer_must_not_be_the_implementer(self):
+        self.setup_v4()
+        review = read(self.root / self.name('review'))
+        review['reviewer'] = 'Bob'
+        self.write('review', review)
+        with self.assertRaisesRegex(Invalid, 'Reviewer must not be the implementation owner'):
+            delivery.verify(self.root, self.profile, self.task, self.report, self.skill, 'acceptance')
+
+    def test_acceptance_needs_recorded_implementer_to_check_independence(self):
+        self.setup_v4()
+        self.design['roles']['implementation_owner'] = ''
+        self.write('design', self.design)
+        with self.assertRaisesRegex(Invalid, 'approval is missing|recorded implementation owner'):
+            delivery.verify(self.root, self.profile, self.task, self.report, self.skill, 'acceptance')
+
+    def test_acceptance_needs_confirmed_business_sources(self):
+        self.setup_v4()
+        del self.design['sections'][1]['data']['scenario']['sources']
+        self.write('design', self.design)
+        from contracts_v5 import execution_environment
+        self.assertIn('Acceptance scenario needs confirmed business sources: A1',
+                      execution_environment(self.profile, self.task, self.design))
+        with self.assertRaisesRegex(Invalid, 'confirmed business sources: A1'):
+            delivery.verify(self.root, self.profile, self.task, self.report, self.skill, 'acceptance')
+
+    def test_scenario_sources_are_explicit_and_unique(self):
+        self.setup_v4()
+        scenario = self.design['sections'][1]['data']['scenario']
+        valid = copy.deepcopy(scenario['sources'])
+        for value, message in (([], 'non-empty'), ([{'ref': 'SOP#1', 'version': '1'}], 'Missing fields: confirmed_by'),
+                               ([{'ref': '__REPLACE__', 'version': '1', 'confirmed_by': 'carol'}], 'Unfilled template'),
+                               (valid + valid, 'Duplicate scenario source')):
+            scenario['sources'] = value
+            with self.subTest(value=value), self.assertRaisesRegex(Invalid, message):
+                designs.fingerprints(self.design)
+        scenario['sources'] = valid
 
     def test_readable_pending_status_and_report_status_execute_no_project_commands(self):
         self.setup_v4(complexity='medium')
@@ -178,6 +223,103 @@ class DeliveryCases(unittest.TestCase):
         self.assertEqual(code, 0, output.getvalue())
         self.assertFalse(marker.exists())
         self.assertFalse(json.loads(output.getvalue())['business_accepted'])
+
+    def declare_pending_automation(self):
+        review = read(self.root / self.name('review'))
+        review['findings'].append({'id': 'Q-auto-S2', 'summary': 'Delivery to a real member connection is not automated yet',
+            'owner': 'bob', 'affects': ['A1'], 'blocks': ['acceptance'], 'state': 'deferred',
+            'resolution': {'reason': 'Project has no message receiver test entry yet', 'evidence': ['manual acceptance record'],
+                           'confirmed_by': 'carol', 'confirmation': 'Accepted manual protection until the entry exists',
+                           'follow_up': 'TASK-build-receiver-entry', 'scope_change': 'Regression for S2 moves to the follow-up task'}})
+        self.write('review', review)
+        self.report['automation'] = {'scenarios': [
+            {'id': 'S1', 'acceptance': ['A1'], 'guarantee': 'Addition result is correct', 'status': 'automated',
+             'level': 'journey', 'check': 'unit', 'cases': []},
+            {'id': 'S2', 'acceptance': ['A1'], 'guarantee': 'Member receives the reminder on a real connection',
+             'status': 'pending-automation', 'level': 'journey', 'reason': 'No message receiver test entry yet',
+             'finding': 'Q-auto-S2', 'due': '2026-11-15'},
+            {'id': 'S3', 'acceptance': ['A1'], 'guarantee': 'Third-party mail actually arrives', 'status': 'manual-only',
+             'level': 'manual', 'reason': 'External channel cannot be captured', 'owner': 'qa', 'trigger': 'Before each release'}]}
+        self.write('report', self.report)
+
+    def test_undeclared_automation_keeps_previous_result(self):
+        self.setup_v4()
+        result = delivery.verify(self.root, self.profile, self.task, self.report, self.skill, 'acceptance')
+        self.assertEqual(result['automation_status'], 'not-declared')
+        self.assertFalse(result['regression_pending'])
+
+    def test_pending_automation_stays_visible_after_delivery(self):
+        self.setup_v4()
+        self.declare_pending_automation()
+        accepted = delivery.verify(self.root, self.profile, self.task, self.report, self.skill, 'acceptance')
+        self.assertTrue(accepted['business_accepted'])
+        self.assertTrue(accepted['regression_pending'])
+        self.assertEqual([r['id'] for r in accepted['automation_status']['pending_automation']], ['S2'])
+        self.assertEqual([r['id'] for r in accepted['automation_status']['manual_only']], ['S3'])
+        self.write('acceptance', accepted)
+        completion = knowledge.finish_v4(self.root, self.profile, self.task, self.skill, 'CS-T',
+            self.root / self.name('brief'), 'none', 'Existing source owns the requirement', self.root / self.name('acceptance'))
+        self.write('knowledge', completion)
+        self.report['knowledge'] = self.name('knowledge')
+        delivered = delivery.verify(self.root, self.profile, self.task, self.report, self.skill)
+        self.assertTrue(delivered['delivery_complete'])
+        self.assertTrue(delivered['regression_pending'])
+        self.assertIn('not regression automation', delivered['assurance'])
+        self.write('report', self.report)
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            code = workflow.main(['verify', '--root', str(self.root), '--cs-skill', str(self.skill), '--task', self.name('task'),
+                                  '--report', self.name('report'), '--format', 'text'])
+        self.assertEqual(code, 0, output.getvalue())
+        self.assertIn('regression_pending: True', output.getvalue())
+        self.assertIn('自动化待建设：S2 → Q-auto-S2，期限 2026-11-15', output.getvalue())
+
+    def test_pending_automation_needs_deferred_issue_and_due_date(self):
+        self.setup_v4()
+        self.declare_pending_automation()
+        pending = self.report['automation']['scenarios'][1]
+        for field, value, message in (('finding', 'unknown', 'deferred issue'), ('due', 'soon', 'due date')):
+            original = pending[field]
+            pending[field] = value
+            with self.assertRaisesRegex(Invalid, message):
+                delivery.verify(self.root, self.profile, self.task, self.report, self.skill, 'acceptance')
+            pending[field] = original
+        pending['check'] = 'unit'
+        with self.assertRaisesRegex(Invalid, 'Unknown fields'):
+            delivery.verify(self.root, self.profile, self.task, self.report, self.skill, 'acceptance')
+
+    def test_automation_entries_reference_actual_scope_and_results(self):
+        self.setup_v4()
+        self.declare_pending_automation()
+        automated, _, manual = self.report['automation']['scenarios']
+        cases = (
+            (automated, 'check', 'missing', 'executed check'),
+            (automated, 'cases', ['never-ran'], 'missing, failed or skipped'),
+            (automated, 'level', 'manual', 'manual level'),
+            (manual, 'level', 'journey', 'manual level'),
+            (manual, 'acceptance', ['A9'], 'unknown acceptance'),
+            (manual, 'id', 'S1', 'Duplicate automation scenario'),
+        )
+        for entry, field, value, message in cases:
+            original = copy.deepcopy(entry[field])
+            entry[field] = value
+            with self.subTest(field=field, value=value), self.assertRaisesRegex(Invalid, message):
+                delivery.verify(self.root, self.profile, self.task, self.report, self.skill, 'acceptance')
+            entry[field] = original
+        del manual['owner']
+        with self.assertRaisesRegex(Invalid, 'Missing fields: owner'):
+            delivery.verify(self.root, self.profile, self.task, self.report, self.skill, 'acceptance')
+
+    def test_automated_regression_level_must_be_covered_by_the_check(self):
+        import contracts_v5
+        profile = {'checks': {'rules': {'coverage': {'level': 'unit'}}}}
+        execution = {'results': {'rules': {'cases': {}}}}
+        value = {'scenarios': [{'id': 'S1', 'acceptance': ['A1'], 'guarantee': 'Row is persisted', 'status': 'automated',
+                                'level': 'interface', 'check': 'rules', 'cases': []}]}
+        with self.assertRaisesRegex(Invalid, 'does not cover the declared regression level'):
+            contracts_v5.automation(value, {'acceptance': [{'id': 'A1'}]}, [], profile, execution)
+        value['scenarios'][0]['level'] = 'unit'
+        self.assertEqual(contracts_v5.automation(value, {'acceptance': [{'id': 'A1'}]}, [], profile, execution)['automated'][0]['check'], 'rules')
 
     def test_parent_withdrawal_during_child_acceptance_is_rejected(self):
         parent = 'https://github.com/example/project/issues/1'
