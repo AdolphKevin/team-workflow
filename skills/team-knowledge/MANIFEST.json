@@ -1,0 +1,31 @@
+{
+  "algorithm": "sha256",
+  "files": {
+    "SKILL.md": "d88d55d4b8f7a7112473c9e1957ed7c17e3a859657976e8eb524c89d282d7075",
+    "agents/openai.yaml": "d660ec45c2b67e9aeb482b06764b44c03503913ad2756ffbac8b0d68a7992121",
+    "references/lessons-from-history.md": "fbe4eb849d75016cf2c9093ad6bdbf9a8f3b610f965f11c8aa31f9812a4cfc44",
+    "references/migration.md": "158b8f2da3e837490db07c2393d4ea59c685c1609ca1fb66852b53b6c4eda92e",
+    "references/writing.md": "f5ae985da1aa740f38d93e389e4d7b19c604476ce2e6d5894cea5e3bce91ea85",
+    "scripts/tw.py": "130a162b2c953756bf302d3ff12c44de087edb5f0be31bd840a29fe2f9a1b6b6",
+    "scripts/tw_runtime/__init__.py": "d036cf2a6620a8459baf0ca9459ebe14cfd3b0ff21157578e4a8f54370931fc6",
+    "scripts/tw_runtime/audit.py": "715cdb841d9111ca288ce1a10f1ab973b50bea8d0bf866b8f30a708ae4d272f7",
+    "scripts/tw_runtime/brief.py": "b2bb1816395b3d13771da788c3f4c691c6fb9e3e593d24e53f03d871b3484441",
+    "scripts/tw_runtime/cache.py": "9039beef54f908fd6cd2a60f070d118b109c19a7b8f4817d25fc817151295f9f",
+    "scripts/tw_runtime/check.py": "d723185b2af71e4867fdb5e7f1505631d867c58990517f1633dda0af49bb2ae7",
+    "scripts/tw_runtime/cli.py": "41718f83d0af469265062526b11a67e301ab64b204b86472d66a9a776e114f7c",
+    "scripts/tw_runtime/entries.py": "b23bfa735d511d49ae1623b6aa5198a3bef6dcff2dcb1ea16fe33450ffba6189",
+    "scripts/tw_runtime/files.py": "36dd3b7bf6641617f4d7f60d5f314ef5999c35aec1ba67057e02d476b72096f5",
+    "scripts/tw_runtime/frontmatter.py": "5885b6dbf1287f25c599a2c1b450ad1b9c2db904f43a2be012710c3d4ac2e2a2",
+    "scripts/tw_runtime/gitutil.py": "256f0e4ffbb652ac01e8bf7df3c7fa3ec1b7c5eb3168eb31564d02a454b4bf7a",
+    "scripts/tw_runtime/globs.py": "235cba95c01f3e2cb9406ff5219b495d9a23fab42f2abbbf8e9b4311ebada368",
+    "scripts/tw_runtime/init.py": "30e275f61f1826da649f572be879c7144d107a59e7261a0072ccd46f9a818c81",
+    "scripts/tw_runtime/install.py": "4fc2bf8da89459a18d07e84e67382ab28657c4522300b8381f06ec7ddfaa3d3e",
+    "scripts/tw_runtime/new.py": "a8062a5e507e6d5f13747b2050983dd48d39a3220c2a28ecdd5b625a6d1ee05c",
+    "scripts/tw_runtime/project.py": "5500fd560102964dca0c02acb92c094b2fac2aa07564253f8a57ffef86afe7da",
+    "scripts/tw_runtime/read.py": "03cb9a5203a0be6c67b31f75fc59f9e27a2eb1e1cc427d7c81862f1ab7c12447",
+    "scripts/tw_runtime/textmatch.py": "9a5d82f0c8d0529b0fbe21e85d809a7c480283643e7eef9829e08a5c826f8af3"
+  },
+  "schema_version": 1,
+  "skill": "team-knowledge",
+  "version": "0.9.0-dev"
+}

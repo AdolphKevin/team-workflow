@@ -1,0 +1,6 @@
+interface:
+  display_name: "Team Knowledge"
+  short_description: "开工前读取、完成后维护项目 .tw/ 中的现行约束、决策和踩过的坑"
+  default_prompt: "使用 $team-knowledge 读取与当前任务相关的项目知识，完成后更新知识并运行 tw check。"
+policy:
+  allow_implicit_invocation: true

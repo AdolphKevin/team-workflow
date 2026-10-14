@@ -2,6 +2,56 @@
 
 本页只保留当前候选版的验证结果；更早版本的记录见 Git 历史。
 
+## 合并重构阶段 1：知识运行时（分支 `feature/unified-redesign`，未发布，2026-10-14）
+
+依据 [合并重构方案](proposals/2026-10-14-unified-redesign.md) 第 I 节阶段 1 验收。新增技能 `skills/team-knowledge`，命令为 `tw`：init、brief、read、new、check、audit、cache、version。
+
+**回归与发行**
+
+- 本机 Python 3.13 运行全仓 266 项测试，全部通过。其中 `tw` 新增 48 项，覆盖格式、结构检查、检索、命令与安装完整性。
+- `check_release.py` 通过：两个技能的 MANIFEST 均为最新。
+- team-knowledge 篇幅：SKILL.md 1,297 字符，writing.md 1,941，migration.md 1,514，lessons-from-history.md 416；首次必读合计 3,238，预算 8,000。
+
+**真实仓库：core 本地克隆，原仓库未改动**
+
+- `init` 从真实远端识别出 `github.com/channelwill/cw2-live-chat`。
+- `check` 检出以下问题：照抄旧卡时残留的 `__REPLACE__`、scope 指向已删除的 `internal/service/homepage_ad_service_auth_test.go`、旧目录 `.codestable` 与 `.team-workflow.json`。
+- 用 #146 的任务描述和路径运行 `brief`，用时 0.17 秒，取到对应决策和相关提交 `454f3998`。
+- 运行 `brief`、`check`、`audit` 前后，工作区文件指纹一致，证明三者零写入。
+- 发现并修复一个问题：CLAUDE.md 已有 `@./AGENTS.md` 时，`init --guidance` 仍会追加一份引用块。
+
+**客户端调用（在 core 克隆的项目级技能目录中实测）**
+
+| 客户端 | 结果 |
+| --- | --- |
+| Claude Code 2.1.296 | 未点名技能时自动调用 `team-knowledge` 并运行 `brief`。本次在 8 轮上限处停止，没有给出最终回答 |
+| Codex CLI 0.162.1 | 从 `.agents/skills/` 发现技能。未点名时先运行 `brief`，查明入口后按说明带 `--path` 重读；只读沙箱下没有写入 |
+| Cursor | 本机没有命令行代理，未验证 |
+
+**独立试用（Codex，未参与实现；gateway 本地克隆）**
+
+- **迁移**：只读技能说明，用约 25 分钟完成迁移。7 张旧卡的去向：
+  - 1 张写成 lesson，依据修复提交 `51b0e571` 与两个通过的守护测试；
+  - 1 张并入 overview；
+  - 5 张缺少用户确认，没有迁入，已列入迁移说明。
+- **检索**：用 3 个真实提交主题运行 `brief`，输出 518–1,660 字符。其中一次命中预期教训；一次因为共用文件，返回了相关度较低的教训。
+- **发现并已修复的问题**，均已补回归用例：
+  - 未初始化但存在旧目录时，提示不指向迁移指南；
+  - brief 截断 600–1,200 字符的总览；
+  - lesson 中“放弃过的做法”不被校验和计数，现在三种条目都支持；
+  - AGENTS.md 中仍要求使用旧 CS 时没有警告；
+  - 文档缺少 config.json 格式、条目证据要求、未核实内容的去处、模拟测试不算核实。
+- **复验**：由 Codex 在一个全新的 gateway 克隆上完成，未参与实现。
+  - 第一轮：5 项中 3 项已修复，2 项部分修复。新发现两个问题：“按 CS 规则更新”一类的说法没有触发旧 CS 警告；“放弃过的做法”缺少关键词时没有报错。
+  - 修复后第二轮复验两项都通过，同时确认 CSS、CSV 这类文本不会误报。
+  - 原始命令与输出保留在克隆的 `tw-acceptance-evidence/` 中，属于本机证据，未提交。
+
+**未完成**
+
+- 真实查询回放的召回基线。`scripts/replay_brief.py` 已经就绪，但需要先迁移 core 知识，并由独立代理确定预期条目，放在阶段 3。
+- Cursor 调用验证。
+- 两位真实成员试点，放在阶段 4。
+
 ## 0.7.0-rc.1（未发布改动，2026-10-14）
 
 本轮改动包括业务验收与质量改进标准、项目验收方式与测试能力建设、回归自动化状态、

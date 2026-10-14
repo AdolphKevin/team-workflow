@@ -56,7 +56,8 @@ def check(root=ROOT):
         for row in lock['files']:
             assert sha(temp / row['path']) == row['upstream_sha256'], row['source']
     files = [p for p in root.rglob('*') if p.is_file() and not any(
-        name in p.relative_to(root).parts for name in ('.git', '.claude', '.codestable', '.team-workflow', '__pycache__', 'dist'))]
+        name in p.relative_to(root).parts for name in ('.git', '.claude', '.codestable', '.team-workflow', '__pycache__', 'dist'))
+        and not p.relative_to(root).as_posix().startswith('.tw/local/')]
     for path in files:
         assert not path.is_symlink(), f'symlink in release source: {path.name}'
         if path.suffix == '.py':
@@ -79,11 +80,35 @@ def check(root=ROOT):
     import common
     assert shipped == common.manifest(root / 'skills/team-workflow'), \
         'skills/team-workflow/MANIFEST.json is stale; run python3 scripts/package.py --manifest'
+    budgets = knowledge_checks(root)
     names = lint_names(root)
     imported = import_scripts(root)
     return {'ok': True, 'version': version, 'upstream_files': len(lock['files']), 'source_files_checked': len(files),
             'undefined_name_lint': {'files': names['files'], 'lint_version': names['lint_version']},
-            'scripts_imported': imported, 'skill_manifest_files': len(shipped['files'])}
+            'scripts_imported': imported, 'skill_manifest_files': len(shipped['files']), 'knowledge': budgets}
+
+
+KNOWLEDGE_BUDGETS = {'SKILL.md': 2500, 'references/writing.md': 3000, 'references/migration.md': 3000,
+                     'references/lessons-from-history.md': 1500}
+FIRST_READ = ('SKILL.md', 'references/writing.md')
+
+
+def knowledge_checks(root):
+    """team-knowledge: manifest is current and instruction text stays within its character budgets."""
+    skill = root / 'skills/team-knowledge'
+    sys.path.insert(0, str(skill / 'scripts'))
+    from tw_runtime import install
+    shipped = json.loads((skill / 'MANIFEST.json').read_text())
+    assert shipped == install.manifest(skill), \
+        'skills/team-knowledge/MANIFEST.json is stale; run python3 scripts/package.py --manifest'
+    sizes = {name: len((skill / name).read_text(encoding='utf-8')) for name in KNOWLEDGE_BUDGETS}
+    for name, limit in KNOWLEDGE_BUDGETS.items():
+        assert sizes[name] <= limit, f'skills/team-knowledge/{name} has {sizes[name]} characters, budget {limit}'
+    extra = sorted(p.relative_to(skill).as_posix() for p in (skill / 'references').glob('*.md')) 
+    assert set(extra) <= set(KNOWLEDGE_BUDGETS), f'new reference needs a budget: {sorted(set(extra) - set(KNOWLEDGE_BUDGETS))}'
+    first = sum(sizes[name] for name in FIRST_READ)
+    assert first <= 8000, f'team-knowledge first-read chain has {first} characters, budget 8000'
+    return {'manifest_files': len(shipped['files']), 'characters': sizes, 'first_read': first}
 
 
 def lint_names(root):
@@ -97,12 +122,14 @@ def lint_names(root):
 
 def import_scripts(root):
     """Import every tool module in a fresh interpreter so import-time errors fail the release."""
-    scripts = root / 'skills/team-workflow/scripts'
-    modules = sorted(p.stem for p in scripts.glob('*.py'))
     code = 'import importlib, sys\nsys.path.insert(0, sys.argv[1])\nfor name in sys.argv[2:]: importlib.import_module(name)'
-    result = subprocess.run([sys.executable, '-I', '-c', code, str(scripts), *modules], text=True, capture_output=True)
-    assert result.returncode == 0, result.stderr
-    return len(modules)
+    count = 0
+    for scripts, modules in ((root / 'skills/team-workflow/scripts', sorted(p.stem for p in (root / 'skills/team-workflow/scripts').glob('*.py'))),
+                             (root / 'skills/team-knowledge/scripts', ['tw_runtime.' + p.stem for p in sorted((root / 'skills/team-knowledge/scripts/tw_runtime').glob('*.py')) if p.stem != '__init__'])):
+        result = subprocess.run([sys.executable, '-I', '-c', code, str(scripts), *modules], text=True, capture_output=True)
+        assert result.returncode == 0, result.stderr
+        count += len(modules)
+    return count
 
 
 if __name__ == '__main__':

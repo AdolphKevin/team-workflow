@@ -9,6 +9,7 @@ import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
 SKILL = ROOT / 'skills/team-workflow'
+KNOWLEDGE = ROOT / 'skills/team-knowledge'
 
 
 def skill_manifest():
@@ -17,26 +18,39 @@ def skill_manifest():
     return common.manifest(SKILL)
 
 
+def knowledge_manifest():
+    sys.path.insert(0, str(KNOWLEDGE / 'scripts'))
+    from tw_runtime import install
+    return install.manifest(KNOWLEDGE)
+
+
+def manifests():
+    return {SKILL / 'MANIFEST.json': skill_manifest(), KNOWLEDGE / 'MANIFEST.json': knowledge_manifest()}
+
+
 def write_manifest():
-    path = SKILL / 'MANIFEST.json'
-    path.write_text(json.dumps(skill_manifest(), indent=2, sort_keys=True) + '\n')
-    return path
+    written = []
+    for path, data in manifests().items():
+        path.write_text(json.dumps(data, indent=2, sort_keys=True) + '\n')
+        written.append(path)
+    return written
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--output', type=Path)
-    parser.add_argument('--manifest', action='store_true', help='Regenerate skills/team-workflow/MANIFEST.json only')
+    parser.add_argument('--manifest', action='store_true', help='Regenerate the skills\' MANIFEST.json files only')
     args = parser.parse_args()
     root = ROOT
     if args.manifest:
-        path = write_manifest()
-        print(json.dumps({'manifest': path.relative_to(root).as_posix(), 'files': len(skill_manifest()['files'])}))
+        paths = write_manifest()
+        print(json.dumps({'manifests': [p.relative_to(root).as_posix() for p in paths]}))
         return
     if args.output is None:
         parser.error('--output is required unless --manifest is given')
-    if json.loads((SKILL / 'MANIFEST.json').read_text()) != skill_manifest():
-        parser.error('MANIFEST.json is stale; run scripts/package.py --manifest')
+    for path, data in manifests().items():
+        if json.loads(path.read_text()) != data:
+            parser.error(f'{path.relative_to(root)} is stale; run scripts/package.py --manifest')
     output = args.output.resolve()
     if output.is_relative_to(root):
         parser.error('Archive must be outside the plugin directory')
