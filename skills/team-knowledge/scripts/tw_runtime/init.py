@@ -24,8 +24,10 @@ def plan(root, guidance=False):
                 f'{KB}/ 已被其他工具使用（format 不是 {FORMAT}），拒绝接管')
         actions.append({'path': f'{KB}/config.json', 'action': 'unchanged'})
     else:
-        if (root / KB).exists() and any((root / KB).iterdir()):
-            raise Invalid(f'{KB}/ 已存在但没有本工具的 config.json，可能属于其他工具，拒绝接管')
+        own = {'.gitignore', 'local', 'overview.md', 'glossary.md', 'rules', 'decisions', 'lessons'}
+        foreign = sorted(p.name for p in (root / KB).iterdir() if p.name not in own) if (root / KB).is_dir() else []
+        if foreign:
+            raise Invalid(f'{KB}/ 已存在且含有本工具布局之外的文件（{", ".join(foreign[:3])}），可能属于其他工具，拒绝接管')
         config = {'format': FORMAT, 'data_version': DATA_VERSION,
                   'project': {'id': gitutil.remote_identity(root) or f'local:{root.name}', 'name': root.name}}
         actions.append({'path': f'{KB}/config.json', 'action': 'create',

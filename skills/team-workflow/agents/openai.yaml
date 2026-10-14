@@ -1,4 +1,6 @@
 interface:
   display_name: "Team Workflow"
-  short_description: "基于已初始化的 CS 完成团队任务评估、方案评审、接力实施与验收"
-  default_prompt: "使用 $team-workflow 在已初始化 CS 的项目中完成当前团队任务。"
+  short_description: "团队任务评估、方案评审、接力实施、业务验收与知识更新"
+  default_prompt: "使用 $team-workflow 完成当前团队任务。"
+policy:
+  allow_implicit_invocation: false

@@ -11,7 +11,7 @@ class CleanupCases(unittest.TestCase):
     git = fixtures.WorkflowCases.git
 
     def request(self, name, finished=True):
-        directory = self.root / '.team-workflow/tasks/task/requests' / name
+        directory = self.root / '.tw/local/tasks/task/requests' / name
         create(directory / 'request.json', {'task_id': 'T', 'pid': os.getpid()})
         if finished:
             create(directory / 'response.json', {'ok': False, 'problem': 'old failure'})
@@ -21,9 +21,9 @@ class CleanupCases(unittest.TestCase):
         abandoned = self.request('old')
         retained = self.request('referenced')
         self.assertEqual(cleanup.preview(self.root)['candidates'], [])
-        create(self.root / '.team-workflow/final.json', {'schema_version': 6, 'kind': 'delivery-verification',
+        create(self.root / '.tw/local/final.json', {'data_version': 1, 'kind': 'delivery-verification',
             'task_id': 'T', 'ok': True, 'delivery_complete': True,
-            'covered_requests': [artifact(self.root, p) for p in self.root.glob('.team-workflow/tasks/*/requests/*/request.json')],
+            'covered_requests': [artifact(self.root, p) for p in self.root.glob('.tw/local/tasks/*/requests/*/request.json')],
             'materials': [{'path': str((retained / 'response.json').relative_to(self.root))}]})
         plan = cleanup.preview(self.root)
         self.assertEqual(plan['candidates'], [str(abandoned.relative_to(self.root))])
@@ -33,7 +33,7 @@ class CleanupCases(unittest.TestCase):
         self.assertTrue((self.root / 'app.py').exists())
 
     def material(self, kind, name, days_old, size=1024):
-        directory = self.root / '.team-workflow' / kind / name
+        directory = self.root / '.tw/local' / kind / name
         directory.mkdir(parents=True)
         (directory / 'run.json').write_bytes(b'{}' + b' ' * size)
         stamp = __import__('time').time() - days_old * 86400
@@ -45,12 +45,12 @@ class CleanupCases(unittest.TestCase):
         orphan = self.material('batches', 'orphan', 30, size=4096)
         recent = self.material('batches', 'recent', 1)
         cited = self.material('imports', 'cited', 30)
-        create(self.root / '.team-workflow/acceptance-149.json', {'materials': [
+        create(self.root / '.tw/local/acceptance-149.json', {'materials': [
             {'path': str((cited / 'run.json').relative_to(self.root)), 'sha256': 'x'}]})
-        manual = self.root / '.team-workflow/delivery-followup/evidence'
+        manual = self.root / '.tw/local/delivery-followup/evidence'
         manual.mkdir(parents=True)
         (manual / 'core.test').write_bytes(b'\x7fELF' + b'0' * 8192)
-        stale = self.root / '.team-workflow/validation-active/dead.json'
+        stale = self.root / '.tw/local/validation-active/dead.json'
         create(stale, {'pid': 2 ** 22 + 12345, 'tasks': ['T']})
         self.assertEqual(cleanup.preview(self.root)['candidates'], [])  # default scope is unchanged
         plan = cleanup.preview(self.root, 'all', 14)
@@ -59,19 +59,19 @@ class CleanupCases(unittest.TestCase):
         self.assertIn(relative(recent), plan['protected'])
         self.assertIn(relative(cited), plan['protected'])
         self.assertEqual({r['path'] for r in plan['unmanaged']},
-                         {'.team-workflow/acceptance-149.json', '.team-workflow/delivery-followup'})
+                         {'.tw/local/acceptance-149.json', '.tw/local/delivery-followup'})
         self.assertGreater(next(r['bytes'] for r in plan['unmanaged'] if r['path'].endswith('followup')), 8192)
         self.assertGreaterEqual(plan['totals']['reclaimable_bytes'], 4096)
-        self.assertEqual(plan['totals']['largest'][0]['path'], '.team-workflow/delivery-followup/evidence/core.test')
+        self.assertEqual(plan['totals']['largest'][0]['path'], '.tw/local/delivery-followup/evidence/core.test')
         cleanup.apply(self.root, plan)
         self.assertFalse(orphan.exists() or stale.exists())
         self.assertTrue(recent.exists() and cited.exists() and manual.exists())
 
     def test_changed_references_and_active_requests_refuse_application(self):
         self.request('old')
-        create(self.root / '.team-workflow/final.json', {'schema_version': 6, 'kind': 'delivery-verification',
+        create(self.root / '.tw/local/final.json', {'data_version': 1, 'kind': 'delivery-verification',
             'task_id': 'T', 'ok': True, 'delivery_complete': True,
-            'covered_requests': [artifact(self.root, p) for p in self.root.glob('.team-workflow/tasks/*/requests/*/request.json')]})
+            'covered_requests': [artifact(self.root, p) for p in self.root.glob('.tw/local/tasks/*/requests/*/request.json')]})
         plan = cleanup.preview(self.root)
         active = self.request('active', finished=False)
         with self.assertRaisesRegex(Invalid, 'active'):
@@ -89,18 +89,18 @@ class CleanupCases(unittest.TestCase):
 
     def test_old_completion_does_not_make_a_reopened_task_deletable(self):
         self.request('first')
-        create(self.root / '.team-workflow/final.json', {'schema_version': 6, 'kind': 'delivery-verification',
+        create(self.root / '.tw/local/final.json', {'data_version': 1, 'kind': 'delivery-verification',
             'task_id': 'T', 'ok': True, 'delivery_complete': True,
-            'covered_requests': [artifact(self.root, p) for p in self.root.glob('.team-workflow/tasks/*/requests/*/request.json')]})
+            'covered_requests': [artifact(self.root, p) for p in self.root.glob('.tw/local/tasks/*/requests/*/request.json')]})
         self.assertEqual(len(cleanup.preview(self.root)['candidates']), 1)
         self.request('later-failed')
         self.assertEqual(cleanup.preview(self.root)['candidates'], [])
 
     def test_completed_task_keeps_submitted_issue_history(self):
         old = self.request('review-failure')
-        create(old / 'review-input.json', {'schema_version': 6, 'task_id': 'T', 'at': '2026-10-13T00:00:00Z',
+        create(old / 'review-input.json', {'data_version': 1, 'task_id': 'T', 'at': '2026-10-13T00:00:00Z',
             'issues': [{'id': 'Q1', 'summary': 'A business decision was unresolved'}]})
-        create(self.root / '.team-workflow/final.json', {'schema_version': 6, 'kind': 'delivery-verification',
+        create(self.root / '.tw/local/final.json', {'data_version': 1, 'kind': 'delivery-verification',
             'task_id': 'T', 'ok': True, 'delivery_complete': True,
             'covered_requests': [artifact(self.root, old / 'request.json')]})
         plan = cleanup.preview(self.root)

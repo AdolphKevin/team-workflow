@@ -3,14 +3,14 @@ name: matt-tdd
 description: Test-driven development. Use when the user wants to build features or fix bugs test-first, mentions "red-green-refactor", or wants integration tests.
 ---
 
-Before using this method, read the [CS integration rules](../team-workflow/references/matt-integration.md) for prerequisites and the shared knowledge entry.
+Before using this method, read the [knowledge and team rules](../team-workflow/references/matt-integration.md): project knowledge comes from team-knowledge (`tw brief`).
 
 
 # Test-Driven Development
 
 TDD is the red → green loop. This skill is the reference that makes that loop produce tests worth keeping: what a good test is, where tests go, the anti-patterns, and the rules of the loop. Every section applies on every cycle: consult them before and during the loop, not after.
 
-Before exploring, use the unified CS brief to read the registered glossary and relevant decisions; request full source documents through CS when excerpts are insufficient.
+Before exploring, run `tw brief` with the affected paths to read the glossary, rules, decisions and lessons; use `tw read` when an excerpt is not enough.
 
 ## What a good test is
 

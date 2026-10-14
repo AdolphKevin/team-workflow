@@ -1,4 +1,4 @@
-"""Version 4 team coordination at the GitHub and CS process boundaries."""
+"""Team coordination at the GitHub boundary with project knowledge."""
 import copy
 import json
 import subprocess
@@ -16,7 +16,6 @@ class CoordinationCases(unittest.TestCase):
     setUp = fixtures.WorkflowCases.setUp
     git = fixtures.WorkflowCases.git
     check = fixtures.WorkflowCases.check
-    fake_cs = fixtures.WorkflowCases.fake_cs
 
     def prepare(self, complexity='medium'):
         self.url = 'https://github.com/example/project/issues/1'
@@ -24,7 +23,7 @@ class CoordinationCases(unittest.TestCase):
         self.check('import app; assert app.add(1, 2) == 3')
         self.task.update(id=self.url, design_id='addition')
         self.design = {
-            'schema_version': 5, 'kind': 'design', 'id': 'addition', 'revision': 1, 'task_id': self.url,
+            'data_version': 1, 'kind': 'design', 'id': 'addition', 'revision': 1, 'task_id': self.url,
             'assessment': {'complexity': complexity, 'risks': [], 'effort': 'one day',
                            'drivers': ['One arithmetic operation'], 'uncertainties': [],
                            'required_skills': ['Python']},
@@ -40,12 +39,11 @@ class CoordinationCases(unittest.TestCase):
         plans.plan(self.design)
         self.issue = {'html_url': self.url, 'state': 'open', 'updated_at': '2026-10-12T01:00:00Z',
                       'body': self.body(), 'assignees': [{'login': 'bob'}], 'comments_data': []}
-        self.skill = self.fake_cs()
         self.gets = []
 
     def body(self):
         return 'Add two inputs.\n\n```team-workflow-task\n' + json.dumps(
-            {'schema_version': 5, 'parent': None, 'task': self.task}) + '\n```\n'
+            {'data_version': 1, 'parent': None, 'task': self.task}) + '\n```\n'
 
     def github(self, endpoint, paginate=False, binary=False):
         self.gets.append(endpoint)
@@ -100,14 +98,14 @@ class CoordinationCases(unittest.TestCase):
         self.prepare()
         with patch.object(github_read, 'api', side_effect=self.github):
             self.establish_design()
-            draft = coordination.draft(self.root, self.profile, self.url, self.handoff(), self.skill, kind='design')
+            draft = coordination.draft(self.root, self.profile, self.url, self.handoff(), kind='design')
             self.assertTrue(draft['ok'], draft)
             self.assertEqual(draft['record']['creator'], 'alice')
             self.assertEqual(draft['record']['owner'], 'bob')
             self.assertEqual(draft['record']['roles'], self.design['roles'])
             self.assertIn('T1', draft['record']['approved_sections'])
             self.publish_fixture(draft, 'alice')
-            resumed = coordination.resume(self.root, self.profile, self.url, self.skill)
+            resumed = coordination.resume(self.root, self.profile, self.url)
         self.assertTrue(resumed['ok'], resumed)
         self.assertTrue(resumed['ready_to_implement'])
         self.assertEqual(resumed['current']['remaining'], ['Implement addition'])
@@ -121,17 +119,16 @@ class CoordinationCases(unittest.TestCase):
                 self.prepare(complexity)
                 with patch.object(github_read, 'api', side_effect=self.github):
                     self.establish_design(approved=False)
-                    result = coordination.draft(self.root, self.profile, self.url, self.handoff(), self.skill, kind='design')
+                    result = coordination.draft(self.root, self.profile, self.url, self.handoff(), kind='design')
                     self.assertEqual(result['ok'], expected, result)
                     self.publish_fixture(result, 'alice')
-                    resumed = coordination.resume(self.root, self.profile, self.url, self.skill)
+                    resumed = coordination.resume(self.root, self.profile, self.url)
                 self.assertEqual(resumed['ready_to_implement'], expected, resumed)
                 self.assertEqual(resumed['delivery'], 'not-evaluated')
                 self.git('remote', 'remove', 'origin')
-                # The Git and CS fixtures belong to the next independent subcase.
+                # The Git and local evidence fixtures belong to the next independent subcase.
                 import shutil
-                shutil.rmtree(self.root / '.team-workflow')
-                shutil.rmtree(self.root / '.codestable')
+                shutil.rmtree(self.root / '.tw/local', ignore_errors=True)
 
     def test_record_posted_for_someone_else_keeps_the_named_approver_and_actual_recorder(self):
         self.prepare()
@@ -146,9 +143,9 @@ class CoordinationCases(unittest.TestCase):
             self.assertEqual(len(loaded['approvals']), 1)
             self.assertEqual(loaded['approval_records'][0]['reviewer'], 'carol')
             self.assertEqual(loaded['approval_records'][0]['recorded_by'], 'bob')
-            draft = coordination.draft(self.root, self.profile, self.url, self.handoff(), self.skill, kind='design')
+            draft = coordination.draft(self.root, self.profile, self.url, self.handoff(), kind='design')
             self.publish_fixture(draft, 'bob')
-            resumed = coordination.resume(self.root, self.profile, self.url, self.skill)
+            resumed = coordination.resume(self.root, self.profile, self.url)
         self.assertNotIn('comment author', str(resumed['gaps']))
         self.assertEqual(resumed['current']['creator'], 'alice')
 
@@ -165,15 +162,15 @@ class CoordinationCases(unittest.TestCase):
         self.prepare()
         with patch.object(github_read, 'api', side_effect=self.github):
             self.establish_design()
-            self.publish_fixture(coordination.draft(self.root, self.profile, self.url, self.handoff(), self.skill, kind='design'), 'alice')
-            self.assertTrue(coordination.resume(self.root, self.profile, self.url, self.skill)['ok'])
+            self.publish_fixture(coordination.draft(self.root, self.profile, self.url, self.handoff(), kind='design'), 'alice')
+            self.assertTrue(coordination.resume(self.root, self.profile, self.url)['ok'])
             self.issue['body'] += '\nReject negative values too.\n'
-            requirements = coordination.resume(self.root, self.profile, self.url, self.skill)
+            requirements = coordination.resume(self.root, self.profile, self.url)
             self.assertFalse(requirements['ready_to_implement'])
             self.assertIn('Requirements changed', str(requirements['gaps']))
             self.issue['body'] = self.body()
             (self.root / 'app.py').write_text('def add(a, b): return 0\n')
-            source = coordination.resume(self.root, self.profile, self.url, self.skill)
+            source = coordination.resume(self.root, self.profile, self.url)
         self.assertFalse(source['ok'])
         self.assertIn('Source content changed', str(source['gaps']))
         self.assertEqual(source['delivery'], 'not-evaluated')
@@ -182,22 +179,22 @@ class CoordinationCases(unittest.TestCase):
         self.prepare()
         with patch.object(github_read, 'api', side_effect=self.github):
             self.establish_design()
-            first = coordination.draft(self.root, self.profile, self.url, self.handoff(), self.skill, kind='design')
+            first = coordination.draft(self.root, self.profile, self.url, self.handoff(), kind='design')
             self.publish_fixture(first, 'alice')
             self.publish_fixture(first, 'alice')
             conflict = coordination.load(self.url)
             self.assertIn('concurrent', str(conflict['gaps']))
             with self.assertRaisesRegex(Invalid, 'explicit resolution'):
-                coordination.draft(self.root, self.profile, self.url, self.handoff(), self.skill, kind='design')
+                coordination.draft(self.root, self.profile, self.url, self.handoff(), kind='design')
             progress = self.handoff(resolution={'history_digest': conflict['history_digest'],
                 'reason': 'Read both comments; same design, retain implementation as remaining.'})
-            reconciled = coordination.draft(self.root, self.profile, self.url, progress, self.skill, kind='design')
+            reconciled = coordination.draft(self.root, self.profile, self.url, progress, kind='design')
             self.assertTrue(reconciled['ok'], reconciled)
             self.publish_fixture(reconciled, 'alice')
-            self.assertTrue(coordination.resume(self.root, self.profile, self.url, self.skill)['ok'])
+            self.assertTrue(coordination.resume(self.root, self.profile, self.url)['ok'])
             self.assertEqual(len(self.issue['comments_data']), 5)
             self.issue['comments_data'][2]['body'] += '\nEarlier comment was changed.\n'
-            altered = coordination.resume(self.root, self.profile, self.url, self.skill)
+            altered = coordination.resume(self.root, self.profile, self.url)
         self.assertFalse(altered['ok'])
         self.assertIn('history changed', str(altered['gaps']))
 
@@ -205,27 +202,27 @@ class CoordinationCases(unittest.TestCase):
         self.prepare()
         with patch.object(github_read, 'api', side_effect=self.github):
             self.establish_design()
-            self.publish_fixture(coordination.draft(self.root, self.profile, self.url, self.handoff(), self.skill, kind='design'), 'alice')
+            self.publish_fixture(coordination.draft(self.root, self.profile, self.url, self.handoff(), kind='design'), 'alice')
             progress = coordination.progress_draft(self.root, self.profile, self.url,
                 {'author': 'bob', 'done': ['Checked addition behavior'], 'verified': [],
                  'remaining': ['Need overflow decision'], 'questions': []}, 'bob-check-1')
             self.publish_fixture(progress, 'bob')
-            resumed = coordination.resume(self.root, self.profile, self.url, self.skill)
+            resumed = coordination.resume(self.root, self.profile, self.url)
             self.assertEqual(len(resumed['pending_progress']), 1)
             self.assertFalse(resumed['ok'])
             ignored = coordination.draft(self.root, self.profile, self.url,
-                self.handoff(creator='bob'), self.skill)
+                self.handoff(creator='bob'))
             self.assertFalse(ignored['ok'])
             contribution = resumed['pending_progress'][0]
             confirmed = self.handoff(creator='bob',
                 included_progress=[{'id': contribution['id'], 'digest': contribution['digest']}],
                 remaining=['Need overflow decision'])
-            draft = coordination.draft(self.root, self.profile, self.url, confirmed, self.skill)
+            draft = coordination.draft(self.root, self.profile, self.url, confirmed)
             self.assertTrue(draft['ok'], draft)
             self.publish_fixture(draft, 'bob')
-            self.assertTrue(coordination.resume(self.root, self.profile, self.url, self.skill)['ok'])
+            self.assertTrue(coordination.resume(self.root, self.profile, self.url)['ok'])
             self.issue['comments_data'][-2]['body'] = progress['markdown'].replace('Need overflow decision', 'Changed earlier progress')
-            altered = coordination.resume(self.root, self.profile, self.url, self.skill)
+            altered = coordination.resume(self.root, self.profile, self.url)
         self.assertFalse(altered['ok'])
         self.assertIn('history changed', str(altered['gaps']))
 
@@ -243,7 +240,7 @@ class CoordinationCases(unittest.TestCase):
                 coordination.progress_draft(self.root, self.profile, self.url, progress, 'once')
 
     def dependency(self, role):
-        directory = self.root / '.team-workflow/library'
+        directory = self.root / '.tw/local/library'
         directory.mkdir(parents=True)
         for argv in [('init', '-q'), ('config', 'user.email', 'test@example.invalid'),
                      ('config', 'user.name', 'Fixture'), ('config', 'commit.gpgsign', 'false'),
@@ -253,7 +250,7 @@ class CoordinationCases(unittest.TestCase):
         subprocess.check_call(['git', '-C', str(directory), 'add', '.'])
         subprocess.check_call(['git', '-C', str(directory), 'commit', '-qm', 'library'])
         self.profile['external_inputs'] = {'library': {'kind': 'repository', 'repository': 'example/library', 'role': role}}
-        write(self.root / '.team-workflow/local.json', {'repositories': {'example/library': str(directory)}})
+        write(self.root / '.tw/local/repositories.json', {'repositories': {'example/library': str(directory)}})
         return directory
 
     def test_build_dependency_is_pinned_without_inventing_collaborators(self):
@@ -261,12 +258,12 @@ class CoordinationCases(unittest.TestCase):
         self.dependency('build')
         with patch.object(github_read, 'api', side_effect=self.github):
             self.establish_design()
-            draft = coordination.draft(self.root, self.profile, self.url, self.handoff(), self.skill, kind='design')
+            draft = coordination.draft(self.root, self.profile, self.url, self.handoff(), kind='design')
             self.assertTrue(draft['ok'], draft)
             self.assertEqual(draft['record']['participants'], [])
             self.assertEqual({row['repository'] for row in draft['record']['versions']}, {'example/project', 'example/library'})
             self.assertEqual(draft['record']['dependencies'][0]['role'], 'build')
-            omitted = coordination.draft(self.root, self.profile, self.url, self.handoff(dependencies=[]), self.skill, kind='design')
+            omitted = coordination.draft(self.root, self.profile, self.url, self.handoff(dependencies=[]), kind='design')
         self.assertFalse(omitted['ok'])
         self.assertIn('Declared dependency missing', str(omitted['gaps']))
 
@@ -276,12 +273,12 @@ class CoordinationCases(unittest.TestCase):
         (library / '.DS_Store').write_bytes(b'finder')
         with patch.object(github_read, 'api', side_effect=self.github):
             self.establish_design()
-            dirty = coordination.draft(self.root, self.profile, self.url, self.handoff(), self.skill, kind='design')
+            dirty = coordination.draft(self.root, self.profile, self.url, self.handoff(), kind='design')
             self.assertFalse(dirty['ok'])
             self.assertIn('Unshared working changes: example/library: .DS_Store', str(dirty['gaps']))
             self.assertIn('.git/info/exclude', str(dirty['gaps']))
             (library / '.git/info/exclude').write_text('.DS_Store\n')
-            clean = coordination.draft(self.root, self.profile, self.url, self.handoff(), self.skill, kind='design')
+            clean = coordination.draft(self.root, self.profile, self.url, self.handoff(), kind='design')
         self.assertTrue(clean['ok'], clean['gaps'])
 
     def test_modified_dependency_requires_its_actual_responsibility(self):
@@ -289,7 +286,7 @@ class CoordinationCases(unittest.TestCase):
         self.dependency('modified')
         with patch.object(github_read, 'api', side_effect=self.github):
             self.establish_design()
-            draft = coordination.draft(self.root, self.profile, self.url, self.handoff(), self.skill, kind='design')
+            draft = coordination.draft(self.root, self.profile, self.url, self.handoff(), kind='design')
         self.assertFalse(draft['ok'])
         self.assertIn('responsibility', str(draft['gaps']))
         self.assertIn('example/library', str(draft['gaps']))
@@ -298,7 +295,7 @@ class CoordinationCases(unittest.TestCase):
         self.prepare()
         with patch.object(github_read, 'api', side_effect=self.github):
             self.establish_design()
-            self.publish_fixture(coordination.draft(self.root, self.profile, self.url, self.handoff(), self.skill, kind='design'), 'alice')
+            self.publish_fixture(coordination.draft(self.root, self.profile, self.url, self.handoff(), kind='design'), 'alice')
             self.issue['body'] += '\nAddition applies to integer inputs.\n'
             revised = copy.deepcopy(self.design)
             revised['revision'] = 2
@@ -306,10 +303,10 @@ class CoordinationCases(unittest.TestCase):
             self.publish_fixture(coordination.draft_design(self.url, revised), 'alice')
             self.publish_fixture(coordination.draft_approval(self.url,
                 {'reviewer': 'carol', 'confirmation': 'Approved integer scope.'}), 'carol')
-            refreshed = coordination.draft(self.root, self.profile, self.url, self.handoff(), self.skill, kind='design')
+            refreshed = coordination.draft(self.root, self.profile, self.url, self.handoff(), kind='design')
             self.assertTrue(refreshed['ok'], refreshed)
             self.publish_fixture(refreshed, 'alice')
-            self.assertTrue(coordination.resume(self.root, self.profile, self.url, self.skill)['ok'])
+            self.assertTrue(coordination.resume(self.root, self.profile, self.url)['ok'])
 
     def test_parallel_approvals_can_be_reconciled_without_deleting_history(self):
         self.prepare()
@@ -333,7 +330,7 @@ class CoordinationCases(unittest.TestCase):
         with patch.object(github_read, 'api', side_effect=self.github):
             self.establish_design()
             self.assertEqual(coordination.load(self.url)['gaps'], [])
-            resumed = coordination.resume(self.root, self.profile, self.url, self.skill)
+            resumed = coordination.resume(self.root, self.profile, self.url)
         self.assertFalse(resumed['ok'])
         self.assertIn('No confirmed handoff', str(resumed['gaps']))
 
@@ -345,7 +342,7 @@ class CoordinationCases(unittest.TestCase):
         child_task = {**self.task, 'id': child_url, 'parent': self.url, 'acceptance_scope': 'task'}
         child = {'html_url': child_url, 'state': 'open', 'assignees': [{'login': 'bob'}],
                  'body': '```team-workflow-task\n' + json.dumps(
-                     {'schema_version': 5, 'parent': self.url, 'task': child_task}) + '\n```\n',
+                     {'data_version': 1, 'parent': self.url, 'task': child_task}) + '\n```\n',
                  'comments_data': []}
 
         def transport(endpoint, **kwargs):
@@ -359,11 +356,11 @@ class CoordinationCases(unittest.TestCase):
             state = coordination.load(child_url)
             self.assertEqual(state['design_issue'], self.url)
             self.assertEqual(state['approvals'][0]['reviewer'], 'carol')
-            draft = coordination.draft(self.root, self.profile, child_url, self.handoff(), self.skill, kind='design')
+            draft = coordination.draft(self.root, self.profile, child_url, self.handoff(), kind='design')
             self.assertTrue(draft['ok'], draft)
             child['comments_data'].append({'html_url': child_url + '#issuecomment-8',
                 'body': draft['markdown'], 'user': {'login': 'alice'}})
-            resumed = coordination.resume(self.root, self.profile, child_url, self.skill)
+            resumed = coordination.resume(self.root, self.profile, child_url)
         self.assertTrue(resumed['ok'], resumed)
         self.assertEqual(resumed['task']['id'], child_url)
         self.assertEqual(resumed['design']['task_id'], self.url)
@@ -372,7 +369,7 @@ class CoordinationCases(unittest.TestCase):
         self.prepare()
         with patch.object(github_read, 'api', side_effect=self.github):
             self.establish_design()
-            self.publish_fixture(coordination.draft(self.root, self.profile, self.url, self.handoff(), self.skill, kind='design'), 'alice')
+            self.publish_fixture(coordination.draft(self.root, self.profile, self.url, self.handoff(), kind='design'), 'alice')
         reads = 0
 
         def transport(endpoint, **kwargs):
@@ -384,7 +381,7 @@ class CoordinationCases(unittest.TestCase):
             return self.github(endpoint, **kwargs)
 
         with patch.object(github_read, 'api', side_effect=transport):
-            resumed = coordination.resume(self.root, self.profile, self.url, self.skill)
+            resumed = coordination.resume(self.root, self.profile, self.url)
         self.assertFalse(resumed['ok'])
         self.assertIn('Platform changed while reading', str(resumed['gaps']))
 
@@ -392,10 +389,10 @@ class CoordinationCases(unittest.TestCase):
         self.prepare()
         with patch.object(github_read, 'api', side_effect=self.github):
             self.establish_design()
-            draft = coordination.draft(self.root, self.profile, self.url, self.handoff(), self.skill, kind='design')
+            draft = coordination.draft(self.root, self.profile, self.url, self.handoff(), kind='design')
             self.publish_fixture(draft, 'alice')
             self.issue['comments_data'][-1].update(created_at='2026-10-12T01:00:00Z', updated_at='2026-10-12T02:00:00Z')
-            resumed = coordination.resume(self.root, self.profile, self.url, self.skill)
+            resumed = coordination.resume(self.root, self.profile, self.url)
         self.assertFalse(resumed['ok'])
         self.assertIn('edited platform record', str(resumed['gaps']))
 
@@ -408,13 +405,13 @@ class CoordinationCases(unittest.TestCase):
              'data': {'acceptance': ['A2'], 'scope': ['other.py'], 'blocked_by': []}, 'depends_on': []}]
         with patch.object(github_read, 'api', side_effect=self.github):
             self.establish_design()
-            draft = coordination.draft(self.root, self.profile, self.url, self.handoff(), self.skill, kind='design')
+            draft = coordination.draft(self.root, self.profile, self.url, self.handoff(), kind='design')
             self.publish_fixture(draft, 'alice')
             revised = copy.deepcopy(self.design)
             revised['revision'] = 2
             revised['sections'][-1]['body'] = 'Changed independent implementation requirements'
             self.publish_fixture(coordination.draft_design(self.url, revised), 'alice')
-            resumed = coordination.resume(self.root, self.profile, self.url, self.skill)
+            resumed = coordination.resume(self.root, self.profile, self.url)
         self.assertTrue(resumed['ok'], resumed)
         self.assertEqual(resumed['approval_status']['tasks']['T2']['state'], 'needs-review')
         self.assertEqual(resumed['approval_status']['tasks']['T1']['state'], 'ready')
@@ -451,13 +448,13 @@ class CoordinationCases(unittest.TestCase):
         self.design['sections'][2]['data']['blocked_by'] = ['T0']
         with patch.object(github_read, 'api', side_effect=self.github):
             self.establish_design()
-            missing = coordination.draft(self.root, self.profile, self.url, self.handoff(), self.skill, kind='design')
+            missing = coordination.draft(self.root, self.profile, self.url, self.handoff(), kind='design')
             self.assertFalse(missing['ok'])
-            draft = coordination.draft(self.root, self.profile, self.url, self.handoff(), self.skill,
+            draft = coordination.draft(self.root, self.profile, self.url, self.handoff(),
                                        kind='design', completed_tasks=['T0'])
             self.assertTrue(draft['ok'], draft)
             self.publish_fixture(draft, 'alice')
-            resumed = coordination.resume(self.root, self.profile, self.url, self.skill, completed_tasks=['T0'])
+            resumed = coordination.resume(self.root, self.profile, self.url, completed_tasks=['T0'])
         self.assertTrue(resumed['ready_to_implement'], resumed)
 
 
@@ -476,8 +473,7 @@ class CoordinationCases(unittest.TestCase):
                      ([], 'Completed handoff needs original verification records')]
             for verified, gap in cases:
                 with self.subTest(gap=gap):
-                    draft = coordination.draft(self.root, self.profile, self.url, dict(finished, verified=verified),
-                                               self.skill, kind='implementation')
+                    draft = coordination.draft(self.root, self.profile, self.url, dict(finished, verified=verified), kind='implementation')
                     if gap is None:
                         self.assertTrue(draft['ok'], draft)
                     else:

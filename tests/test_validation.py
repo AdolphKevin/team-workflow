@@ -22,9 +22,8 @@ class ContentValidation(unittest.TestCase):
     def test_knowledge_commit_and_index_do_not_expire_execution(self):
         self.setup_task()
         path, record = self.run_batch()
-        (self.root / '.codestable').mkdir()
-        (self.root / '.codestable/note.md').write_text('actual completed knowledge')
-        self.git('add', '.codestable/note.md')
+        (self.root / '.tw/overview.md').write_text((self.root / '.tw/overview.md').read_text() + '\n实际核对后的说明。\n')
+        self.git('add', '.tw')
         self.git('commit', '-qm', 'knowledge only')
         self.assertEqual(validation.verify_runs(self.root, self.profile, self.task, [str(path.relative_to(self.root))])['checks'], ['unit'])
         (self.root / 'app.py').write_text('def add(a,b): return a+b+0\n')
@@ -110,7 +109,7 @@ class ContentValidation(unittest.TestCase):
         check['required_cases'] = ['pkg::TestAdd']
         self.assertEqual(validation.inspect_record(self.root, self.profile, record), {'unit'})
         from common import artifact
-        acceptance = {'schema_version': 6, 'kind': 'acceptance', 'business_accepted': True,
+        acceptance = {'data_version': 1, 'kind': 'acceptance', 'business_accepted': True,
             'materials': [artifact(self.root, path)], 'report': {'runs': [path.relative_to(self.root).as_posix()]}}
         self.assertEqual(validation.inspect_record(self.root, self.profile, acceptance), {'unit'})
         self.assertEqual(record, original)
@@ -139,14 +138,14 @@ class ContentValidation(unittest.TestCase):
 
     def test_invalid_reevaluation_does_not_hide_valid_focused_rerun(self):
         self.setup_task()
-        marker = self.root / '.team-workflow/junit-cases.json'
+        marker = self.root / '.tw/local/junit-cases.json'
         marker.parent.mkdir(exist_ok=True)
         marker.write_text('["TestAdd"]')
         check = self.junit('unit', [], ['pkg::TestAdd'])
         check['argv'] = [sys.executable, '-c',
             "import json; from pathlib import Path; "
             "rows = ''.join(f'<testcase classname=\"pkg\" name=\"{n}\"/>' "
-            "for n in json.loads(Path('.team-workflow/junit-cases.json').read_text())); "
+            "for n in json.loads(Path('.tw/local/junit-cases.json').read_text())); "
             "Path(r'{output}/report.xml').write_text(f'<testsuite>{rows}</testsuite>')"]
         old, record = self.run_batch()
         self.assertEqual(record['results'][0]['status'], 'passed')
@@ -174,10 +173,10 @@ class ContentValidation(unittest.TestCase):
 
     def test_recorded_environment_is_trusted_offline_after_the_fixture_is_removed(self):
         self.setup_task()
-        marker = self.root / '.team-workflow/environment.txt'
+        marker = self.root / '.tw/local/environment.txt'
         marker.parent.mkdir(exist_ok=True)
         marker.write_text('fixture-1')
-        self.profile['checks']['unit']['environment'] = {'kind': 'fixture', 'identity': [sys.executable, '-c', "from pathlib import Path; print(Path('.team-workflow/environment.txt').read_text())"]}
+        self.profile['checks']['unit']['environment'] = {'kind': 'fixture', 'identity': [sys.executable, '-c', "from pathlib import Path; print(Path('.tw/local/environment.txt').read_text())"]}
         path, _ = self.run_batch()
         names = [str(path.relative_to(self.root))]
         marker.unlink()
@@ -188,21 +187,21 @@ class ContentValidation(unittest.TestCase):
         with self.assertRaisesRegex(Invalid, 'source'):
             validation.verify_runs(self.root, self.profile, self.task, names, live=False)
 
-    def test_legacy_records_are_named_for_one_rerun(self):
+    def test_unsupported_data_version_cannot_be_reused(self):
         self.setup_task()
         path, record = self.run_batch()
-        record['schema_version'] = 5
+        record['data_version'] = 2
         from common import write
         write(path, record)
-        with self.assertRaisesRegex(Invalid, 'before schema 6; re-run'):
+        with self.assertRaisesRegex(Invalid, 'Expected schema 1 execution record'):
             validation.verify_runs(self.root, self.profile, self.task, [str(path.relative_to(self.root))])
 
     def test_mutable_environment_identity_and_source_changes_during_execution(self):
         self.setup_task()
-        marker = self.root / '.team-workflow/environment.txt'
+        marker = self.root / '.tw/local/environment.txt'
         marker.parent.mkdir(exist_ok=True)
         marker.write_text('fixture-1')
-        self.profile['checks']['unit']['environment'] = {'kind': 'fixture', 'identity': [sys.executable, '-c', "from pathlib import Path; print(Path('.team-workflow/environment.txt').read_text())"]}
+        self.profile['checks']['unit']['environment'] = {'kind': 'fixture', 'identity': [sys.executable, '-c', "from pathlib import Path; print(Path('.tw/local/environment.txt').read_text())"]}
         path, _ = self.run_batch()
         marker.write_text('fixture-2')
         with self.assertRaisesRegex(Invalid, 'environment'):

@@ -1,56 +1,52 @@
 # 工具约定
 
-配置、任务、方案及平台记录使用 `schema_version: 5`；工具在本地生成的证据（执行、导入、评审、交付报告、
-验收、知识简报与完成、准备上下文）使用 `schema_version: 6`。第六版之前的证据保留为历史，不用于新的验收，
-由 `adopt` 列出需要重跑的任务。运行环境为
-Python 3.10+、Git 和项目自身的测试依赖。通用工具只使用标准库。
+项目配置是 `.tw/config.json`，本地证据放在被 Git 忽略的 `.tw/local/`。配置、任务、方案、平台记录和本地证据统一使用
+`data_version: 1`；迁移前旧目录中的证据不用于新的验收。
+运行环境为 Python 3.10+、Git 和项目自身的测试依赖，通用工具只使用标准库。
 
-下文 `$WF` 是已安装技能的 `scripts/workflow.py` 路径，`$PROJECT` 是项目目录，
-`$CS_SKILL` 是发现的独立 CS 技能目录。输入路径相对项目，输出使用命令返回的
-`artifact.path`，不要假设公共固定文件名。默认返回 JSON，`--format text` 用于阅读。
+下文 `tw` 指 `python3 <team-knowledge 技能目录>/scripts/tw.py`，团队命令写作 `tw team <命令>`；`$PROJECT`
+是项目目录。输入路径相对项目，输出使用命令返回的 `artifact.path`，不要假设公共固定文件名。默认返回 JSON，
+`--format text` 用于阅读。
 
 ## 配置与任务
 
 ```bash
-python3 "$WF" schema --root "$PROJECT"
-python3 "$WF" project --root "$PROJECT" --cs-skill "$CS_SKILL"
-python3 "$WF" guidance --root "$PROJECT" [--scope project|global|all] [--file AGENTS.md] [--apply]
+tw team schema --root "$PROJECT"
+tw team project --root "$PROJECT"
+tw init --root "$PROJECT" --guidance [--apply]
+tw team guidance --root "$PROJECT" [--scope project|global|all] [--file AGENTS.md] [--apply]
 ```
 
-`project` 同时核对安装完整性：`tool.status` 为 `intact`、`modified`（列出 `changed`、`missing`、
-`unexpected`）或 `unknown`（缺少 `MANIFEST.json`）。不是 `intact` 时返回 `error_code: tool-modified`，
-`verify` 与 `knowledge` 拒绝执行；发现工具缺陷时报告缺陷并重装，不修改已安装的技能。确需带改动运行时加
-`--allow-modified-tool`，结果中的 `tool.override` 为真并随记录保留（该选项只覆盖 team-workflow 自身，不覆盖 CS）。
-CS 须声明 `contract_version: 1`、`task-source-acceptances` 与 `install-integrity` 能力，且其 `integrity.status` 为
-`intact`；凡是调用 CS 的命令（`project`、`prepare`、`brief`、`knowledge-template`、`knowledge` 和最终 `verify`）
-在 CS 被修改时返回 `error_code: tool-modified`。业务验收阶段的 `verify` 不调用 CS，只使用准备时取得的知识简报。
+`project` 同时核对安装完整性：`installation.integrity.status` 为 `intact`、`modified`（列出 `changed`、`missing`、
+`unexpected`）或 `unknown`（缺少 `MANIFEST.json`）。正在运行的两个技能不是 `intact` 或不属于同一发行时返回
+`error_code: tool-modified`，`verify` 拒绝执行；客户端目录中其他副本被改动、版本不同或残留旧技能 cs，只列在 `warnings`。发现工具缺陷时报告缺陷并重装，不修改已安装的技能。确需带改动运行时加
+`--allow-modified-tool`，结果中的 `tool.override` 为真并随记录保留。`project` 同时报告配置校验结果、
+`tw check` 的错误数，以及两个技能是否来自同一发行（`tw version --check-install`）。
 工具自身缺陷返回 `error_code: tool-defect`，保留请求目录作为证据。
 
-`project` 的 `version.status` 为 `current` 或 `tool-outdated`。项目配置的格式或
-`workflow_version` 高于已安装工具时，所有读取该配置的命令返回 `tool-outdated`，先更新
-已安装技能。规则见[接入指南](onboarding.md#更新与回退)。
+项目配置的 `data_version` 高于已安装工具支持的版本时，工具拒绝读取并提示更新技能；
+规则见[接入指南](onboarding.md#更新与回退)。
 
-`guidance` 默认预览，`--apply` 只写入标记块：项目指令文件得到[项目指引](../templates/guidance-project.md)，
+`tw init --guidance` 维护 AGENTS.md 中的知识指引块；`tw team guidance` 默认预览，`--apply` 只写入标记块：项目指令文件得到[项目指引](../templates/guidance-project.md)，
 本机 Claude Code 与 Codex 的用户级文件得到[全局指引](../templates/guidance-global.md)。项目规则只写
 `AGENTS.md`（没有则新建）；`CLAUDE.md` 没有则新建并只放 `@AGENTS.md` 引用（[引用模板](../templates/guidance-claude.md)），
 已含 `@AGENTS.md` 或 `@./AGENTS.md` 的保持不动；`--file` 只接受仓内相对路径，引用随之指向该文件。每个目标的
 `action` 为 `create`、`append`、`update`、`unchanged`、`skipped`（该客户端目录不存在）或 `blocked`（标记损坏，
-整次拒绝写入）。写入保留原文件的换行风格、权限和符号链接。`--home` 只用于试验，指向替代的用户目录。`schema` 返回随技能安装的[配置模板](../templates/profile.json)、[任务模板](../templates/task.json)
-和[方案模板](../templates/design.json)。模板需要按实际项目填写；配置放在根目录
-`.team-workflow.json`，手工任务输入及运行材料放在被 Git 忽略的 `.team-workflow/`。
+整次拒绝写入）。写入保留原文件的换行风格、权限和符号链接。`--home` 只用于试验，指向替代的用户目录。`schema` 返回随技能安装的[团队配置模板](../templates/config.json)、[任务模板](../templates/task.json)
+和[方案模板](../templates/design.json)。模板需要按实际项目填写；团队字段写入 `.tw/config.json`，
+手工任务输入及运行材料放在被 Git 忽略的 `.tw/local/`。
 
 | 配置字段 | 含义 |
 | --- | --- |
-| `schema_version`、`project` | 固定格式 5，以及项目稳定名称 |
+| `format`、`data_version`、`project` | 由 `tw init` 生成：工具标识、数据版本 1、`{id, name}` 项目身份 |
 | `context` | 必须读取的现有仓内文件 |
-| `knowledge` | `provider: cs`，入口固定为 `.codestable/wiki/INDEX.md` |
+| `shared`、`documents` | 共享知识仓与原文登记，见 team-knowledge 写作规范 |
 | `checks` | 检查编号到具体命令、报告格式、用例及环境要求的映射 |
 | `required_checks` | 分别为 `code`、`docs` 指定默认检查 |
 | `risk_checks` | 风险到非空检查集合；缺少风险映射会报错 |
 | `inputs` | 参与结果但被 Git 忽略的文件或目录 |
 | `external_inputs` | 逻辑依赖及用途，本机位置另行提供 |
 | `environment_versions` | 名称到只读版本查询命令数组 |
-| `workflow_version` | 可选；配置所需的最低工具版本，高于已安装工具时拒绝执行 |
 
 检查包含 `argv` 参数数组、`purpose`、仓内 `cwd`、秒数 `timeout`、`format`、
 `required_cases`、`required_env` 和 `environment`。命令不经 shell，凭证通过环境传递，
@@ -67,7 +63,7 @@ CS 须声明 `contract_version: 1`、`task-source-acceptances` 与 `install-inte
 可变外部数据的检查；后者必须真实表达服务、数据库或夹具的有关状态。身份无法核实时
 不复用结果。`revision_sensitive: true` 仅用于实际依赖 Git 提交编号的检查。
 
-任务使用 `schema_version: 5`，包含 `id`、真实存在的完整基准提交 `base`、`goal`、
+任务使用 `data_version: 1`，包含 `id`、真实存在的完整基准提交 `base`、`goal`、
 `non_goals`、`kind`（`code` 或 `docs`）、`risks`、`acceptance`，以及关联的 `design_id`
 和非空任务节数组 `section_ids`，以及 `acceptance_scope`（主需求 `requirement`，子任务 `task`）。子任务的 `parent` 指向方案所属主需求。验收项为 `{id, expectation, checks}`。`paths`、
 `symbols` 和跨仓 `scopes` 提供知识读取范围；实际子任务可保留 `parent`。
@@ -80,9 +76,8 @@ CS 须声明 `contract_version: 1`、`task-source-acceptances` 与 `install-inte
 ## 开工材料、状态与方案
 
 ```bash
-python3 "$WF" prepare --root "$PROJECT" --task "$TASK" --design "$DESIGN" \
-  --cs-skill "$CS_SKILL"
-python3 "$WF" status --root "$PROJECT" --context "$CONTEXT" --format text
+tw team prepare --root "$PROJECT" --task "$TASK" --design "$DESIGN"
+tw team status --root "$PROJECT" --context "$CONTEXT" --format text
 ```
 
 平台任务也可用 `prepare --issue <完整Issue链接>` 读取共享任务和方案。已有批准使用
@@ -91,7 +86,8 @@ python3 "$WF" status --root "$PROJECT" --context "$CONTEXT" --format text
 所请求的 Issue 缺少任务块时返回 `issue-not-adopted`；已接入的子 Issue 所引用的父 Issue 缺块时，
 返回 `parent-issue-not-adopted`，并指向父 Issue 的地址及 `issue-draft --task <parent-task.json>` 补齐命令。
 
-`resume` 和 `status` 只读，不生成新的上下文文件。后续命令复用已有 `--context`；缺少时以当前方案和已有批准运行 `prepare`，无需再次请求批准。
+`status` 只读。`resume` 只在自己的请求目录保存本次开工简报（`brief.json`）和结果（`resume.json`），不生成新的上下文文件，
+也不改动项目或已有材料。后续命令复用已有 `--context`；缺少时以当前方案和已有批准运行 `prepare`，无需再次请求批准。
 
 `prepare` 返回上下文、任务、方案与开工简报引用。把上下文的 `artifact.path` 作为
 `$CONTEXT`，后续 `--context` 自动补齐这些输入并检查内容。必须实际阅读简报；保存文件
@@ -99,18 +95,18 @@ python3 "$WF" status --root "$PROJECT" --context "$CONTEXT" --format text
 更新批准不需要重做开工简报，也不能用事后简报覆盖原读取记录。
 
 ```bash
-python3 "$WF" design-diff --root "$PROJECT" --task "$TASK" --design "$NEW_DESIGN" \
+tw team design-diff --root "$PROJECT" --task "$TASK" --design "$NEW_DESIGN" \
   --design-history "$V1" --design-history "$V2"
 ```
 
-`design-diff` 比较最后一份旧版和当前版，保留完整历史删除。`status` 和 `resume` 只读
-汇总材料及缺口，统一不在此声明本轮业务验收、最终交付或允许关闭；这些结论由 `verify` 核对。
+`design-diff` 比较最后一份旧版和当前版，保留完整历史删除。`status` 和 `resume` 汇总材料及缺口，
+统一不在此声明本轮业务验收、最终交付或允许关闭；这些结论由 `verify` 核对。
 
 ## 实施、批准与代码评审
 
 ```bash
-python3 "$WF" run --root "$PROJECT" --context "$CONTEXT"
-python3 "$WF" run --root "$PROJECT" --task "$TASK" --with-task "$OTHER_TASK"
+tw team run --root "$PROJECT" --context "$CONTEXT"
+tw team run --root "$PROJECT" --task "$TASK" --with-task "$OTHER_TASK"
 ```
 
 任务、项目默认及风险检查取并集；`--with-task` 可重复。同一批次每项检查执行一次，
@@ -130,10 +126,10 @@ python3 "$WF" run --root "$PROJECT" --task "$TASK" --with-task "$OTHER_TASK"
 每项检查独立选取结果。一份批次中某项检查过期，只影响这一项：用 `run --check <该项>` 聚焦重跑，
 再把新旧记录一起传给 `--run`。核查为每项检查选用当前有效的最新结果，过期或被替代的记录列在
 `superseded_execution` 中。环境只在业务验收（`verify --phase acceptance`）时实际核对；之后的
-`knowledge` 与最终 `verify` 使用验收时记录的环境（`environment_checked: recorded at acceptance`），
+最终 `verify` 使用验收时记录的环境（`environment_checked: recorded at acceptance`），
 隔离数据库等夹具清理后已完成的验收仍然有效。源码、定义、评审和平台在每一步都重新核对。
 旧候选的原始报告不符合当前用例要求时，只记录该候选的问题，继续选择其它候选；导入记录也遵守离线环境核查规则。
-知识文件、暂存布局和无关流程配置变化不会自动重复业务测试。运行期间的协作标记位于 `.team-workflow/validation-active/`；共享目录保持稳定。标记不拦截编辑器写入，起止指纹也不证明期间绝无改动。
+知识正文（`.tw/` 下的条目）、暂存布局和无关流程配置变化不会使按内容绑定的检查过期。运行期间的协作标记位于 `.tw/local/validation-active/`；共享目录保持稳定。标记不拦截编辑器写入，起止指纹也不证明期间绝无改动。
 
 本地评审输入写在任务输入目录，例如：
 
@@ -144,7 +140,7 @@ python3 "$WF" run --root "$PROJECT" --task "$TASK" --with-task "$OTHER_TASK"
 `reviewer` 必填；`confirmation` 可省略，有依据时建议填写。批准可以由他人代为记录。生成记录：
 
 ```bash
-python3 "$WF" approval-draft --root "$PROJECT" --context "$CONTEXT" \
+tw team approval-draft --root "$PROJECT" --context "$CONTEXT" \
   --record "$APPROVAL_INPUT" --run "$RUN"
 ```
 
@@ -155,9 +151,9 @@ python3 "$WF" approval-draft --root "$PROJECT" --context "$CONTEXT" \
 验收仍须真实评审证据；省略记录不能绕过已配置的检查。草稿不产生批准事实。
 
 ```bash
-python3 "$WF" review-template --root "$PROJECT" --context "$CONTEXT" \
+tw team review-template --root "$PROJECT" --context "$CONTEXT" \
   --approval "$APPROVAL" --run "$RUN"
-python3 "$WF" evidence --root "$PROJECT" --path <实际证据文件>
+tw team evidence --root "$PROJECT" --path <实际证据文件>
 ```
 
 将默认未通过的模板复制为本任务的评审输入，实际阅读代码、需求与报告后填写：具体
@@ -165,82 +161,52 @@ python3 "$WF" evidence --root "$PROJECT" --path <实际证据文件>
 当前风险、知识冲突处置和未解决问题。证据使用命令返回的路径与指纹；只引用测试源码
 不能证明测试已通过。保留生成时的任务、源码、章节绑定，过期时重新评审。
 
-## 先验收，再回写知识
+## 先验收，再更新知识
 
 ```bash
-python3 "$WF" delivery-template --root "$PROJECT" --context "$CONTEXT" \
+tw team delivery-template --root "$PROJECT" --context "$CONTEXT" \
   --approval "$APPROVAL" --run "$RUN" --review "$REVIEW"
-python3 "$WF" verify --root "$PROJECT" --context "$CONTEXT" \
-  --report "$DELIVERY" --phase acceptance --cs-skill "$CS_SKILL" \
-  --out .team-workflow/acceptance-<本次唯一编号>.json
+tw team verify --root "$PROJECT" --context "$CONTEXT" \
+  --report "$DELIVERY" --phase acceptance \
+  --out .tw/local/acceptance-<本次唯一编号>.json
 ```
 
 成功结果中的 `business_accepted` 为真，但 `delivery_complete`、`closable` 仍为假。
-保存验收产物路径 `$ACCEPTANCE`，再按 CS 的完整规则写回最终结果。知识草稿使用：
 
-```bash
-python3 "$WF" knowledge-template --root "$PROJECT" --context "$CONTEXT" \
-  --acceptance "$ACCEPTANCE" --cs-skill "$CS_SKILL"
+验收通过后，按 team-knowledge 的写作规范在同一分支直接修改 `.tw/` 条目：根因不明显的缺陷写 lesson，
+难以逆转的选择写 decision，改变了必须保持的行为写 rule；没有可复用结论时不写。运行 `tw check`，修复全部错误。
+
+交付报告的 `knowledge` 字段写知识处置：
+
+```json
+"knowledge": {"files": [".tw/lessons/2026-10-14-retry-storm.md"], "reason": ""}
 ```
 
-把返回的 `artifact.path` 复制为待填写的 `$CS_PAYLOAD`。继续同一任务加 `--cs-task-id`。
-工具通过 CS 的公开模板接口生成输入，保留实际验收引用与结构化任务关联；省略验收时
-只生成 `in-progress` 和空 `items`。工作流不执行 CS 写入。
-
-多个 Issue 共用一次实现时共用一条 CS 任务记录，各自保留验收。用 `--with-task` 列出其余任务，
-`--acceptance` 按任务重复：
+`delivery-template` 根据任务 `base` 到工作区的 Git 差异预填 `files`；没有知识改动时 `files` 为空，
+必须在 `reason` 写明不需要更新的理由。`.tw/.gitignore` 和 `config.json` 不算知识。多个 Issue 共用一次实现时，知识改动只写一次，各任务的报告分别列出。
 
 ```bash
-python3 "$WF" knowledge-template --root "$PROJECT" --context "$CONTEXT" \
-  --with-task "$TASK_150" --with-task "$TASK_152" \
-  --acceptance "$ACCEPTANCE_149" --acceptance "$ACCEPTANCE_150" --acceptance "$ACCEPTANCE_152" \
-  --cs-task-id "$CS_TASK_ID" --cs-skill "$CS_SKILL"
+tw check --root "$PROJECT"
+tw team delivery-template --root "$PROJECT" --context "$CONTEXT" \
+  --approval "$APPROVAL" --run "$RUN" --review "$REVIEW" \
+  --acceptance .tw/local/acceptance-<本次唯一编号>.json
+tw team verify --root "$PROJECT" --context "$CONTEXT" --report "$FINAL_DELIVERY"
 ```
 
-草稿写入 `task.source.workflow_acceptances`（每项 `{path, sha256, task_id, issue?}`）和每个任务的
-`external_refs`。全部任务都有验收时才为 `completed`，否则保持 `in-progress` 并在
-`pending_acceptance` 列出待验收任务，可以逐个补齐。CS 按 `path` 合并该列表，提交较短的旧列表不会丢失
-已有条目。之后每个任务分别运行 `knowledge`，只传自己的一份验收；工具核对 CS 记录包含该验收的当前指纹。
+最终核查默认阶段为 `delivery`：报告的 `acceptance` 必须指向本任务通过的业务验收记录（上面
+`--phase acceptance --out` 的产物）。验收之后任务、方案章节、源码，以及交付报告引用的执行、评审、
+批准材料都不能变化，否则用当前材料重新验收。`files` 必须正好列出本任务相对 `base` 改动的知识正文
+（含删除、未跟踪的新文件），`delivery-template` 已按此预填；`tw check` 必须没有错误；`files` 为空时
+`reason` 必填。工具不判断知识是否充分，这由评审人确认。知识正文不参与执行绑定，
+提交知识不会使按内容绑定的检查过期。
 
-填写实际结果、验证和知识处置，不把未通过验收的
-工作标为完成。外部关联写入 `task.external_refs`，不依赖请求正文包含链接。
-
-```bash
-python3 "$CS_SKILL/scripts/cs_knowledge.py" --root "$PROJECT" learn \
-  --file "$CS_PAYLOAD" --dry-run --plan-out "$CS_PLAN"
-python3 "$CS_SKILL/scripts/cs_knowledge.py" --root "$PROJECT" learn \
-  --file "$CS_PAYLOAD" --plan-file "$CS_PLAN"
-python3 "$CS_SKILL/scripts/cs_knowledge.py" --root "$PROJECT" doctor
-```
-
-`$CS_PLAN` 每次选择项目外的新路径。第一条明确成功并产生本次计划后才执行第二条；
-失败立即停止，不能应用同名旧文件。CS 负责独占创建、并发和幂等保证，工作流不绕过它。
-
-新增知识使查询结果变化时，追加 `brief --context "$CONTEXT"` 获取 `$FINAL_BRIEF`，
-保留原来的 `$BRIEF`。随后只读捕获完成状态：
-
-```bash
-python3 "$WF" knowledge --root "$PROJECT" --context "$CONTEXT" \
-  --acceptance "$ACCEPTANCE" --brief "$BRIEF" --final-brief "$FINAL_BRIEF" \
-  --cs-task-id "$CS_TASK_ID" --disposition none --reason '<实际知识处置原因>' \
-  --cs-skill "$CS_SKILL"
-python3 "$WF" delivery-template --root "$PROJECT" --context "$CONTEXT" \
-  --approval "$APPROVAL" --run "$RUN" --review "$REVIEW" --knowledge "$KNOWLEDGE"
-python3 "$WF" verify --root "$PROJECT" --context "$CONTEXT" \
-  --report "$FINAL_DELIVERY" --cs-skill "$CS_SKILL"
-```
-
-没有查询变化时可省略 `--final-brief`。`none/reused/updated/added` 描述实际知识处置，
-不要求每次新增卡片。`knowledge` 不执行 CS 写入；它核对当前业务验收、规范任务记录、
-结构化关联及相关来源。真正有知识使用影响时仍按 CS 保存证据。
-
-最终核查默认阶段为 `delivery`。Issue 身份自动触发平台核查，漏传 `--issue` 不能绕过。
-交付完整还需要当前交接无剩余事项、未决问题及未确认进度。关闭另需明确授权：报告可
-记录 `close_authorization: {confirmed_by, reference}`；工具仅报告状态，不执行关闭。
+Issue 身份自动触发平台核查，漏传 `--issue` 不能绕过。交付完整还需要当前交接无剩余事项、
+未决问题及未确认进度。关闭另需明确授权：报告可记录 `close_authorization: {confirmed_by, reference}`；
+工具仅报告状态，不执行关闭。
 
 ### 回归自动化状态
 
-`delivery_complete` 只表示验收、知识回写和交接记录齐全，不表示应沉淀的回归已经自动化。
+`delivery_complete` 只表示验收、知识处置和交接记录齐全，不表示应沉淀的回归已经自动化。
 报告可在 `delivery-template` 生成后手工加入可选的 `automation`，按场景声明回归状态；
 每次重新生成模板后需再次加入。未声明时结果为 `automation_status: "not-declared"`。
 
@@ -296,8 +262,8 @@ python3 "$WF" verify --root "$PROJECT" --context "$CONTEXT" \
 目录下的新文件，已有路径拒绝覆盖。失败输出给出原因及下一步；不要改指纹消除错误。
 
 ```bash
-python3 "$WF" cleanup --root "$PROJECT" [--cleanup-scope all --older-than 14] > "$CLEANUP_PLAN"
-python3 "$WF" cleanup --root "$PROJECT" --apply --plan "$CLEANUP_PLAN"
+tw team cleanup --root "$PROJECT" [--cleanup-scope all --older-than 14] > "$CLEANUP_PLAN"
+tw team cleanup --root "$PROJECT" --apply --plan "$CLEANUP_PLAN"
 ```
 
 `--cleanup-scope all` 另外清理超过指定天数且未被任何记录引用的 `batches/`、`imports/` 目录和已结束进程留下的
@@ -316,17 +282,16 @@ python3 "$WF" cleanup --root "$PROJECT" --apply --plan "$CLEANUP_PLAN"
 ## 进度、恢复与统计
 
 ```bash
-python3 "$WF" status --root "$PROJECT" --context "$CONTEXT" --format text
-python3 "$WF" metrics --root "$PROJECT" [--task "$TASK"] [--since 2026-10-01] [--format text]
+tw team status --root "$PROJECT" --context "$CONTEXT" --format text
+tw team metrics --root "$PROJECT" [--task "$TASK"] [--since 2026-10-01] [--format text]
 ```
 
-`status` 根据工具已记录的请求列出任务步骤（准备、运行检查、评审、业务验收、知识草稿、知识核对、最终交付），
+`status` 根据工具已记录的请求列出任务步骤（准备、运行检查、评审、业务验收、最终交付），
 每步为 `done`、`pending`、`stale`（源码已变需重做）、`failed`、`running-or-interrupted` 或
 `not-recorded`（工具没有记录，可能已在工具外完成，或较早的失败已被后续成功步骤取代）；最近一次尝试被中断或失败时
-显示该状态并作为下一步。执行步骤读取每项结果的源码指纹（声明依赖提交编号的检查还比较提交）；知识完成记录与
-知识草稿读取其引用的验收记录，源码变化时也显示 `stale`。此项核查只读取材料，不执行环境命令。
-`next_step.next_command` 已填入当前上下文和已产生文件的路径，`$WF`、`$PROJECT`、
-`$CS_SKILL` 及尚未产生的文件用变量或占位符标出。使用 `--allow-modified-tool` 产生的结果只在没有正常结果时采用，并标注。
+显示该状态并作为下一步。执行步骤读取每项结果的源码指纹（声明依赖提交编号的检查还比较提交），源码变化时显示 `stale`。
+此项核查只读取材料，不执行环境命令。
+`next_step.next_command` 已填入当前上下文和已产生文件的路径，`$PROJECT` 及尚未产生的文件用变量或占位符标出。使用 `--allow-modified-tool` 产生的结果只在没有正常结果时采用，并标注。
 会话中断后先运行它再继续。任务开始后团队流程规则（技能入口、参考页、分发指引）有变化时，`rules_changed` 为真。
 
 `metrics` 只读本机运行目录，按任务统计各命令的请求次数、失败与未完成次数、耗时，以及每项检查的运行和重跑次数，
@@ -335,7 +300,7 @@ python3 "$WF" metrics --root "$PROJECT" [--task "$TASK"] [--since 2026-10-01] [-
 ## 前置任务与只读状态
 
 任务节的 `blocked_by` 需要实际业务验收证明。为每个前置项保存
-`{"section":"T1","task":".team-workflow/.../task.json","report":".team-workflow/.../delivery.json"}`，
+`{"section":"T1","task":".tw/local/.../task.json","report":".tw/local/.../delivery.json"}`，
 在 `prepare`、`handoff` 或生成交付模板时重复传 `--dependency <输入文件>`。
 工具重新核对前置项的原始报告与批准，不能用 Issue 已关闭代替验收。准备结果把本次
 核对的材料保存在 context 中，后续最终交付仍重新核对。

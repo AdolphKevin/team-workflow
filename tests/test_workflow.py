@@ -10,14 +10,29 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-SCRIPTS = Path(__file__).resolve().parents[1] / 'skills/team-workflow/scripts'
+SCRIPTS = Path(__file__).resolve().parents[1] / 'skills/team-knowledge/scripts/tw_runtime/team'
 sys.path.insert(0, str(SCRIPTS))
+sys.path.insert(0, str(SCRIPTS.parents[1]))
 # The source tree changes during development; integrity gates are proven in test_integrity.py.
 os.environ.setdefault('TEAM_WORKFLOW_ALLOW_MODIFIED_TOOL', '1')
 from common import Invalid, artifact, profile_valid, snapshot, task_valid, write
 import execution
 import validation
 import workflow
+
+
+def configuration(root, profile):
+    from tw_runtime import FORMAT
+    from tw_runtime.gitutil import remote_identity
+    return {'format': FORMAT, 'data_version': 1,
+            'project': {'id': remote_identity(root) or 'local:sample', 'name': profile['project']},
+            'context': list(profile['context']), 'shared': {}, 'documents': [],
+            **{key: profile[key] for key in ('checks', 'required_checks', 'risk_checks', 'inputs',
+                                          'external_inputs', 'environment_versions', 'accounts')}}
+
+
+def write_config(root, profile):
+    write(root / '.tw/config.json', configuration(root, profile))
 
 
 class WorkflowCases(unittest.TestCase):
@@ -29,19 +44,28 @@ class WorkflowCases(unittest.TestCase):
         self.git('config', 'user.email', 'test@example.invalid')
         self.git('config', 'user.name', 'Fixture')
         self.git('config', 'commit.gpgsign', 'false')
-        (self.root / '.gitignore').write_text('.team-workflow/\n__pycache__/\n')
+        (self.root / '.gitignore').write_text('__pycache__/\n')
         (self.root / 'AGENTS.md').write_text('Respect the public behavior.\n')
         (self.root / 'app.py').write_text('def add(a, b):\n    return a+b\n')
         self.git('add', '.')
         self.git('commit', '-qm', 'fixture')
-        self.profile = {'schema_version': 5, 'project': 'sample', 'context': ['AGENTS.md'],
-                        'knowledge': {'provider': 'cs', 'entry': '.codestable/wiki/INDEX.md'},
+        self.profile = {'data_version': 1, 'project': 'sample', 'context': ['AGENTS.md'],
+                        'external_inputs': {}, 'accounts': [],
                         'checks': {}, 'required_checks': {'code': [], 'docs': []},
                         'risk_checks': {}, 'inputs': [], 'environment_versions': {}}
-        self.task = {'schema_version': 5, 'id': 'TASK-fixture', 'base': self.git('rev-parse', 'HEAD').strip(),
+        self.task = {'data_version': 1, 'id': 'TASK-fixture', 'base': self.git('rev-parse', 'HEAD').strip(),
                      'goal': 'Addition works', 'non_goals': [], 'kind': 'code', 'risks': [],
                      'acceptance': [{'id': 'A1', 'expectation': '1 + 2 is 3', 'checks': []}],
                      'design_id': 'D-add', 'section_ids': ['T1'], 'acceptance_scope': 'requirement', 'paths': ['app.py']}
+
+        from tw_runtime import init
+        from tw_fixtures import entry
+        init.run(self.root, apply=True)
+        (self.root / '.tw/overview.md').write_text(entry('算术服务', '通过 app.add 计算加法。', source=['self:AGENTS.md']))
+        write_config(self.root, self.profile)
+        self.git('add', '.tw')
+        self.git('commit', '-qm', 'initialized knowledge and team configuration')
+        self.task['base'] = self.git('rev-parse', 'HEAD').strip()
 
     def git(self, *args):
         return subprocess.check_output(['git', '-C', str(self.root), *args], text=True)
@@ -63,81 +87,27 @@ class WorkflowCases(unittest.TestCase):
         profile_valid(self.profile, self.root)
         return validation.run_batch(self.root, self.profile, [self.task])
 
-    def fake_cs(self):
-        """Contract stub, not evidence of CS production compatibility."""
-        skill = self.root / '.team-workflow/cs-fixture'
-        (skill / 'scripts').mkdir(parents=True)
-        (skill / 'SKILL.md').write_text('CS protocol fixture')
-        wiki = self.root / '.codestable/wiki'
-        wiki.mkdir(parents=True)
-        (wiki / 'INDEX.md').write_text('Project knowledge')
-        (wiki / 'task.md').write_text(self.task['id'] + '\ncompleted')
-        write(self.root / '.codestable/config.json', {'version': '2.1.0'})
-        (skill / 'scripts/bootstrap.py').write_text('import json\nprint(json.dumps({"ok":True,"skill_version":"2.1.0","contract_version":1,"integrity":{"status":"intact","changed":[],"missing":[],"unexpected":[]},"capabilities":["documents","receipt-check","task-files","task-external-refs","exclusive-plan-file","review-actions","task-source-acceptances","install-integrity"]}))')
-        reply = {'ok': True, 'state': '0'*64, 'kind': 'receipt-check', 'read_only': True, 'query_state': {}, 'changed': [], 'receipt': {'query_state': {}}, 'task_status': 'completed', 'canonical_task_id': 'CS-T', 'task_revision': 1,
-                 'files': ['.codestable/wiki/task.md'],
-                 'records': [{'id': 'CS-T', 'path': '.codestable/wiki/task.md', 'relations': ['task-note']} ]}
-        reply['scopes'] = self.task.get('scopes') or [{'repository': 'self', 'path': p} for p in self.task.get('paths', ['app.py'])]
-        reply['external_refs'] = [{'system': 'github' if self.task['id'].startswith('https://github.com/') else 'team-workflow', 'id': self.task['id']}]
-        (skill / 'scripts/cs_knowledge.py').write_text(
-            'import json,sys,hashlib\nfrom pathlib import Path\n'
-            + 'reply=' + repr(reply) + '\n'
-            + 'root=Path(sys.argv[sys.argv.index("--root")+1])\n'
-            + 'if "template" in sys.argv:\n'
-            + ' p=root/".team-workflow/acceptance.json"\n'
-            + ' ' + 'source={"workflow_acceptances":[dict({"path":str(p.relative_to(root)),"sha256":hashlib.sha256(p.read_bytes()).hexdigest(),"task_id":json.loads(p.read_text())["task_id"]},**({"issue":reply["external_refs"][0]["id"]} if reply["external_refs"][0]["system"]=="github" else {}))]} if p.exists() else {}' + '\n'
-            + ' reply={"ok":True,"task":{"source":source,"status":"completed","summary":"fixture","result":"fixture","scopes":reply["scopes"]},"items":[]}\n'
-            + 'print(json.dumps(reply))\n')
-        return skill
 
-    def test_project_rejects_unsupported_cs_before_work_starts(self):
-        skill = self.fake_cs()
-        (skill / 'scripts/bootstrap.py').write_text('print(\'{"ok":true,"skill_version":"2.0.0"}\')')
-        write(self.root / '.team-workflow.json', self.profile)
-        output = io.StringIO()
-        with contextlib.redirect_stdout(output):
-            status = workflow.main(['project', '--root', str(self.root), '--cs-skill', str(skill)])
-        result = json.loads(output.getvalue())
-        self.assertEqual(status, 1)
-        self.assertFalse(result['ok'])
-        self.assertEqual(result['cs']['status'], 'incomplete')
-        self.assertIn('contract', result['cs']['reason'])
 
-    def test_project_rejects_modified_or_incomplete_cs_install(self):
-        skill = self.fake_cs()
-        write(self.root / '.team-workflow.json', self.profile)
-        bootstrap = skill / 'scripts/bootstrap.py'
-        original = bootstrap.read_text()
-        cases = [(original.replace('"status":"intact","changed":[]', '"status":"modified","changed":["scripts/knowledge.py"]'),
-                  'scripts/knowledge.py'),
-                 (original.replace(',"install-integrity"', ''), 'install-integrity')]
-        for script, reason in cases:
-            with self.subTest(reason=reason):
-                bootstrap.write_text(script)
-                output = io.StringIO()
-                with contextlib.redirect_stdout(output):
-                    status = workflow.main(['project', '--root', str(self.root), '--cs-skill', str(skill)])
-                self.assertEqual(status, 1)
-                self.assertIn(reason, json.loads(output.getvalue())['cs']['reason'])
 
     def test_unexpected_exception_is_reported_as_tool_defect_with_response(self):
         import commands
-        write(self.root / '.team-workflow.json', self.profile)
-        write(self.root / '.team-workflow/task.json', self.task)
+        write_config(self.root, self.profile)
+        write(self.root / '.tw/local/task.json', self.task)
         output = io.StringIO()
         with patch.object(commands, 'produce', side_effect=NameError("name 'read' is not defined")), \
                 contextlib.redirect_stdout(output):
-            status = workflow.main(['task-export', '--root', str(self.root), '--task', '.team-workflow/task.json',
+            status = workflow.main(['task-export', '--root', str(self.root), '--task', '.tw/local/task.json',
                                     '--request-id', 'defect'])
         result = json.loads(output.getvalue())
         self.assertEqual(status, 1)
         self.assertEqual(result['error_code'], 'tool-defect')
         self.assertIn('NameError', result['problem'])
         self.assertIn('installed skill', result['next_action'])
-        responses = list((self.root / '.team-workflow/tasks').glob('*/requests/defect/response.json'))
+        responses = list((self.root / '.tw/local/tasks').glob('*/requests/defect/response.json'))
         self.assertEqual(len(responses), 1)
         with patch.object(commands, 'dispatch', side_effect=RuntimeError('boom')), contextlib.redirect_stdout(io.StringIO()) as raw:
-            self.assertEqual(workflow.main(['snapshot', '--root', str(self.root), '--task', '.team-workflow/task.json']), 1)
+            self.assertEqual(workflow.main(['snapshot', '--root', str(self.root), '--task', '.tw/local/task.json']), 1)
         self.assertEqual(json.loads(raw.getvalue())['error_code'], 'tool-defect')
 
     def test_deleted_and_untracked_files_change_fingerprint(self):
@@ -155,7 +125,7 @@ class WorkflowCases(unittest.TestCase):
 
     def test_knowledge_write_does_not_invalidate_source(self):
         old = snapshot(self.root, self.profile)
-        self.fake_cs()
+        (self.root / '.tw/overview.md').write_text((self.root / '.tw/overview.md').read_text() + '\n新的说明。\n')
         self.assertEqual(old, snapshot(self.root, self.profile))
 
     def test_unknown_risk_and_unmapped_risk_block(self):
@@ -219,7 +189,7 @@ class WorkflowCases(unittest.TestCase):
         self.assertEqual(record['results'], [])
 
     def test_ignored_explicit_input_changes_binding(self):
-        (self.root / '.gitignore').write_text('.team-workflow/\nsecret-config.json\n')
+        (self.root / '.gitignore').write_text('secret-config.json\n')
         (self.root / 'secret-config.json').write_text('one')
         self.profile['inputs'] = ['secret-config.json']
         before = snapshot(self.root, self.profile)
@@ -245,13 +215,13 @@ class WorkflowCases(unittest.TestCase):
 
     def test_project_check_does_not_execute_project_commands(self):
         self.check("from pathlib import Path; Path('should-not-exist').touch()")
-        write(self.root / '.team-workflow.json', self.profile)
+        write_config(self.root, self.profile)
         with contextlib.redirect_stdout(io.StringIO()):
-            self.assertEqual(workflow.main(['project', '--root', str(self.root)]), 1)  # CS absent
+            self.assertEqual(workflow.main(['project', '--root', str(self.root)]), 0)
         self.assertFalse((self.root / 'should-not-exist').exists())
 
     def test_scenario_requires_fresh_bound_review(self):
-        out = self.root / '.team-workflow/scenario'
+        out = self.root / '.tw/local/scenario'
         out.mkdir(parents=True)
         write(out / 'manifest.json', {'run_id': 'scenario-1'})
         write(out / 'suite-transcript.json', {'actual': 'fixture'})
@@ -282,7 +252,7 @@ class WorkflowCases(unittest.TestCase):
         with self.assertRaises(Invalid):
             profile_valid(self.profile, self.root)
         with self.assertRaises(Invalid):
-            execution.output_path(self.root, self.root / '.team-workflow', '{output}/../escape')
+            execution.output_path(self.root, self.root / '.tw/local', '{output}/../escape')
 
     def test_incomplete_package_or_junit_counts_cannot_pass(self):
         stream = '\n'.join(json.dumps(e) for e in [
@@ -302,7 +272,7 @@ class WorkflowCases(unittest.TestCase):
         path = Path(outside.name) / 'go.work'
         path.write_text('workspace A')
         self.profile['external_inputs'] = {'workspace': {'kind': 'file'}}
-        write(self.root / '.team-workflow/local.json', {'inputs': {'workspace': str(path)}})
+        write(self.root / '.tw/local/repositories.json', {'inputs': {'workspace': str(path)}})
         profile_valid(self.profile, self.root)
         before = snapshot(self.root, self.profile)
         path.write_text('workspace B')

@@ -30,7 +30,6 @@ class PortableCases(unittest.TestCase):
     setUp = fixtures.WorkflowCases.setUp
     git = fixtures.WorkflowCases.git
     check = fixtures.WorkflowCases.check
-    fake_cs = fixtures.WorkflowCases.fake_cs
 
     def prepare(self, xml=None, **options):
         self.git('remote', 'add', 'origin', 'https://github.com/example/project.git')
@@ -46,7 +45,7 @@ class PortableCases(unittest.TestCase):
         row['required_cases'] = ['Arithmetic::adds']
 
     def capture(self, provider=True):
-        self.directory = self.root / '.team-workflow/ci' / uuid.uuid4().hex
+        self.directory = self.root / '.tw/local/ci' / uuid.uuid4().hex
         context = {'GITHUB_ACTIONS': 'true', 'GITHUB_REPOSITORY': 'example/project',
                    'GITHUB_RUN_ID': '17', 'GITHUB_RUN_ATTEMPT': '2', 'GITHUB_JOB': 'test'} if provider else {'GITHUB_ACTIONS': 'false'}
         with patch.dict(os.environ, context):
@@ -109,7 +108,7 @@ class PortableCases(unittest.TestCase):
         self.assertTrue(all(not Path(row['path']).is_absolute() for row in result['artifacts']))
         self.assertEqual(record['started_at'], original['started_at'])
 
-    def test_shared_schema6_import_reevaluates_portable_command_paths(self):
+    def test_shared_import_reevaluates_portable_command_paths(self):
         self.prepare()
         self.profile['checks']['unit']['required_cases'] = ['adds']
         self.capture()
@@ -199,12 +198,12 @@ class PortableCases(unittest.TestCase):
 
     def test_imported_execution_reuses_recorded_environment_offline(self):
         self.prepare()
-        marker = self.root / '.team-workflow/fixture-id.txt'
+        marker = self.root / '.tw/local/fixture-id.txt'
         marker.parent.mkdir(exist_ok=True)
         marker.write_text('isolated-database-1')
         self.profile['checks']['unit']['environment'] = {'kind': 'fixture',
             'identity': [sys.executable, '-c',
-                "from pathlib import Path; print(Path('.team-workflow/fixture-id.txt').read_text())"]}
+                "from pathlib import Path; print(Path('.tw/local/fixture-id.txt').read_text())"]}
         self.capture()
         path, _ = self.import_result()
         names = [path.relative_to(self.root).as_posix()]
@@ -226,7 +225,7 @@ class PortableCases(unittest.TestCase):
 
     def test_declared_frontend_repository_is_executed_and_captured(self):
         self.prepare()
-        frontend = self.root / '.team-workflow/frontend'
+        frontend = self.root / '.tw/local/frontend'
         frontend.mkdir(parents=True)
         for argv in [('init', '-q'), ('config', 'user.email', 'test@example.invalid'),
                      ('config', 'user.name', 'Fixture'), ('config', 'commit.gpgsign', 'false'),
@@ -236,7 +235,7 @@ class PortableCases(unittest.TestCase):
         (frontend / '.gitignore').write_text('__pycache__/\n')
         subprocess.check_call(['git', '-C', str(frontend), 'add', '.'])
         subprocess.check_call(['git', '-C', str(frontend), 'commit', '-qm', 'frontend fixture'])
-        write(self.root / '.team-workflow/local.json', {'repositories': {'example/frontend': str(frontend)}})
+        write(self.root / '.tw/local/repositories.json', {'repositories': {'example/frontend': str(frontend)}})
         self.profile['external_inputs'] = {'web': {'kind': 'repository', 'repository': 'example/frontend', 'role': 'modified'}}
         check = self.profile['checks']['unit']
         check['repository'] = 'example/frontend'
@@ -295,7 +294,7 @@ class PortableCases(unittest.TestCase):
         self.assertEqual(target['fixture']['identity'], 'fixture-v1')
         with patch('platform.system', return_value='Darwin'), patch('platform.machine', return_value='arm64'):
             with self.assertRaisesRegex(Invalid, 'environment|target'):
-                validation.capture(self.root, self.profile, 'unit', self.root / '.team-workflow/local-incompatible')
+                validation.capture(self.root, self.profile, 'unit', self.root / '.tw/local/local-incompatible')
 
     def test_remote_target_must_match_complete_recorded_environment(self):
         self.prepare()
@@ -314,7 +313,7 @@ class PortableCases(unittest.TestCase):
 
 
 class AggregateCases(unittest.TestCase):
-    """Actual local execution, review and CS protocol responses across three repos."""
+    """Actual local execution and review across three repositories."""
 
     def setUp(self):
         self.fixtures, self.roots = {}, {}
@@ -327,46 +326,33 @@ class AggregateCases(unittest.TestCase):
             fixture.task.update(id='TASK-' + name, parent='JOINT-fixture',
                                 design_id='design-' + name, section_ids=['T1'], paths=['app.py'], acceptance_scope='task')
             fixture.check('import app; assert app.add(1,2)==3')
-            fixture.skill = fixture.fake_cs()
             self.fixtures[name] = fixture
             self.roots['example/' + name] = fixture.root
         core = self.fixtures['core']
         self.root = core.root
-        self.skill = core.skill
         core.task['risks'] = ['cross-service']
         core.profile['risk_checks'] = {'cross-service': ['unit']}
         core.profile['external_inputs'] = {
             'gateway': {'kind': 'repository', 'repository': 'example/gateway', 'role': 'joint'},
             'common': {'kind': 'repository', 'repository': 'example/common', 'role': 'build'}}
-        write(core.root / '.team-workflow/local.json', {'repositories': {
+        write(core.root / '.tw/local/repositories.json', {'repositories': {
             key: str(value) for key, value in self.roots.items() if key != 'example/core'}})
         core.profile['checks']['unit']['argv'][2] = (
             'import app, json, importlib.util; from pathlib import Path; assert app.add(1,2)==3; '
-            'locations=json.loads(Path(".team-workflow/local.json").read_text())["repositories"]; '
+            'locations=json.loads(Path(".tw/local/repositories.json").read_text())["repositories"]; '
             '\nfor repo in ("example/gateway","example/common"):\n'
             ' spec=importlib.util.spec_from_file_location("dependency", str(Path(locations[repo])/"app.py")); '
             'module=importlib.util.module_from_spec(spec); spec.loader.exec_module(module); assert module.add(1,2)==3\n'
             'print("joint public arithmetic behavior passed")')
-        # A real CS installation accepts --root for every project. The process
-        # fixture returns each project's note identity from that actual root.
-        script = self.skill / 'scripts/cs_knowledge.py'
-        script.write_text('import json,sys,hashlib\nfrom pathlib import Path\n'
-            'root=Path(sys.argv[sys.argv.index("--root")+1])\n'
-            'task=(root/".codestable/wiki/task.md").read_text().splitlines()[0]\n'
-            'p=root/".team-workflow/acceptance.json"\n'
-            'reply={"ok":True,"kind":"receipt-check","read_only":True,"query_state":{},'
-            '"changed":[],"receipt":{"query_state":{}},"task_status":"completed",'
-            '"canonical_task_id":"CS-T","task_revision":1,"files":[".codestable/wiki/task.md"],'
-            '"records":[{"id":"CS-T","path":".codestable/wiki/task.md","relations":["task-note"]}],'
-            '"scopes":[{"repository":"self","path":"app.py"}],'
-            '"external_refs":[{"system":"team-workflow","id":task}]}\n'
-            'if "template" in sys.argv:\n'
-            ' reply={"ok":True,"task":{"source":{"workflow_acceptances":[{"path":str(p.relative_to(root)),"sha256":hashlib.sha256(p.read_bytes()).hexdigest(),"task_id":task}]}}}\n'
-            'print(json.dumps(reply))\n')
-        self.manifest = {'schema_version': 5, 'task_id': 'JOINT-fixture', 'joint': 'example/core',
+        for fixture in self.fixtures.values():
+            fixtures.write_config(fixture.root, fixture.profile)
+            fixture.git('add', '.tw/config.json')
+            fixture.git('commit', '-qm', 'configure participant checks')
+            fixture.task['base'] = fixture.git('rev-parse', 'HEAD').strip()
+        self.manifest = {'data_version': 1, 'task_id': 'JOINT-fixture', 'joint': 'example/core',
             'participants': [{'repository': 'example/' + name, 'commit': fixture.task['base'],
-                'profile': '.team-workflow/profile.json', 'task': '.team-workflow/task.json',
-                'report': '.team-workflow/report.json'}
+                'profile': '.tw/config.json', 'task': '.tw/local/task.json',
+                'report': '.tw/local/report.json'}
                 for name, fixture in self.fixtures.items() if name != 'common'],
             'dependencies': [{'repository': 'example/common', 'commit': self.fixtures['common'].task['base']}]}
         for name in ('core', 'gateway'):
@@ -376,11 +362,11 @@ class AggregateCases(unittest.TestCase):
         parent_task.pop('parent', None)
         self.parent_fixture = SimpleNamespace(root=self.root, profile=self.fixtures['core'].profile, task=parent_task)
         self.complete(self.parent_fixture, prefix='parent-', knowledge_complete=False)
-        self.manifest['requirement'] = {'repository': 'example/core', 'task': '.team-workflow/parent-task.json', 'report': '.team-workflow/parent-report.json'}
+        self.manifest['requirement'] = {'repository': 'example/core', 'task': '.tw/local/parent-task.json', 'report': '.tw/local/parent-report.json'}
 
     def complete(self, fixture, portable_run=False, prefix='', knowledge_complete=True):
         root, profile, task = fixture.root, fixture.profile, fixture.task
-        design = {'schema_version': 5, 'kind': 'design', 'id': task['design_id'], 'revision': 1,
+        design = {'data_version': 1, 'kind': 'design', 'id': task['design_id'], 'revision': 1,
             'task_id': task.get('parent') or task['id'], 'assessment': {'complexity': 'medium', 'risks': list(task['risks']),
                 'effort': 'one hour', 'drivers': ['arithmetic behavior'], 'uncertainties': [], 'required_skills': ['Python']},
             'roles': {'design_owner': 'alice', 'implementation_owner': 'bob', 'acceptance_owner': 'carol'},
@@ -392,16 +378,23 @@ class AggregateCases(unittest.TestCase):
                  'data': {'acceptance': ['A1'], 'scope': ['app.py'], 'blocked_by': []}, 'depends_on': []}]}
         plans.plan(design)
         def save(name, value):
-            write(root / '.team-workflow' / (prefix + name + '.json'), value)
-            return '.team-workflow/' + prefix + name + '.json'
-        save('profile', profile)
+            write(root / '.tw/local' / (prefix + name + '.json'), value)
+            return '.tw/local/' + prefix + name + '.json'
+        fixtures.write_config(root, profile)
+        from common import git
+        git(root, 'add', '.tw/config.json')
+        if git(root, 'diff', '--cached', '--name-only'):
+            git(root, 'commit', '-qm', 'update participant configuration')
+            for participant in self.manifest['participants']:
+                if self.roots[participant['repository']] == root:
+                    participant['commit'] = git(root, 'rev-parse', 'HEAD').decode().strip()
         save('task', task)
-        brief = save('brief', knowledge.brief(root, task, self.skill, [], []))
+        brief = save('brief', knowledge.brief(root, task, [], []))
         run, _ = validation.run_batch(root, profile, [task], portable=portable_run)
         approval = designs.approval_draft(design, 'carol', 'Confirmed scope and testable acceptance')
-        report = {'schema_version': 6, 'task_id': task['id'], 'design': save('design', design),
+        report = {'data_version': 1, 'task_id': task['id'], 'design': save('design', design),
             'approvals': [save('approval', approval)], 'brief': brief, 'runs': [run.relative_to(root).as_posix()],
-            'review': '.team-workflow/' + prefix + 'review.json'}
+            'review': '.tw/local/' + prefix + 'review.json'}
         review = delivery.review_template(root, profile, task, report)
         ref = artifact(root, run)
         review.update(reviewer='carol', knowledge_conflicts_resolved=True)
@@ -409,14 +402,13 @@ class AggregateCases(unittest.TestCase):
             review[axis] = {'status': 'passed', 'summary': 'Read actual public behavior and executed results', 'evidence': [ref]}
         review['acceptance'] = [{'id': 'A1', 'status': 'passed', 'summary': 'Observed the declared arithmetic result', 'evidence': [ref], 'observations': [plans.observation(ref)]}]
         save('review', review)
-        accepted = delivery.verify(root, profile, task, report, self.skill, 'acceptance')
-        save('acceptance', accepted)
+        accepted = delivery.verify(root, profile, task, report, 'acceptance')
+        acceptance = save('acceptance', accepted)
         if not knowledge_complete:
             save('report', report)
             return
-        completion = knowledge.finish(root, profile, task, self.skill, 'CS-T', root / brief,
-            'none', 'Existing requirement remains sufficient', root / '.team-workflow/acceptance.json')
-        report['knowledge'] = save('knowledge', completion)
+        report['acceptance'] = acceptance
+        report['knowledge'] = {'files': [], 'reason': 'Existing requirement remains sufficient'}
         save('report', report)
         if fixture is self.fixtures['core'] and hasattr(self, 'parent_fixture'):
             self.complete(self.parent_fixture, prefix='parent-', knowledge_complete=False)
@@ -428,7 +420,7 @@ class AggregateCases(unittest.TestCase):
 
     def aggregate(self, manifest=None):
         with patch.object(github_read, 'api', side_effect=self.api):
-            return portable.aggregate(self.root, manifest or self.manifest, self.roots, self.skill)
+            return portable.aggregate(self.root, manifest or self.manifest, self.roots)
 
     def test_joint_execution_covers_both_deliveries_and_build_dependency(self):
         result = self.aggregate()
@@ -443,7 +435,7 @@ class AggregateCases(unittest.TestCase):
         missing.pop('requirement')
         with self.assertRaisesRegex(Invalid, 'requirement'):
             self.aggregate(missing)
-        path = self.root / '.team-workflow/parent-review.json'
+        path = self.root / '.tw/local/parent-review.json'
         review = read(path)
         review['acceptance'][0]['observations'] = []
         write(path, review)
@@ -469,7 +461,10 @@ class AggregateCases(unittest.TestCase):
     def test_modified_repository_cannot_hide_as_an_unreviewed_build_dependency(self):
         core = self.fixtures['core']
         core.profile['external_inputs']['common']['role'] = 'modified'
-        write(core.root / '.team-workflow/profile.json', core.profile)
+        fixtures.write_config(core.root, core.profile)
+        core.git('add', '.tw/config.json')
+        core.git('commit', '-qm', 'declare modified dependency')
+        self.manifest['participants'][0]['commit'] = core.git('rev-parse', 'HEAD').strip()
         with self.assertRaisesRegex(Invalid, 'no verified participant delivery'):
             self.aggregate()
 
@@ -480,7 +475,7 @@ class AggregateCases(unittest.TestCase):
             self.aggregate()
         common.git('restore', 'app.py')
         gateway = self.fixtures['gateway']
-        review_path = gateway.root / '.team-workflow/review.json'
+        review_path = gateway.root / '.tw/local/review.json'
         review = read(review_path)
         review['spec']['status'] = 'pending'
         write(review_path, review)
@@ -526,7 +521,7 @@ class PortableHelpers(unittest.TestCase):
             with zipfile.ZipFile(output, 'w') as archive:
                 archive.writestr(name, 'bad')
             with self.assertRaises(Invalid):
-                portable.unpack(output.getvalue(), self.root / '.team-workflow/imports/test')
+                portable.unpack(output.getvalue(), self.root / '.tw/local/imports/test')
 
 
 if __name__ == '__main__':

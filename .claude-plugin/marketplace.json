@@ -6,7 +6,7 @@
   "plugins": [
     {
       "name": "team-workflow",
-      "description": "基于独立 CS 的团队任务流程与 MATT 方法，支持分节评审、接力实施和真实验证。",
+      "description": "团队任务流程、项目知识（.tw）与 MATT 开发方法，支持分节评审、接力实施和真实验证。",
       "category": "productivity",
       "source": "./"
     }

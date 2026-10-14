@@ -4,7 +4,7 @@ from pathlib import Path
 import sys
 import unittest
 
-SCRIPTS = Path(__file__).resolve().parents[1] / 'skills/team-workflow/scripts'
+SCRIPTS = Path(__file__).resolve().parents[1] / 'skills/team-knowledge/scripts/tw_runtime/team'
 sys.path.insert(0, str(SCRIPTS))
 from common import Invalid
 import designs
@@ -313,7 +313,7 @@ class DesignCases(unittest.TestCase):
     def test_stale_format_or_forged_fingerprints_fail_closed(self):
         design = example()
         accepted = designs.approval_draft(design, 'alice', 'Plan approved')
-        for field, value in (('schema_version', 4), ('fingerprint_version', 0)):
+        for field, value in (('data_version', 2), ('fingerprint_version', 0)):
             with self.subTest(field=field):
                 stale = copy.deepcopy(accepted)
                 stale[field] = value
@@ -346,7 +346,7 @@ class DesignCases(unittest.TestCase):
         duplicate['sections'].append(copy.deepcopy(duplicate['sections'][1]))
         cases.append(duplicate)
         old = example()
-        old['schema_version'] = 4
+        old['data_version'] = 2
         cases.append(old)
         for value in cases:
             with self.subTest(value=value):

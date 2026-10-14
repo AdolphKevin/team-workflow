@@ -13,9 +13,9 @@ KNOWLEDGE = ROOT / 'skills/team-knowledge'
 
 
 def skill_manifest():
-    sys.path.insert(0, str(SKILL / 'scripts'))
-    import common
-    return common.manifest(SKILL)
+    sys.path.insert(0, str(KNOWLEDGE / 'scripts'))
+    from tw_runtime import install
+    return install.manifest(SKILL)
 
 
 def knowledge_manifest():

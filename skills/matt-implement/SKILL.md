@@ -1,9 +1,10 @@
 ---
 name: matt-implement
 description: "Implement a piece of work based on a spec or set of tickets."
+disable-model-invocation: true
 ---
 
-Before using this method, read the [CS integration rules](../team-workflow/references/matt-integration.md) for prerequisites and the shared knowledge entry.
+Before using this method, read the [knowledge and team rules](../team-workflow/references/matt-integration.md): project knowledge comes from team-knowledge (`tw brief`).
 
 
 Implement the work described by the user in the spec or tickets.
@@ -18,4 +19,4 @@ Preserve known issue IDs and unresolved decisions through review and handoff. Ma
 
 Once done, call the bundled skill `matt-code-review` to review the work.
 
-Finish the logical task under the shared CS integration rules. Commit only when requested or already authorized.
+Finish the logical task under the shared knowledge and team rules, updating `.tw` knowledge in the same change. Commit only when requested or already authorized.

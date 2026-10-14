@@ -1,77 +1,41 @@
 ---
 name: team-workflow
-description: 在已初始化独立 CS 的项目中开展团队任务：方案评审、实施交接、业务验收、自动回归、每周质量复盘和知识回写。适用于新建任务、接手、变更方案及交付；独立 MATT 调用保持轻量。
+description: 团队任务入口：方案评审、实施交接、业务验收、自动回归、每周质量复盘和知识更新。适用于新建任务、接手、变更方案及交付；项目知识由 team-knowledge 提供，独立调用 MATT 方法时保持轻量。
+disable-model-invocation: true
 ---
 
 # 团队任务与开发方法
 
-先读 [CS 接入约定](references/matt-integration.md)。从本入口开始的任务采用团队流程；
-切换 MATT 方法或恢复会话时，沿用当前任务的批准、验收和未决问题。
-团队任务、缺陷处理和每周质量复盘均读取[业务验收与质量改进标准](references/business-acceptance.md)。
-该页统一维护首次独立验收、回归层次与有效性、端到端链路、运行环境、交付证据、缺陷关联及
-每周复盘规则，并链接三份可填写记录；每周复盘从该页第 8 节开始，按其中引用核对完整规则。
-首次接入、为项目设计验收方式，或项目尚无集成、E2E 入口时，先读[接入指南](references/onboarding.md)，
-再按[项目验收方式与测试能力建设](references/test-capability.md)第 2 节产出项目验收方案。
+先读[方法与知识约定](references/matt-integration.md)。命令都是 `tw team <命令>`，其中 `tw` 指 `python3 <team-knowledge 技能目录>/scripts/tw.py`；知识读写用 team-knowledge。切换 MATT 方法或恢复会话时，沿用当前任务的批准、验收和未决问题。团队任务、缺陷处理和每周质量复盘按[业务验收与质量改进标准](references/business-acceptance.md)执行；首次接入或项目缺少集成、E2E 入口时，先读[接入指南](references/onboarding.md)。
 
 ## 从需求到可实施
 
-1. 运行 `project` 核对工具、项目和 CS。项目要求更新的工具时，更新技能后重新读取本入口。
-   首次接入或技能升级后运行 `guidance`，预览并应用项目与本机指令文件的标记块；升级后再运行
-   `adopt` 预览需要重跑的旧证据。`project` 报告工具或 CS 安装被修改（`tool-modified`）、命令返回
-   `tool-defect` 时，停止并报告缺陷，不修改 `~/.agents/skills/` 下的已安装文件。
-2. 读取知识及需求原文，先描述真实起点、角色操作、业务入口、结果、失败情形和验收负责人。
-   调查相关操作与服务责任：读取、修改、删除、引用替换、后台触发，以及谁产生数据、谁提交结果。
-   再按可独立验收的工作拆分，子任务引用共享方案；主需求仍保留完整业务路径的独立验收。
-3. 形成可评审的实现方案，分别评估复杂度、风险、工作量、依据和待定事项。简单任务可用
-   一份短方案并在开发后合并评审；中等、复杂任务先取得具体评审人的方案确认。用户要求
-   先批准时遵循该要求。已有明确批准只按其实际范围复用，不重复请求同一确认。
-   Issue 还没有结构化任务块（命令返回 `issue-not-adopted`）时，用 `issue-draft` 一次生成正文、
-   方案评论和评审请求草稿，交由用户按顺序发布；批准要在实施前取得，不留到交付时补。
-4. **首次修改业务源码或派出实施代理前**，新任务运行 `prepare`，接手任务运行 `resume`，
-   阅读材料和缺项，确认 `implementation_ready` 或 `ready_to_implement` 为真。Issue 已创建、
-   没有前置任务、命令 `ok: true`、业务选择或部分字段得到确认，都不能替代这项核对。
-   条件未满足时继续必要调查、隔离复现和基线检查，补方案或提交具体待定问题。
+1. 运行 `tw team project` 核对配置、知识检查和安装。项目还有 `.codestable/` 或 `.team-workflow*` 时，先按 team-knowledge 的迁移指南迁移。结果为 `tool-modified` 或 `tool-defect` 时停止并报告，不修改已安装文件。
+2. 用 `tw brief` 读取知识，读需求原文，先写清真实起点、角色操作、业务入口、结果、失败情形和验收负责人。调查相关的读取、修改、删除、引用替换、后台触发，以及谁产生数据、谁提交结果。再按可独立验收的工作拆分；主需求保留完整业务路径的独立验收。
+3. 形成可评审的方案，分别评估复杂度、风险、工作量、依据和待定事项。简单任务用短方案，开发后合并评审；中等、复杂任务先取得具体评审人的确认。已有批准只按实际范围复用。Issue 还没有结构化任务块时，用 `issue-draft` 生成草稿交由用户发布。
+4. **首次修改业务源码或派出实施代理前**，新任务运行 `prepare`，接手任务运行 `resume`，确认 `implementation_ready` 或 `ready_to_implement` 为真。Issue 已建、业务选择已确认，都不能替代这项核对。
 
-新建子任务、改变业务范围或约束、发现遗漏入口或跨服务责任时，更新相关方案再核对；
-只重审受影响的部分。待定事项只阻塞相关工作。代理交接须包含方案版本、实际批准、
-允许修改范围、验收和未决问题；主代理使用同一规则。
+范围、约束或跨服务责任变化时，只重审受影响的部分。代理交接须包含方案版本、实际批准、允许修改范围、验收和未决问题。
 
 ## 实施与交付
 
-按 [团队交付步骤](references/team-delivery.md) 执行，调用命令时读
-[工具约定](references/contracts.md)。方案指纹与局部重审见 [分节方案](references/designs.md)。
-采用多代理派遣时，另按业务验收标准第 3 节交接。
+按[团队交付步骤](references/team-delivery.md)执行，命令细节见[工具约定](references/contracts.md)，方案指纹见[分节方案](references/designs.md)。
 
-- 先核实技术事实，再给用户场景、依据、选项和后果；按业务验收标准保留首次验收、回归
-  执行和未验证范围的记录，报告分别说明业务验收与交付状态。
-- 每个已知问题保留编号、影响范围、负责人和处置。已说明不等于已解决；交接自动带入
-  未决问题，接受限制或延期须写明确认人，延期还要有跟进任务和范围调整依据。
-- 并行按授权和实际需要采用。最终验收期间，共享目录暂停编辑、生成代码和切换提交；
-  `status` 可见运行状态。项目允许独立目录时可以隔离，不强制新增工作区或代理。
-- 顺序为实际验证与评审 → 业务验收 → CS 写入 → 知识核对 → 最终交付。业务验收前只
-  保存必要进度；完成知识草稿使用 `knowledge-template --acceptance`，真实写入仍由 CS 负责。
-  多个 Issue 共用一次实现时共用一条 CS 记录，各自一份验收。预览失败立即停止依赖步骤；
-  只应用刚成功生成的新计划文件。
-- 检查过期时只聚焦重跑过期的那一项；修改用例登记不需要重跑。任务中断后先运行
-  `status --format text`，按其中的下一步命令继续。
-- 以 GitHub Issue 为任务的单人工作，在最终 `verify` 得到一份“收尾说明”草稿，代替单独的实施交接；多人接力、
-  修改或联合其他仓库、跨服务任务仍发布实施交接。给用户确认时附上结果中的 `summary_markdown`，
-  不要另写术语化的确认稿。
-- 回复分别说明检查通过、失败、未验证范围、业务验收和交付状态。源码或测试文件链接
-  只能辅助解释，实际通过需原始运行或人工观察证据；保留已有提交、发布和关闭授权边界。
+- 顺序为：实际验证与评审 → 业务验收 → 在同一分支更新 `.tw` 知识并通过 `tw check` → 交付报告写明知识处置 → 最终交付。
+- 每个已知问题保留编号、影响范围、负责人和处置。接受限制或延期须写明确认人。
+- 检查过期时只重跑过期的那一项。任务中断后先运行 `status --format text`，按下一步继续。
+- 单人以 Issue 为任务时，最终 `verify` 给出收尾说明草稿；多人接力或跨仓任务仍发布实施交接。
+- 回复分别说明检查通过、失败、未验证范围、业务验收和交付状态。实际通过需要原始运行或人工观察证据。
 
 ## 按目标选择方法
 
-只读取当前需要的方法；独立 MATT 调用保持轻量。
-
 | 目标 | 方法 |
 | --- | --- |
-| 澄清方案、形成规格、拆分任务 | [问题澄清](../matt-grilling/SKILL.md)、[规格](../matt-to-spec/SKILL.md)、[拆分](../matt-to-tickets/SKILL.md) |
-| 实现需求或关联任务 | [实现](../matt-implement/SKILL.md)、[多任务实现](../matt-implement-spec/SKILL.md) |
-| 定位故障或测试先行 | [诊断](../matt-diagnosing-bugs/SKILL.md)、[测试](../matt-tdd/SKILL.md) |
-| 调整模块或领域概念 | [设计](../matt-codebase-design/SKILL.md)、[领域建模](../matt-domain-modeling/SKILL.md) |
-| 审查与 PR 说明 | [审查](../matt-code-review/SKILL.md)、[PR](../matt-pr/SKILL.md) |
-| 原型、调研、代理指引 | [原型](../matt-prototype/SKILL.md)、[调研](../matt-research/SKILL.md)、[代理写作](../matt-writing-for-agents/SKILL.md) |
+| 澄清、规格、拆分 | [问题澄清](../matt-grilling/SKILL.md)、[规格](../matt-to-spec/SKILL.md)、[拆分](../matt-to-tickets/SKILL.md) |
+| 实现 | [实现](../matt-implement/SKILL.md)、[多任务实现](../matt-implement-spec/SKILL.md) |
+| 故障与测试 | [诊断](../matt-diagnosing-bugs/SKILL.md)、[测试](../matt-tdd/SKILL.md) |
+| 模块与领域 | [设计](../matt-codebase-design/SKILL.md)、[领域建模](../matt-domain-modeling/SKILL.md) |
+| 审查与 PR | [审查](../matt-code-review/SKILL.md)、[PR](../matt-pr/SKILL.md) |
+| 原型、调研、写作 | [原型](../matt-prototype/SKILL.md)、[调研](../matt-research/SKILL.md)、[代理写作](../matt-writing-for-agents/SKILL.md) |
 
-首次接入读 [接入指南](references/onboarding.md)。用户要求环境复盘时使用
-[环境复盘](../matt-retro/SKILL.md)，普通收尾不自动增加复盘。
+用户要求环境复盘时使用[环境复盘](../matt-retro/SKILL.md)。

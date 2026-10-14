@@ -38,6 +38,14 @@ class Init(Case):
         self.tw('init', '--apply', '--guidance')
         self.assertEqual((self.root / 'CLAUDE.md').read_text(), '# 导入通用标准\n@./AGENTS.md\n')
 
+    def test_partial_own_layout_is_completed(self):
+        write(self.root, '.tw/.gitignore', 'local/\n')
+        write(self.root, '.tw/local/repositories.json', '{}')
+        code, result = self.tw_json('init', '--apply')
+        self.assertEqual(code, 0, result)
+        self.assertEqual({a['path']: a['action'] for a in result['actions']},
+                         {'.tw/config.json': 'create', '.tw/.gitignore': 'unchanged', '.tw/overview.md': 'create'})
+
     def test_refuses_a_foreign_tw_directory(self):
         write(self.root, '.tw/config.json', '{"format": "someone-else"}')
         code, _, err = self.tw('init', '--apply')

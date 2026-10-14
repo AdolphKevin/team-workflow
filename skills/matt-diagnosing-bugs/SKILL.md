@@ -3,14 +3,14 @@ name: matt-diagnosing-bugs
 description: Diagnosis loop for hard bugs and performance regressions. Use when the user says "diagnose"/"debug this", or reports something broken/throwing/failing/slow.
 ---
 
-Before using this method, read the [CS integration rules](../team-workflow/references/matt-integration.md) for prerequisites and the shared knowledge entry.
+Before using this method, read the [knowledge and team rules](../team-workflow/references/matt-integration.md): project knowledge comes from team-knowledge (`tw brief`).
 
 
 # Diagnosing Bugs
 
 A discipline for hard bugs. Skip phases only when explicitly justified.
 
-Before exploring, use the unified CS brief to read the registered glossary and relevant decisions; request full source documents through CS when excerpts are insufficient.
+Before exploring, run `tw brief` with the affected paths to read the glossary, rules, decisions and lessons; use `tw read` when an excerpt is not enough.
 
 ## Redact
 

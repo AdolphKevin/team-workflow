@@ -1,9 +1,10 @@
 ---
 name: matt-retro
 description: "Review a coding session to improve the agent's working environment when an environment retrospective or improvement is requested. Produces suggestions, not a code review or a routine task-completion step."
+disable-model-invocation: true
 ---
 
-Before using this method, read the [CS integration rules](../team-workflow/references/matt-integration.md) for prerequisites and the shared knowledge entry.
+Before using this method, read the [knowledge and team rules](../team-workflow/references/matt-integration.md): project knowledge comes from team-knowledge (`tw brief`).
 
 Suggest improvements to the coding agent's **environment** from the session the user identifies; default to the current session. Focus on the environment goal already in the task.
 

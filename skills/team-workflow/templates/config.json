@@ -1,0 +1,69 @@
+{
+  "format": "channelwill/team-workflow",
+  "data_version": 1,
+  "project": {
+    "id": "__REPLACE__",
+    "name": "__REPLACE__"
+  },
+  "context": [
+    "README.md"
+  ],
+  "shared": {},
+  "documents": [],
+  "checks": {
+    "unit": {
+      "argv": [
+        "python3",
+        "-m",
+        "pytest",
+        "tests",
+        "--junitxml={output}/results.xml"
+      ],
+      "purpose": "__REPLACE__",
+      "cwd": ".",
+      "timeout": 600,
+      "format": "junit",
+      "report": "{output}/results.xml",
+      "required_cases": [],
+      "required_env": [],
+      "environment": {
+        "kind": "stateless"
+      },
+      "coverage": {
+        "level": "unit",
+        "entrypoints": [
+          "__REPLACE__"
+        ],
+        "environment": "__REPLACE__",
+        "substitutes": [],
+        "isolation": "unresolved",
+        "isolation_evidence": []
+      }
+    }
+  },
+  "required_checks": {
+    "code": [
+      "unit"
+    ],
+    "docs": []
+  },
+  "risk_checks": {},
+  "inputs": [],
+  "external_inputs": {},
+  "environment_versions": {
+    "python": [
+      "python3",
+      "--version"
+    ]
+  },
+  "accounts": [
+    {
+      "id": "__REPLACE__",
+      "kind": "synthetic",
+      "environment": "__REPLACE__",
+      "login": "agent-after-authorization",
+      "isolation": "__REPLACE__",
+      "credential_env": []
+    }
+  ]
+}

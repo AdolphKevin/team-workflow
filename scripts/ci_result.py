@@ -7,20 +7,21 @@ from pathlib import Path
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / 'skills/team-workflow/scripts'))
+sys.path[:0] = [str(ROOT / 'skills/team-knowledge/scripts'),
+                str(ROOT / 'skills/team-knowledge/scripts/tw_runtime/team')]
 from common import git, read
 import validation
 import portable
 
 
 def profile():
-    return {'schema_version': 5, 'project': 'team-workflow', 'context': ['AGENTS.md'],
-            'knowledge': {'provider': 'cs', 'entry': '.codestable/wiki/INDEX.md'},
+    return {'data_version': 1, 'project': 'team-workflow', 'context': ['AGENTS.md'],
+            'external_inputs': {}, 'accounts': [],
             'checks': {'regression': {'argv': ['python3', 'scripts/test.py', '--junitxml', '{output}/tests.xml'],
                 'cwd': '.', 'timeout': 300, 'purpose': 'Workflow contract regressions; excludes real member acceptance',
                 'format': 'junit', 'report': '{output}/tests.xml', 'artifacts': ['{output}/tests.evidence.json'],
                 'required_cases': [], 'required_env': [], 'environment': {'kind':'stateless'},
-                'coverage': {'level':'journey','entrypoints':['workflow.py'],'environment':'isolated-test-repositories',
+                'coverage': {'level':'journey','entrypoints':['tw team'],'environment':'isolated-test-repositories',
                 'substitutes':['GitHub API fixtures'],'isolation':'isolated','isolation_evidence':[]}}},
             'required_checks': {'code': ['regression'], 'docs': []}, 'risk_checks': {}, 'inputs': [],
             'environment_versions': {'python': ['python3', '--version']}}
@@ -35,7 +36,7 @@ def main():
         portable.validate_import(ROOT, profile(), result)
         print(json.dumps({'ok': True, 'receipt': str(path), 'result': result['result']}, indent=2))
         return 0
-    task = {'schema_version': 5, 'id': 'release-regression', 'base': git(ROOT, 'rev-parse', 'HEAD').decode().strip(),
+    task = {'data_version': 1, 'id': 'release-regression', 'base': git(ROOT, 'rev-parse', 'HEAD').decode().strip(),
             'design_id': 'release', 'section_ids':['T1'], 'acceptance_scope':'requirement',
             'goal': 'Execute the release behavior regressions', 'non_goals': ['real member acceptance'],
             'kind': 'code', 'risks': [], 'acceptance': [{'id': 'A1', 'expectation': 'Every regression executes and passes', 'checks': ['regression']}]}

@@ -28,18 +28,17 @@ class BusinessEvidence(unittest.TestCase):
     setUp = fixtures.WorkflowCases.setUp
     git = fixtures.WorkflowCases.git
     check = fixtures.WorkflowCases.check
-    fake_cs = fixtures.WorkflowCases.fake_cs
     setup_task = delivery_cases.DeliveryCases.setup_task
     name = delivery_cases.DeliveryCases.name
     write = delivery_cases.DeliveryCases.write
 
     def verify(self):
-        return delivery.verify(self.root, self.profile, self.task, self.report, self.skill, 'acceptance')
+        return delivery.verify(self.root, self.profile, self.task, self.report, 'acceptance')
 
     def refresh(self):
         self.write('design', self.design)
         self.write('task', self.task)
-        self.write('brief', knowledge.brief(self.root, self.task, self.skill, [], []))
+        self.write('brief', knowledge.brief(self.root, self.task, [], []))
         run, _ = validation.run_batch(self.root, self.profile, [self.task])
         self.runs = [run.relative_to(self.root).as_posix()]
         self.report['runs'] = self.runs
@@ -86,7 +85,7 @@ class BusinessEvidence(unittest.TestCase):
         journey = copy.deepcopy(self.profile['checks']['unit'])
         journey['coverage'] = {**plans.coverage(), 'entrypoints': ['app.py:install', 'app.py:send']}
         journey['argv'] = [sys.executable, '-c',
-            'import subprocess,sys; state=".team-workflow/business-state.json"; '
+            'import subprocess,sys; state=".tw/local/business-state.json"; '
             'subprocess.run([sys.executable,"app.py","install",state],check=True); '
             'subprocess.run([sys.executable,"app.py","send",state],check=True)']
         self.profile['checks']['journey'] = journey
@@ -226,43 +225,8 @@ class BusinessEvidence(unittest.TestCase):
         self.assertFalse(state['implementation_ready'])
         self.assertEqual(contracts.unresolved(self.design['issues'], ['unrelated'], 'implementation'), [])
 
-    def test_knowledge_draft_is_partial_until_business_acceptance_exists(self):
-        self.setup_task()
-        draft = knowledge.completion_template(self.root, self.profile, self.task, self.skill)
-        self.assertEqual(draft['task']['status'], 'in-progress')
-        self.assertEqual(draft['items'], [])
-        accepted = self.verify()
-        self.write('acceptance', accepted)
-        path = self.root / self.name('acceptance')
-        draft = knowledge.completion_template(self.root, self.profile, self.task, self.skill, [path])
-        self.assertEqual(draft['task']['status'], 'completed')
-        self.assertEqual(draft['task']['source']['workflow_acceptances'],
-                         [{**artifact(self.root, path), 'task_id': self.task['id']}])
-        self.assertEqual(knowledge.pending_acceptance(draft, [self.task]), [])
 
-    def test_knowledge_rejects_an_unbound_or_stale_completion(self):
-        self.setup_task()
-        self.write('acceptance', self.verify())
-        path = self.root / self.name('acceptance')
-        script = self.skill / 'scripts/cs_knowledge.py'
-        script.write_text(script.read_text().replace('"task":{"source":source', '"task":{"source":{}'))
-        with self.assertRaisesRegex(Invalid, 'reference the actual'):
-            knowledge.finish(self.root, self.profile, self.task, self.skill, 'CS-T',
-                self.root / self.name('brief'), 'none', 'No new rule', path)
-        review = read(self.root / self.name('review'))
-        review['spec']['summary'] = 'Changed after acceptance'
-        self.write('review', review)
-        with self.assertRaises(Invalid):
-            knowledge.completion_template(self.root, self.profile, self.task, self.skill, [path])
 
-    def test_knowledge_scope_cannot_use_an_unrelated_repository_path(self):
-        self.setup_task()
-        self.write('acceptance', self.verify())
-        script = self.skill / 'scripts/cs_knowledge.py'
-        script.write_text(script.read_text().replace("'path': 'app.py'", "'path': 'unrelated/backend'"))
-        with self.assertRaisesRegex(Invalid, 'knowledge scope'):
-            knowledge.finish(self.root, self.profile, self.task, self.skill, 'CS-T',
-                self.root / self.name('brief'), 'none', 'No new rule', self.root / self.name('acceptance'))
 
     def test_unresolved_environment_does_not_execute_the_check(self):
         self.setup_task()
@@ -292,7 +256,7 @@ class BusinessEvidence(unittest.TestCase):
         self.setup_task()
         original = copy.deepcopy(self.task)
         self.profile['risk_checks']['public-contract'] = ['unit']
-        write(self.root / '.team-workflow.json', self.profile)
+        fixtures.write_config(self.root, self.profile)
         variants = [dict(original, risks=['public-contract']),
                     dict(original, design_id='another-plan'),
                     dict(original, acceptance_scope='task', parent='another-parent'),
@@ -320,7 +284,7 @@ class BusinessEvidence(unittest.TestCase):
 
     def test_shared_reference_cannot_be_a_json_pass_without_original_outputs(self):
         self.setup_task()
-        fabricated = {'schema_version': 6, 'kind': 'execution', 'source_unchanged': True,
+        fabricated = {'data_version': 1, 'kind': 'execution', 'source_unchanged': True,
                       'results': [{'id': 'unit', 'status': 'passed', 'state': 'finished', 'exit_code': 0,
                           'binding': {'definition': validation.execution_definition(self.profile['checks']['unit'])},
                           'cases': {}, 'artifacts': []}]}

@@ -1,35 +1,28 @@
 # 安装与升级
 
-Codex、Cursor 与 Claude Code 使用同一个完整 `skills/` 目录，推荐通过 skills CLI 统一安装。Codex 与 Cursor 读取根目录 `plugin.json`，Claude Code 读取 `.claude-plugin/plugin.json`；两份清单只声明入口，名称、版本和描述保持一致，由 `scripts/check_release.py` 核对。各端不维护独立实现。发行 ZIP 包含方法入口、MATT 方法、团队流程与验证工具、适配补丁、许可和说明；业务配置与知识不放入发行包。
+Codex、Cursor 与 Claude Code 共用同一个完整的 `skills/` 目录，推荐通过 skills CLI 统一安装。Codex 与 Cursor 读取根目录 `plugin.json`，Claude Code 读取 `.claude-plugin/plugin.json`。两份清单只声明入口，名称、版本和描述保持一致，由 `scripts/check_release.py` 核对；各端不维护独立实现。
+
+发行包包含：团队入口 `team-workflow`、知识入口 `team-knowledge`（唯一的 Python 运行时也在这里）、15 个 MATT 方法、适配补丁、许可和说明。业务配置与项目知识不放入发行包。
 
 ## 统一安装（推荐）
 
-用 [skills CLI](https://github.com/vercel-labs/skills) 一次安装全部技能，Claude Code、Codex 与 Cursor 共用
-`~/.agents/skills/` 下的同一份文件，一条命令同时更新所有客户端。CS 使用同一种方式安装。
+用 [skills CLI](https://github.com/vercel-labs/skills) 安装固定发行标签。Claude Code、Codex 与 Cursor 共用 `~/.agents/skills/` 下的同一份文件。
 
 ```bash
-npx skills add AdolphKevin/codestable-compact -g --skill '*' --agent claude-code codex cursor
-npx skills add AdolphKevin/team-workflow -g --skill '*' --agent claude-code codex cursor
-npx skills update -g          # 以后升级
+npx skills add AdolphKevin/team-workflow#<发行标签> -g --skill '*' --agent claude-code codex cursor
 npx skills list -g            # 核对来源与安装位置
 ```
 
-必须用 `--skill '*'` 安装全部 16 个技能：主技能与 MATT 方法通过同级目录的相对路径互相引用，只装主技能会找不到配套方法。
-安装后在新会话中使用 `/team-workflow`（Codex 为 `$team-workflow`），或直接调用 `/matt-implement` 等方法。
-`npx skills update` 跟随默认分支，推送到 `main` 即发布；锁文件 `~/.agents/.skill-lock.json` 记录实际安装的目录哈希，
-工具版本以 `workflow.py version` 输出为准。
+- 必须用 `--skill '*'` 安装全部技能。团队入口、知识入口和 MATT 方法之间通过同级目录的相对路径互相引用，CLI 不会自动补装依赖。
+- 升级时显式选择新的发行标签，main 只用于开发；回退时重新安装上一个标签。
+- 安装后运行 `python3 ~/.agents/skills/team-knowledge/scripts/tw.py version --check-install`，确认两个技能属于同一发行、文件未被改动。
+- 从旧版本迁移时，先卸载 `cs` 和 `cs-analysis`：`npx skills remove -g cs cs-analysis`。
 
-技能目录带有 `MANIFEST.json`，记录随发行的每个文件的指纹。`workflow.py version` 与 `project` 报告
-`integrity`：已安装文件被修改、缺失或多出文件时为 `modified`，`verify` 与 `knowledge` 拒绝执行。
-不要直接修改 `~/.agents/skills/` 下的文件；发现工具缺陷时在本仓修复并发布，再运行 `npx skills update -g`。
-修改本仓 `skills/team-workflow/` 后运行 `python3 scripts/package.py --manifest` 重新生成清单，
-`scripts/check_release.py` 会拒绝过期清单。
+技能目录带有 `MANIFEST.json`，记录随发行的每个文件的指纹。已安装文件被修改、缺失或多出文件时，`tw team project` 与 `tw version --check-install` 会报告，团队流程的 `verify` 拒绝执行。不要直接修改 `~/.agents/skills/` 下的文件；发现工具缺陷时在本仓修复并发布新标签。修改本仓技能后运行 `python3 scripts/package.py --manifest` 重新生成清单，`scripts/check_release.py` 会拒绝过期的清单。
 
 ## 插件方式（可选）
 
-根目录 `plugin.json`（Codex、Cursor）与 `.claude-plugin/plugin.json`（Claude Code）仍作为插件入口保留，
-适合需要固定到发行标签的场景。插件按客户端分别安装、分别固定版本，容易出现一端已升级另一端未升级，
-因此不要与上面的统一安装混用，否则同名技能会出现两份。
+根目录 `plugin.json`（Codex、Cursor）与 `.claude-plugin/plugin.json`（Claude Code）仍作为插件入口保留。插件按客户端分别安装、分别固定版本，容易出现一端已升级、另一端未升级，因此不要与统一安装混用，否则同名技能会出现两份。
 
 ```bash
 claude plugin marketplace add AdolphKevin/team-workflow
@@ -38,22 +31,17 @@ codex plugin marketplace add AdolphKevin/team-workflow --ref <发行标签>
 codex plugin add team-workflow@team-workflow
 ```
 
-格式依据 [Claude Code 插件文档](https://code.claude.com/docs/en/plugins)与 [Codex 官方插件文档](https://developers.openai.com/plugins/build/plugins)。
-本地试用可以不安装，直接以 `claude --plugin-dir <仓库目录>` 启动。从统一安装改用插件前，先运行
-`npx skills remove -g` 移除同名技能；反之先卸载各客户端插件与插件目录登记。
+格式依据 [Claude Code 插件文档](https://code.claude.com/docs/en/plugins)与 [Codex 官方插件文档](https://developers.openai.com/plugins/build/plugins)。本地试用可以不安装，直接以 `claude --plugin-dir <仓库目录>` 启动。
 
-## CS 与项目接入
+## 项目接入
 
-使用本包任何开发技能前，先独立安装 CS，并按 CS 自身要求完成项目知识初始化。仅建立空目录不算完成。缺少前提时，本包报告缺口，不代为安装、初始化或重建。
+- **全新项目**：运行 `tw init --apply`，填写 `.tw/overview.md`。
+- **已有 `.codestable/` 或 `.team-workflow*` 的项目**：由代理按 team-knowledge 的迁移指南整理，用一个 PR 交给用户确认，不使用脚本。
+- **独立调用 MATT**：只需要 `.tw/` 知识。
+- **从 `team-workflow` 开始的任务**：还需要 `.tw/config.json` 中的团队字段，按[接入指南](../skills/team-workflow/references/onboarding.md)准备。实际命令见[工具约定](../skills/team-workflow/references/contracts.md)。
 
-CS 独立安装并完成项目知识初始化。工具通过公开命令与返回字段校验能力，缺失时明确报告，不自动安装或重建。不锁定 CS 版本、提交或源码哈希。CI 获取默认分支做真实接口验证，实际提交只记录在验证材料中。源码更新不代表已创建发行标签、插件包或修改全局安装。
+## 版本
 
-独立 MATT 调用无需 `.team-workflow.json`。从 `team-workflow` 开始的新任务默认进入团队流程，按[接入指南](../skills/team-workflow/references/onboarding.md)准备配置与任务。运行 `workflow.py schema` 可直接找到随技能安装的模板；将发现的 CS 目录传给 `--cs-skill` 或 `TEAM_WORKFLOW_CS_SKILL`，用 `project` 检查配置和必要能力。实际命令见[工具约定](../skills/team-workflow/references/contracts.md)。
-
-## 版本切换
-
-0.8.0-rc.1 是候选版：配置、任务、方案和平台记录使用 `schema_version: 5`，本地证据使用 `schema_version: 6`；升级后运行 `adopt` 列出需要重跑的旧证据。任务开始记录实际工作流与 CS 版本，不在一次检查执行期间替换工具。新增能力不要求重建知识库。
-
-集中升级只更新共享插件与独立 CS。项目中的业务测试、原文登记和必要配置继续由所属项目维护。每次发行核对 [MATT 来源](../upstream/matt.lock.json)、适配补丁和许可，发布升级说明与实际验收范围。
-
-候选版可以用于试用。正式版仍要求真实成员双向交接、业务联合验证和后续知识检索全部通过；安装成功本身不证明这些条件已经满足。
+- 只有两个版本轴：软件发行版本，以及项目的 `data_version`。没有破坏性变化时，升级技能不需要改动项目文件。
+- 每次发行核对 [MATT 来源](../upstream/matt.lock.json)、适配补丁和许可，并发布升级说明与实际验收范围。
+- 候选版可以试用。正式版仍要求两位真实成员双向接续；安装成功本身不证明这一点。

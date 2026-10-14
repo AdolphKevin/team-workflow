@@ -4,6 +4,7 @@ import copy
 import io
 import json
 import unittest
+import test_workflow as fixtures
 from unittest.mock import patch
 
 import test_coordination
@@ -18,7 +19,7 @@ CHILD = 'https://github.com/example/project/issues/2'
 
 class IssueAdoption(unittest.TestCase):
     base = test_coordination.CoordinationCases
-    git, check, fake_cs, publish_fixture, body = base.git, base.check, base.fake_cs, base.publish_fixture, base.body
+    git, check, publish_fixture, body = base.git, base.check, base.publish_fixture, base.body
 
     def setUp(self):
         self.base.setUp(self)
@@ -73,22 +74,22 @@ class IssueAdoption(unittest.TestCase):
             issue_draft.draft(self.root, self.profile, dict(self.child_task, parent=self.url), self.design)
 
     def test_commands_on_an_unadopted_issue_point_to_issue_draft(self):
-        write(self.root / '.team-workflow.json', self.profile)
+        fixtures.write_config(self.root, self.profile)
         output = io.StringIO()
         with contextlib.redirect_stdout(output):
-            status = workflow.main(['resume', '--root', str(self.root), '--issue', self.url, '--cs-skill', str(self.skill)])
+            status = workflow.main(['resume', '--root', str(self.root), '--issue', self.url])
         result = json.loads(output.getvalue())
         self.assertEqual((status, result['error_code']), (1, 'issue-not-adopted'))
         self.assertIn('issue-draft', result['next_action'])
 
     def test_adopted_child_reports_unadopted_parent_and_its_next_action(self):
         self.child['body'] += '\n\n```team-workflow-task\n' + json.dumps(
-            {'schema_version': 5, 'parent': self.url, 'task': self.child_task}) + '\n```\n'
-        write(self.root / '.team-workflow.json', self.profile)
+            {'data_version': 1, 'parent': self.url, 'task': self.child_task}) + '\n```\n'
+        fixtures.write_config(self.root, self.profile)
         output = io.StringIO()
         with contextlib.redirect_stdout(output):
             code = workflow.main(['resume', '--root', str(self.root), '--issue', CHILD,
-                                  '--cs-skill', str(self.skill)])
+])
         result = json.loads(output.getvalue())
         self.assertEqual(code, 1, result)
         self.assertEqual(result['error_code'], 'parent-issue-not-adopted')

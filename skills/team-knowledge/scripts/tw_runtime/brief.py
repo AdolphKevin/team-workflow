@@ -113,7 +113,9 @@ def select(project, task, paths, symbols, refs, tags):
             for index, item in enumerate(entries.abandoned(entry.body) or []):
                 head = item.split('\n', 1)[0]
                 keywords = entries.label_value(item, '关键词')
-                for phrase in textmatch.title_phrases(head) | {textmatch.term(k) for k in keywords.replace('，', '、').replace(',', '、').split('、') if textmatch.term(k)}:
+                # Short fragments of a listed head ("盘点、暂存、恢复") match too much; short terms go in 关键词.
+                heads = {phrase for phrase in textmatch.title_phrases(head) if len(phrase) >= 4}
+                for phrase in heads | {textmatch.term(k) for k in keywords.replace('，', '、').replace(',', '、').split('、') if textmatch.term(k)}:
                     abandoned_vocabulary[phrase].add((entry.label, index))
     hits = textmatch.find(task, set(vocabulary) | set(term_vocabulary) | set(abandoned_vocabulary))
     by_label = {entry.label: (entry, root) for entry, root, _ in candidates}

@@ -1,0 +1,645 @@
+# 批次 0：合并重构阶段 2（合并与团队衔接）的 SOP 场景
+# 格式见 docs/proposals/2026-10-14-sop-retest-trust.md 第 3.1 节。
+# 预期结果只依据已批准的重构方案，不依据当前实现的输出。
+# 版本 2（2026-10-14）：按批次 0 第一轮提出的场景问题修订 SOP-02-P01（Q1）、SOP-04-N02（Q2）；
+# 按方案 v4.1 修订的 T1 改写 SOP-05。
+
+metadata:
+  requirement: "team-workflow 与 CS 合并重构 · 阶段 2 合并与团队衔接"
+  batch: "tw-unified-redesign-phase2"
+  version: 2
+  owner: "AdolphKevin"
+  sources:
+    - ref: "docs/proposals/2026-10-14-unified-redesign.md I 节阶段 2、T1–T6、L1–L2、M5"
+      version: "v4.1"
+      confirmed_by: "AdolphKevin"
+  tags: ["tw", "重构", "阶段2"]
+
+sops:
+
+  - id: SOP-01
+    title: 单一运行时与安装完整性
+    actor: "成员"
+    entry: "tw version --check-install"
+    must:
+      - "两个技能来自同一个发行"
+      - "能发现文件被改动和同名技能"
+    scenarios:
+
+      - id: SOP-01-P01
+        polarity: positive
+        title: 安装后核对两个技能来自同一发行
+        actor: 成员
+        priority: P0
+        refs: ["M5", "C"]
+        verify: cli
+        layer: local
+        initial_state:
+          - "在干净的 HOME 下按 docs/install.md 安装 team-workflow 和 team-knowledge"
+        steps:
+          - "运行 tw version --check-install"
+        expected:
+          - "退出码为 0"
+          - "报告两个技能版本一致、文件未改动、没有同名技能"
+        forbidden_effects:
+          - "命令不写入任何文件"
+        evidence_hints: ["命令原始输出", "运行前后 HOME 下技能目录的文件指纹"]
+
+      - id: SOP-01-N01
+        polarity: negative
+        negative_type: other
+        title: 已安装技能的文件被改动
+        actor: 成员
+        priority: P1
+        refs: ["M5"]
+        verify: cli
+        layer: local
+        initial_state:
+          - "完成 SOP-01-P01 的安装"
+          - "手工修改已安装 team-workflow 技能中的一个文件"
+        steps:
+          - "运行 tw version --check-install"
+        expected:
+          - "退出码非 0"
+          - "指出被改动的文件路径"
+        forbidden_effects:
+          - "不自动修复或覆盖被改动的文件"
+        evidence_hints: ["命令原始输出"]
+
+      - id: SOP-01-N02
+        polarity: negative
+        negative_type: duplicate
+        title: 旧的 cs 技能仍然安装
+        actor: 成员
+        priority: P1
+        refs: ["T6"]
+        verify: cli
+        layer: local
+        initial_state:
+          - "完成 SOP-01-P01 的安装"
+          - "在同一 HOME 的技能目录中另装一份旧的 cs 技能"
+        steps:
+          - "运行 tw version --check-install"
+        expected:
+          - "退出码非 0，或明确报告存在应卸载的旧技能 cs"
+        forbidden_effects:
+          - "不自动删除任何技能目录"
+        evidence_hints: ["命令原始输出"]
+
+  - id: SOP-02
+    title: 配置合并与 .tw 布局隔离
+    actor: "成员"
+    entry: "tw init、tw check"
+    must:
+      - "新项目只生成三个入库文件"
+      - ".tw/local/ 必须被忽略且不能被跟踪"
+      - "工具从不执行 git add"
+    scenarios:
+
+      - id: SOP-02-P01
+        polarity: positive
+        title: 新项目初始化只生成最小布局
+        actor: 成员
+        priority: P0
+        refs: ["L1", "T2"]
+        verify: cli
+        layer: local
+        initial_state:
+          - "一个设置了 git remote、没有任何 tw 文件的新仓库"
+        steps:
+          - "运行 tw init 预览"
+          - "运行 tw init --apply"
+          - "运行 tw check"
+          - "按 team-knowledge 的写作规范填写 .tw/overview.md 的正文和 source"
+          - "再次运行 tw check"
+        expected:
+          - "预览不写入任何文件"
+          - "--apply 只新增 .tw/.gitignore、.tw/config.json、.tw/overview.md 三个入库文件"
+          - "config.json 的 format 为 channelwill/team-workflow，data_version 为 1，project.id 取自规范化后的 git remote"
+          - "不存在 .team-workflow.json 和 .codestable/"
+          - "填写前 tw check 退出码非 0，指出 overview 仍有占位内容、缺少来源"
+          - "填写后 tw check 通过"
+        forbidden_effects:
+          - "git 暂存区为空，工具没有执行 git add"
+        evidence_hints: ["git status --porcelain 前后对比", "config.json 原文"]
+
+      - id: SOP-02-N01
+        polarity: negative
+        negative_type: other
+        title: .tw/local/ 下有已跟踪文件
+        actor: 成员
+        priority: P0
+        refs: ["L2"]
+        verify: cli
+        layer: local
+        initial_state:
+          - "完成 SOP-02-P01"
+          - "用 git add -f 跟踪 .tw/local/ 下的一个文件"
+        steps:
+          - "运行 tw check"
+          - "运行一个会写本地证据的团队命令，例如 tw team prepare"
+        expected:
+          - "tw check 报错并指出该文件"
+          - "团队命令拒绝写本地证据并说明原因"
+        forbidden_effects:
+          - "不自动取消跟踪或删除该文件"
+        evidence_hints: ["两条命令的原始输出"]
+
+      - id: SOP-02-N02
+        polarity: negative
+        negative_type: other
+        title: 根 .gitignore 忽略整个 .tw/
+        actor: 成员
+        priority: P1
+        refs: ["L2"]
+        verify: cli
+        layer: local
+        initial_state:
+          - "完成 SOP-02-P01"
+          - "在根 .gitignore 加入 .tw/"
+        steps:
+          - "运行 tw check"
+        expected:
+          - "报错，说明入库知识会被一并忽略"
+        forbidden_effects:
+          - "不修改根 .gitignore"
+        evidence_hints: ["命令原始输出"]
+
+      - id: SOP-02-N03
+        polarity: negative
+        negative_type: other
+        title: .tw/.gitignore 不再忽略 local/
+        actor: 成员
+        priority: P1
+        refs: ["L2"]
+        verify: cli
+        layer: local
+        initial_state:
+          - "完成 SOP-02-P01"
+          - "删除 .tw/.gitignore 中的 local/ 一行"
+        steps:
+          - "运行 tw check"
+          - "运行 tw team prepare"
+        expected:
+          - "tw check 报错"
+          - "团队命令在写任何本地证据之前拒绝执行"
+        forbidden_effects:
+          - ".tw/local/ 下没有新文件"
+        evidence_hints: ["命令原始输出", ".tw/local/ 目录列表"]
+
+      - id: SOP-02-N04
+        polarity: negative
+        negative_type: other
+        title: 其他工具的 .tw/ 目录
+        actor: 成员
+        priority: P2
+        refs: ["L1"]
+        verify: cli
+        layer: local
+        initial_state:
+          - "仓库中已有 .tw/config.json，其 format 不是 channelwill/team-workflow"
+        steps:
+          - "运行 tw init --apply"
+        expected:
+          - "拒绝接管并说明原因"
+        forbidden_effects:
+          - ".tw/ 下的已有文件保持不变"
+        evidence_hints: ["命令原始输出", "运行前后 .tw/ 的文件指纹"]
+
+  - id: SOP-03
+    title: 删除与 CS 的桥接，防止旧系统复活
+    actor: "成员"
+    entry: "tw check、tw team 全流程"
+    must:
+      - "团队流程不再读写 CS"
+      - "新运行时不提供任何创建旧目录的路径"
+    scenarios:
+
+      - id: SOP-03-P01
+        polarity: positive
+        title: 团队流程不依赖 CS
+        actor: 成员
+        priority: P0
+        refs: ["T4", "T6"]
+        verify: cli
+        layer: local
+        initial_state:
+          - "按 SOP-02-P01 初始化的项目，本机没有安装 cs 技能"
+        steps:
+          - "走一遍 tw team prepare、run、verify，直到交付核查"
+        expected:
+          - "全流程完成，不提示缺少 CS、knowledge 记录或 knowledge-template"
+        forbidden_effects:
+          - "没有读取或创建 .codestable/"
+          - "没有调用任何 CS 命令"
+        evidence_hints: ["每条命令的原始输出", "全流程结束后仓库根目录列表"]
+
+      - id: SOP-03-N01
+        polarity: negative
+        negative_type: archived
+        title: 仓库中仍有旧目录
+        actor: 成员
+        priority: P0
+        refs: ["T6", "B"]
+        verify: cli
+        layer: local
+        initial_state:
+          - "已初始化的项目中另外存在 .codestable/ 或 .team-workflow.json"
+        steps:
+          - "运行 tw check"
+        expected:
+          - "报错，列出旧路径并指向迁移指南"
+        forbidden_effects:
+          - "不读取、不迁移、不删除旧目录"
+        evidence_hints: ["命令原始输出"]
+
+      - id: SOP-03-N02
+        polarity: negative
+        negative_type: other
+        title: 任何命令都不会创建旧目录
+        actor: 成员
+        priority: P1
+        refs: ["T6"]
+        verify: cli
+        layer: local
+        initial_state:
+          - "按 SOP-02-P01 初始化的项目"
+        steps:
+          - "依次运行 tw 的全部顶层命令和 tw team 的常用命令（含失败路径）"
+          - "检查仓库和 HOME"
+        expected:
+          - "不存在 .codestable/、.team-workflow.json、.team-workflow/"
+        forbidden_effects: []
+        evidence_hints: ["执行的命令清单", "find 结果"]
+
+  - id: SOP-04
+    title: 执行绑定的目录契约
+    actor: "成员"
+    entry: "tw team run、tw team verify"
+    must:
+      - "只提交知识时，按内容绑定的检查不失效"
+      - "按提交绑定的检查照常绑定 HEAD"
+    scenarios:
+
+      - id: SOP-04-P01
+        polarity: positive
+        title: 只提交知识，按内容绑定的检查仍有效
+        actor: 成员
+        priority: P0
+        refs: ["T3", "V1"]
+        verify: cli
+        layer: local
+        initial_state:
+          - "项目配置了一个按内容绑定的检查，并已通过 tw team run 取得通过结果"
+        steps:
+          - "新增一条 lesson 并提交，只改动知识正文"
+          - "运行 tw team verify"
+        expected:
+          - "原检查结果仍然有效，不要求重跑"
+        forbidden_effects: []
+        evidence_hints: ["verify 原始输出", "提交差异只含知识文件"]
+
+      - id: SOP-04-P02
+        polarity: positive
+        title: 本地证据变化不影响执行绑定
+        actor: 成员
+        priority: P1
+        refs: ["T3"]
+        verify: cli
+        layer: local
+        initial_state:
+          - "同 SOP-04-P01"
+        steps:
+          - "在 .tw/local/ 下新增和修改文件"
+          - "运行 tw team verify"
+        expected:
+          - "原检查结果仍然有效"
+        forbidden_effects: []
+        evidence_hints: ["verify 原始输出"]
+
+      - id: SOP-04-N01
+        polarity: negative
+        negative_type: other
+        title: 修改业务源码后结果失效
+        actor: 成员
+        priority: P0
+        refs: ["T3"]
+        verify: cli
+        layer: local
+        initial_state:
+          - "同 SOP-04-P01"
+        steps:
+          - "修改一个参与快照的源码文件"
+          - "运行 tw team verify"
+        expected:
+          - "报告原检查结果已过期，要求重跑"
+        forbidden_effects: []
+        evidence_hints: ["verify 原始输出"]
+
+      - id: SOP-04-N02
+        polarity: negative
+        negative_type: other
+        title: 知识被声明为构建输入时修改会失效
+        actor: 成员
+        priority: P1
+        refs: ["T3", "L1"]
+        verify: cli
+        layer: local
+        initial_state:
+          - "项目配置的 inputs（项目级，见方案 L1）显式声明了一个知识文件；按内容绑定的检查已取得通过结果"
+        steps:
+          - "修改该知识文件并提交"
+          - "运行 tw team verify"
+        expected:
+          - "按内容绑定的检查结果过期，核查拒绝并指出需要重跑的检查"
+          - "从 inputs 中去掉该文件后，再修改其他知识文件，原结果不受影响"
+        forbidden_effects: []
+        evidence_hints: ["verify 原始输出"]
+
+      - id: SOP-04-N03
+        polarity: negative
+        negative_type: other
+        title: 按提交绑定的检查在提交知识后过期
+        actor: 成员
+        priority: P1
+        refs: ["T3"]
+        verify: cli
+        layer: local
+        initial_state:
+          - "项目配置了一个 revision_sensitive 检查，并已取得通过结果"
+        steps:
+          - "只提交一条知识"
+          - "运行 tw team verify"
+        expected:
+          - "该检查结果过期（设计意图），按内容绑定的检查不受影响"
+        forbidden_effects: []
+        evidence_hints: ["verify 原始输出"]
+
+      - id: SOP-04-N04
+        polarity: negative
+        negative_type: other
+        title: 只改动某个检查的配置项
+        actor: 成员
+        priority: P1
+        refs: ["T3"]
+        verify: cli
+        layer: local
+        initial_state:
+          - "项目配置了检查 A 和 B，两者都已取得通过结果"
+        steps:
+          - "只修改 .tw/config.json 中检查 A 的配置项"
+          - "运行 tw team verify"
+        expected:
+          - "只有检查 A 的结果过期，检查 B 仍然有效"
+        forbidden_effects: []
+        evidence_hints: ["verify 原始输出", "config.json 差异"]
+
+  - id: SOP-05
+    title: 稳定的任务身份
+    actor: "成员、接手者"
+    entry: "tw team prepare、tw team handoff"
+    must:
+      - "任务身份是任务记录的 id，平台任务为 Issue 地址，创建后不改名（方案 v4.1 T1）"
+      - "本地材料放在 .tw/local/tasks/<可读名称>-<身份哈希>/，交接和续接按身份进行"
+    scenarios:
+
+      - id: SOP-05-P01
+        polarity: positive
+        title: 准备任务时按身份存放材料
+        actor: 成员
+        priority: P0
+        refs: ["T1"]
+        verify: cli
+        layer: local
+        initial_state:
+          - "按 SOP-02-P01 初始化的项目，准备一份新任务，任务记录的 id 由创建者给定"
+        steps:
+          - "运行 tw team prepare"
+          - "另准备一份缺少 id 的任务，运行 tw team prepare"
+        expected:
+          - "本地材料位于 .tw/local/tasks/<可读名称>-<身份哈希前 8 位>/，可读名称取自任务 id"
+          - "缺少 id 的任务被拒绝，并指出缺少 id"
+        forbidden_effects:
+          - "本地材料不出现在 .tw/local/ 以外的位置"
+        evidence_hints: ["prepare 原始输出", ".tw/local/tasks/ 目录列表"]
+
+      - id: SOP-05-P02
+        polarity: positive
+        title: 中断后按身份续接
+        actor: 成员
+        priority: P0
+        refs: ["T1"]
+        verify: cli
+        layer: local
+        initial_state:
+          - "完成 SOP-05-P01，任务进行到一半"
+        steps:
+          - "在新的会话中，用同一份任务文件或 prepare 生成的上下文运行 tw team resume 或 tw team status"
+        expected:
+          - "恢复同一任务的材料，身份和任务目录不变"
+          - "status 给出下一条命令"
+        forbidden_effects:
+          - "没有生成第二个身份或第二个任务目录"
+        evidence_hints: ["续接命令原始输出", ".tw/local/tasks/ 目录列表"]
+
+      - id: SOP-05-P03
+        polarity: positive
+        title: 多个 Issue 共用一次实现
+        actor: 成员
+        priority: P1
+        refs: ["T1"]
+        verify: cli
+        layer: local
+        initial_state:
+          - "两个任务由同一次实现完成，共用一份方案（可用两个本地任务代替两个 Issue）"
+        steps:
+          - "用 tw team run --with-task 为两个任务运行一次检查"
+          - "两个任务分别做业务验收和交付核查"
+        expected:
+          - "一份执行记录同时覆盖两个任务，两个任务各自的身份和任务目录不变"
+          - "两个任务的交付报告引用同一次执行；知识改动只写一次，两份报告分别列出"
+        forbidden_effects:
+          - "没有为这次共用的实现另造第三个身份"
+        evidence_hints: ["执行记录原文", "两份交付报告"]
+
+      - id: SOP-05-N01
+        polarity: negative
+        negative_type: duplicate
+        title: 重复准备同一任务
+        actor: 成员
+        priority: P1
+        refs: ["T1"]
+        verify: cli
+        layer: local
+        initial_state:
+          - "完成 SOP-05-P01"
+        steps:
+          - "对同一任务再次运行 tw team prepare，包括改动任务标题后再运行"
+        expected:
+          - "身份保持不变，不被改名"
+        forbidden_effects:
+          - "没有出现第二个任务目录"
+        evidence_hints: ["两次 prepare 的原始输出"]
+
+      - id: SOP-05-N02
+        polarity: negative
+        negative_type: cross-tenant
+        title: 跨仓任务只有主仓身份
+        actor: 成员
+        priority: P2
+        refs: ["T1"]
+        verify: cli
+        layer: local
+        initial_state:
+          - "一个任务的主仓为 A，参与仓为 B"
+        steps:
+          - "在 A 建立联合清单，在 B 准备以 parent 引用联合身份的任务"
+          - "在 A 运行联合核查"
+        expected:
+          - "B 的任务以 parent 引用 A 的联合身份；联合清单只有一个联合身份，归属 A"
+        forbidden_effects:
+          - "B 没有另起一个与联合身份并列的需求级身份"
+        evidence_hints: ["两个仓的任务记录", "联合清单与联合核查的原始输出"]
+
+  - id: SOP-06
+    title: 交付时的知识处置
+    actor: "成员"
+    entry: "tw team verify（delivery 阶段）"
+    must:
+      - "交付报告要么列出改动的知识文件且 tw check 通过，要么写明不需要改知识的理由"
+    scenarios:
+
+      - id: SOP-06-P01
+        polarity: positive
+        title: 改动了知识且检查通过
+        actor: 成员
+        priority: P0
+        refs: ["T4"]
+        verify: cli
+        layer: local
+        initial_state:
+          - "本分支改动了一条 lesson，tw check 通过，其余交付材料齐全"
+        steps:
+          - "运行交付核查"
+        expected:
+          - "核查通过，输出中列出从 git 差异得到的知识文件"
+        forbidden_effects: []
+        evidence_hints: ["verify 原始输出"]
+
+      - id: SOP-06-P02
+        polarity: positive
+        title: 未改知识但写明理由
+        actor: 成员
+        priority: P1
+        refs: ["T4"]
+        verify: cli
+        layer: local
+        initial_state:
+          - "本分支没有改动知识，交付报告中写明了不需要改知识的理由"
+        steps:
+          - "运行交付核查"
+        expected:
+          - "核查通过"
+        forbidden_effects: []
+        evidence_hints: ["verify 原始输出"]
+
+      - id: SOP-06-N01
+        polarity: negative
+        negative_type: empty-input
+        title: 既未改知识也未写理由
+        actor: 成员
+        priority: P0
+        refs: ["T4"]
+        verify: cli
+        layer: local
+        initial_state:
+          - "本分支没有改动知识，交付报告中也没有写理由"
+        steps:
+          - "运行交付核查"
+        expected:
+          - "核查拒绝，说明需要列出知识文件或写明理由"
+        forbidden_effects: []
+        evidence_hints: ["verify 原始输出"]
+
+      - id: SOP-06-N02
+        polarity: negative
+        negative_type: other
+        title: 改动的知识未通过结构检查
+        actor: 成员
+        priority: P1
+        refs: ["T4"]
+        verify: cli
+        layer: local
+        initial_state:
+          - "本分支改动的 lesson 中残留占位符，tw check 失败"
+        steps:
+          - "运行交付核查"
+        expected:
+          - "核查拒绝，并指出 tw check 的失败项"
+        forbidden_effects: []
+        evidence_hints: ["verify 与 check 的原始输出"]
+
+  - id: SOP-07
+    title: 真实任务与 worktree
+    actor: "成员"
+    entry: "本仓真实任务；live-chat worktree 依赖工具"
+    must:
+      - "在本仓用新流程完成一个真实任务"
+      - "新布局下 worktree 依赖解析正确"
+    scenarios:
+
+      - id: SOP-07-P01
+        polarity: positive
+        title: 在本仓用新流程完成一个真实任务
+        actor: 成员
+        priority: P0
+        refs: ["I 阶段 2"]
+        verify: cli
+        layer: local
+        initial_state:
+          - "本仓已按新布局初始化，选定一个真实的小任务"
+        steps:
+          - "用新流程完成该任务，直到交付核查通过"
+        expected:
+          - "交付核查通过，任务身份、证据位置、知识处置均符合 T1、L1、T4"
+        forbidden_effects:
+          - "没有产生旧布局文件"
+        evidence_hints: ["全流程命令与原始输出", "交付报告"]
+
+      - id: SOP-07-P02
+        polarity: positive
+        title: worktree 依赖工具在新布局下解析正确
+        actor: 成员
+        priority: P0
+        refs: ["I 阶段 2"]
+        verify: cli
+        layer: local
+        initial_state:
+          - "live-chat 仓库已按新布局初始化，并有一个 worktree"
+        steps:
+          - "在 worktree 中运行 livechat-worktree-dependency 的 worktree.py"
+        expected:
+          - "依赖映射从 .tw/local/repositories.json 解析，结果指向正确的路径"
+        forbidden_effects:
+          - "没有读取或写入 .team-workflow 下的旧映射"
+        evidence_hints: ["命令原始输出", "解析出的路径"]
+
+      - id: SOP-07-N01
+        polarity: negative
+        negative_type: cross-tenant
+        title: 不同 worktree 的本地证据互相隔离
+        actor: 成员
+        priority: P1
+        refs: ["L2"]
+        verify: cli
+        layer: local
+        initial_state:
+          - "同一仓库有两个 worktree A 和 B"
+        steps:
+          - "在 A 中准备任务并运行检查"
+          - "在 B 中查看本地任务和缓存"
+        expected:
+          - "B 看不到 A 的任务材料和缓存"
+        forbidden_effects:
+          - "A 的证据没有写入 B 的 .tw/local/"
+        evidence_hints: ["两个 worktree 的 .tw/local/ 目录列表"]

@@ -70,6 +70,9 @@ def parser():
     p = sub.add_parser('version', help='版本与安装完整性')
     p.add_argument('--check-install', action='store_true')
     p.add_argument('--home', help=argparse.SUPPRESS)
+    p = sub.add_parser('team', add_help=False, help='团队任务与交付命令')
+    p.add_argument('--help', '-h', dest='team_help', action='store_true')
+    p.add_argument('args', nargs=argparse.REMAINDER)
     return root
 
 
@@ -84,6 +87,16 @@ def main(argv=None):
     args = parser().parse_args(argv)
     root = Path(args.root)
     try:
+        if args.command == 'team':
+            team = Path(__file__).resolve().parent / 'team'
+            sys.path.insert(0, str(team))
+            import workflow
+            argv = ['--help'] if args.team_help else list(args.args)
+            if not any(v == '--root' or v.startswith('--root=') for v in argv):
+                argv += ['--root', str(root)]
+            for repository in args.repository:
+                argv += ['--repository', repository]
+            return workflow.main(argv)
         if args.command == 'init':
             project = Project(root, require_config=False)
             result = init.run(project.root, apply=args.apply, guidance=args.guidance)
@@ -93,7 +106,7 @@ def main(argv=None):
             if args.check_install:
                 result = install.check_install(args.home)
                 emit(result)
-                return 0 if result['ok'] else 1
+                return 0 if result['ok'] and result['installed_ok'] else 1
             emit({'version': install.VERSION, 'skill': str(install.SKILL)})
             return 0
         repositories = args.repository + getattr(args, 'sub_repository', [])

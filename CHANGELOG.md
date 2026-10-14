@@ -1,4 +1,15 @@
-# 未发布
+# 未发布（0.9.0-dev，合并重构）
+
+- 破坏性变化：team-workflow 与 CS 合并为一个仓库、一个运行时。新增知识入口 `team-knowledge`，命令行为 `tw`；团队命令改为 `tw team <命令>`。项目内只保留 `.tw/` 一个目录：入库的 `config.json`、`overview.md`、`glossary.md`、`rules/`、`decisions/`、`lessons/`，以及被忽略的 `local/`。`.codestable/`、`.team-workflow.json`、`.team-workflow/` 不再使用，已接入项目由代理按迁移指南整理，不提供迁移脚本。
+- 知识直接编辑 Markdown，与代码在同一个 PR 评审。`tw check` 只查客观缺陷，`tw brief` 有字符预算，并会提醒“放弃过的做法”。删除计划令牌、锁、回执、内容指纹、`future_use`、11 类目录与任务记录入库。
+- 团队流程删除与 CS 的桥接：`knowledge`、`knowledge-template`、`adopt` 命令，以及 `--cs-skill`、`--profile` 参数。交付报告的 `knowledge` 改为“改动的知识文件或不需要的理由”。只提交知识不再使按内容绑定的检查过期。
+- 最终交付必须引用本任务通过的业务验收记录：`delivery-template --acceptance` 写入交付报告的 `acceptance`，`verify` 核对它属于本任务，且验收后任务、方案章节、源码以及执行、评审、批准材料都没有变化；收尾说明引用这份原件。`knowledge.files` 必须正好列出本任务相对 `base` 改动的知识文件（含删除）；缺少处置时说明要列出文件或写明理由。请求编号的输入指纹包含 `--acceptance` 与当前知识内容，改了其中任何一项都需要新的请求编号。
+- 安装检查分两层：正在运行的两个技能决定 `verify` 是否放行（`tool-modified`）；客户端目录中被改动、含符号链接或版本不同的副本，以及残留的旧技能 cs，只作提示（`project` 的 `warnings`），`tw version --check-install` 对两者都返回非零。
+- 本地任务目录为可读名称加完整身份的哈希，Issue 地址相近的仓库不再落到同一目录。
+- 版本只保留软件发行版本与项目 `data_version` 两个轴；安装改为固定发行标签。
+- MATT：锁文件如实记录为 `main@b0618bc`；改为通过 team-knowledge 读取知识；词汇表与 ADR 遵循原文优先，并用日期加 slug 命名；修复悬空的 tracker doc 与词汇表引用；规格、拆分、实现、多任务实现和复盘五个方法恢复上游的“只允许显式调用”。
+
+# 0.8.0-rc.1（合并前的最后候选）
 
 - 独立试用后的修正：安装被修改时 `verify`、`knowledge` 与 `project` 统一返回 `error_code: tool-modified`（CS 被修改同样如此，`project` 在顶层给出原因）；`project` 的 `tool` 带 `override`；`verify` 输出直接包含 `summary_markdown`、`re_evaluated`、`close_note` 与 `tool`；缺少登记用例时列出报告中实际的用例名；方案范围缺口改为可读说明；收到 SIGTERM 时停止检查的进程组并清除验证标记；`status` 把最近一次中断或失败的尝试作为下一步，已被后续成功取代的失败记为未记录，优先采用未使用 `--allow-modified-tool` 的结果，最终交付步骤包含 `delivery-template`；配置模板的 `workflow_version` 与工具版本一致并由发布检查核对。
 - 修复交接核对的崩溃：带 `verified` 原始记录的完成交接调用了未导入的 `read`，交接时抛出 `NameError`。`verified` 指向源码文件时给出明确缺口，不再报 JSON 解析错误。新增两仓共用、字节相同的 `scripts/lint_undefined_names.py`（基于编译器作用域表，只用标准库），`check_release.py` 运行它并逐个导入工具模块；未预期的异常返回 `error_code: tool-defect` 并写出请求结果。

@@ -3,7 +3,7 @@ name: matt-code-review
 description: "Review the changes since a fixed point (commit, branch, tag, or merge-base) along two axes: Standards (does the code follow this repo's documented coding standards?) and Spec (does the code match what the originating issue/spec asked for?). Reports both axes separately; independent reviewers are optional. Use when the user wants to review a branch, a PR, work-in-progress changes, or asks to \"review since X\"."
 ---
 
-Before using this method, read the [CS integration rules](../team-workflow/references/matt-integration.md) for prerequisites and the shared knowledge entry.
+Before using this method, read the [knowledge and team rules](../team-workflow/references/matt-integration.md): project knowledge comes from team-knowledge (`tw brief`).
 
 
 Two-axis review of the final workspace against the fixed base in the accepted task:
@@ -15,7 +15,7 @@ Review both axes separately. Use independent subagents when authorized and usefu
 
 Use the accepted user goal and the project's existing requirements; a separate task platform is optional.
 
-For a team task, follow the [team delivery rules](../team-workflow/references/team-delivery.md). Record the actual reviewer without imposing a rank or requiring a different person. Simple tasks combine final plan and code approval with the actual code and run references; risks still determine checks. Existing approvals remain valid only for unchanged sections and dependencies. Business acceptance precedes the final CS record, followed by separate knowledge and delivery checks.
+For a team task, follow the [team delivery rules](../team-workflow/references/team-delivery.md). Record the actual reviewer without imposing a rank or requiring a different person. Simple tasks combine final plan and code approval with the actual code and run references; risks still determine checks. Existing approvals remain valid only for unchanged sections and dependencies. Business acceptance precedes the knowledge update, which ships in the same change; delivery then checks the knowledge disposition.
 
 ## Process
 
@@ -31,7 +31,7 @@ Before going further, confirm the fixed point resolves (`git rev-parse <fixed-po
 
 Look for the originating spec, in this order:
 
-1. Issue references in the commit messages (`#123`, `Closes #45`, GitLab `!67`, etc.), fetched via the workflow in the tracker doc.
+1. Issue references in the commit messages (`#123`, `Closes #45`, GitLab `!67`, etc.), fetched from the configured task platform (for example `gh issue view`).
 2. A path the user passed as an argument.
 3. A spec file under `docs/`, `specs/`, or `.scratch/` matching the branch name or feature.
 4. Use the accepted task goal and observable acceptance criteria when no standalone spec exists. Missing requirements remain an explicit incomplete Spec review, never a passing skipped check.

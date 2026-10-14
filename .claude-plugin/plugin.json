@@ -1,7 +1,7 @@
 {
   "name": "team-workflow",
-  "version": "0.8.0-rc.1",
-  "description": "基于独立 CS 的团队任务流程与 MATT 方法，支持分节评审、接力实施和真实验证。",
+  "version": "0.9.0-dev",
+  "description": "团队任务流程、项目知识（.tw）与 MATT 开发方法，支持分节评审、接力实施和真实验证。",
   "author": {
     "name": "AdolphKevin"
   },
@@ -10,7 +10,7 @@
   "keywords": [
     "matt",
     "workflow",
-    "codestable",
+    "project-knowledge",
     "skills"
   ]
 }

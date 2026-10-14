@@ -4,21 +4,20 @@ import io
 import json
 from pathlib import Path
 import sys
-import tempfile
 import unittest
 
-SCRIPTS = Path(__file__).resolve().parents[1] / 'skills/team-workflow/scripts'
+SCRIPTS = Path(__file__).resolve().parents[1] / 'skills/team-knowledge/scripts/tw_runtime/team'
 sys.path.insert(0, str(SCRIPTS))
+sys.path.insert(0, str(SCRIPTS.parents[1]))
+import test_workflow as fixtures
 from common import Invalid, write
 import agents
 import workflow
 
 
 class LedgerCases(unittest.TestCase):
-    def setUp(self):
-        self.tmp = tempfile.TemporaryDirectory()
-        self.addCleanup(self.tmp.cleanup)
-        self.root = Path(self.tmp.name).resolve()
+    setUp = fixtures.WorkflowCases.setUp
+    git = fixtures.WorkflowCases.git
 
     def cli(self, *args):
         out = io.StringIO()
@@ -32,7 +31,7 @@ class LedgerCases(unittest.TestCase):
         code, created = self.cli('--plan', 'plan.json')
         self.assertEqual(code, 0, created)
         self.assertEqual(created['recover_serially'], ['routing', 'automation'])
-        self.assertTrue(all(i['output'].startswith('.team-workflow/agents/audit/') for i in created['items']))
+        self.assertTrue(all(i['output'].startswith('.tw/local/agents/audit/') for i in created['items']))
         code, again = self.cli('--plan', 'plan.json')
         self.assertEqual(code, 1)
         self.assertIn('reuse completed', again['problem'])
@@ -40,7 +39,7 @@ class LedgerCases(unittest.TestCase):
         code, early = self.cli('--mark', 'routing', '--status', 'completed')
         self.assertEqual(code, 1)
         self.assertIn('Write the agent output', early['problem'])
-        (self.root / '.team-workflow/agents/audit/routing.md').write_text('55 items audited\n')
+        (self.root / '.tw/local/agents/audit/routing.md').write_text('55 items audited\n')
         code, done = self.cli('--mark', 'routing', '--status', 'completed')
         self.assertEqual(code, 0, done)
         code, failed = self.cli('--mark', 'automation', '--status', 'interrupted')
@@ -57,7 +56,7 @@ class LedgerCases(unittest.TestCase):
         code, degraded = self.cli('--mark', 'automation', '--status', 'degraded', '--reason', 'spot-checked 5 of 21 items')
         self.assertEqual(degraded['degraded'], ['automation'])
         self.assertEqual(degraded['recover_serially'], [])
-        (self.root / '.team-workflow/agents/audit/automation.md').write_text('21 items audited serially\n')
+        (self.root / '.tw/local/agents/audit/automation.md').write_text('21 items audited serially\n')
         code, recovered = self.cli('--mark', 'automation', '--status', 'completed')
         self.assertEqual(recovered['recovered'], ['automation'])
         history = next(i for i in recovered['items'] if i['id'] == 'automation')['history']

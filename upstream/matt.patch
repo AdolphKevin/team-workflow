@@ -1,8 +1,8 @@
 diff --git a/skills/matt-code-review/SKILL.md b/skills/matt-code-review/SKILL.md
-index 373a4f2..0ea4b65 100644
+index 373a4f2..f08db99 100644
 --- a/skills/matt-code-review/SKILL.md
 +++ b/skills/matt-code-review/SKILL.md
-@@ -1,26 +1,31 @@
+@@ -1,35 +1,40 @@
  ---
 -name: code-review
 -description: "Review the changes since a fixed point (commit, branch, tag, or merge-base) along two axes: Standards (does the code follow this repo's documented coding standards?) and Spec (does the code match what the originating issue/spec asked for?). Runs both reviews in parallel sub-agents and reports them side by side. Use when the user wants to review a branch, a PR, work-in-progress changes, or asks to \"review since X\"."
@@ -11,7 +11,7 @@ index 373a4f2..0ea4b65 100644
  ---
  
 -Two-axis review of the diff between `HEAD` and a fixed point the user supplies:
-+Before using this method, read the [CS integration rules](../team-workflow/references/matt-integration.md) for prerequisites and the shared knowledge entry.
++Before using this method, read the [knowledge and team rules](../team-workflow/references/matt-integration.md): project knowledge comes from team-knowledge (`tw brief`).
 +
 +
 +Two-axis review of the final workspace against the fixed base in the accepted task:
@@ -25,7 +25,7 @@ index 373a4f2..0ea4b65 100644
 -The issue tracker should have been provided to you. If not, tell the user to run `/setup-matt-pocock-skills`.
 +Use the accepted user goal and the project's existing requirements; a separate task platform is optional.
 +
-+For a team task, follow the [team delivery rules](../team-workflow/references/team-delivery.md). Record the actual reviewer without imposing a rank or requiring a different person. Simple tasks combine final plan and code approval with the actual code and run references; risks still determine checks. Existing approvals remain valid only for unchanged sections and dependencies. Business acceptance precedes the final CS record, followed by separate knowledge and delivery checks.
++For a team task, follow the [team delivery rules](../team-workflow/references/team-delivery.md). Record the actual reviewer without imposing a rank or requiring a different person. Simple tasks combine final plan and code approval with the actual code and run references; risks still determine checks. Existing approvals remain valid only for unchanged sections and dependencies. Business acceptance precedes the knowledge update, which ships in the same change; delivery then checks the knowledge disposition.
  
  ## Process
  
@@ -42,8 +42,10 @@ index 373a4f2..0ea4b65 100644
  
  ### 2. Identify the spec source
  
-@@ -29,7 +34,7 @@ Look for the originating spec, in this order:
- 1. Issue references in the commit messages (`#123`, `Closes #45`, GitLab `!67`, etc.), fetched via the workflow in the tracker doc.
+ Look for the originating spec, in this order:
+ 
+-1. Issue references in the commit messages (`#123`, `Closes #45`, GitLab `!67`, etc.), fetched via the workflow in the tracker doc.
++1. Issue references in the commit messages (`#123`, `Closes #45`, GitLab `!67`, etc.), fetched from the configured task platform (for example `gh issue view`).
  2. A path the user passed as an argument.
  3. A spec file under `docs/`, `specs/`, or `.scratch/` matching the branch name or feature.
 -4. If nothing is found, ask the user where the spec is. If they say there isn't one, the **Spec** sub-agent will skip and report "no spec available".
@@ -74,8 +76,21 @@ index 373a4f2..0ea4b65 100644
  
  ### 5. Aggregate
  
+diff --git a/skills/matt-codebase-design/DESIGN-IT-TWICE.md b/skills/matt-codebase-design/DESIGN-IT-TWICE.md
+index d099013..d05e27c 100644
+--- a/skills/matt-codebase-design/DESIGN-IT-TWICE.md
++++ b/skills/matt-codebase-design/DESIGN-IT-TWICE.md
+@@ -27,7 +27,7 @@ Prompt each sub-agent with a separate technical brief (file paths, coupling deta
+ - Agent 3: "Optimise for the most common caller: make the default case trivial."
+ - Agent 4 (if applicable): "Design around ports & adapters for cross-seam dependencies."
+ 
+-Include both [SKILL.md](SKILL.md) vocabulary and GLOSSARY.md vocabulary in the brief so each sub-agent names things consistently with the architecture language and the project's domain language.
++Include both [SKILL.md](SKILL.md) vocabulary and project glossary vocabulary (from `tw brief`) in the brief so each sub-agent names things consistently with the architecture language and the project's domain language.
+ 
+ Each sub-agent outputs:
+ 
 diff --git a/skills/matt-codebase-design/SKILL.md b/skills/matt-codebase-design/SKILL.md
-index 3f63c81..ba92f37 100644
+index 3f63c81..42a3f35 100644
 --- a/skills/matt-codebase-design/SKILL.md
 +++ b/skills/matt-codebase-design/SKILL.md
 @@ -1,8 +1,11 @@
@@ -85,14 +100,14 @@ index 3f63c81..ba92f37 100644
  description: Shared vocabulary for designing deep modules. Use when the user wants to design or improve a module's interface, find deepening opportunities, decide where a seam goes, make code more testable or AI-navigable, or when another skill needs the deep-module vocabulary.
  ---
  
-+Before using this method, read the [CS integration rules](../team-workflow/references/matt-integration.md) for prerequisites and the shared knowledge entry.
++Before using this method, read the [knowledge and team rules](../team-workflow/references/matt-integration.md): project knowledge comes from team-knowledge (`tw brief`).
 +
 +
  # Codebase Design
  
  Design **deep modules**: a lot of behaviour behind a small interface, placed at a clean seam, testable through that interface. Use this language and these principles wherever code is being designed or restructured. The aim is leverage for callers, locality for maintainers, and testability for everyone.
 diff --git a/skills/matt-diagnosing-bugs/SKILL.md b/skills/matt-diagnosing-bugs/SKILL.md
-index d039541..0161c05 100644
+index d039541..3c6da15 100644
 --- a/skills/matt-diagnosing-bugs/SKILL.md
 +++ b/skills/matt-diagnosing-bugs/SKILL.md
 @@ -1,13 +1,16 @@
@@ -102,7 +117,7 @@ index d039541..0161c05 100644
  description: Diagnosis loop for hard bugs and performance regressions. Use when the user says "diagnose"/"debug this", or reports something broken/throwing/failing/slow.
  ---
  
-+Before using this method, read the [CS integration rules](../team-workflow/references/matt-integration.md) for prerequisites and the shared knowledge entry.
++Before using this method, read the [knowledge and team rules](../team-workflow/references/matt-integration.md): project knowledge comes from team-knowledge (`tw brief`).
 +
 +
  # Diagnosing Bugs
@@ -110,12 +125,36 @@ index d039541..0161c05 100644
  A discipline for hard bugs. Skip phases only when explicitly justified.
  
 -When exploring the codebase, read `GLOSSARY.md` (if it exists) to get a clear mental model of the relevant modules, and check ADRs in the area you're touching.
-+Before exploring, use the unified CS brief to read the registered glossary and relevant decisions; request full source documents through CS when excerpts are insufficient.
++Before exploring, run `tw brief` with the affected paths to read the glossary, rules, decisions and lessons; use `tw read` when an excerpt is not enough.
  
  ## Redact
  
+diff --git a/skills/matt-domain-modeling/ADR-FORMAT.md b/skills/matt-domain-modeling/ADR-FORMAT.md
+index d7e61f3..d4a62af 100644
+--- a/skills/matt-domain-modeling/ADR-FORMAT.md
++++ b/skills/matt-domain-modeling/ADR-FORMAT.md
+@@ -1,8 +1,8 @@
+ # ADR Format
+ 
+-ADRs live in `docs/adr/` and use sequential numbering: `0001-slug.md`, `0002-slug.md`, etc.
++ADRs live in the project's registered ADR directory when one exists; otherwise in `.tw/decisions/` as `YYYY-MM-DD-slug.md`. Do not use sequential numbers: parallel branches pick the same number.
+ 
+-Create the `docs/adr/` directory lazily: only when the first ADR is needed.
++Create the directory lazily: only when the first ADR is needed.
+ 
+ ## Template
+ 
+@@ -24,7 +24,7 @@ Only include these when they add genuine value. Most ADRs won't need them.
+ 
+ ## Numbering
+ 
+-Scan `docs/adr/` for the highest existing number and increment by one.
++Name the file by the decision date and a slug; never scan for the highest number.
+ 
+ ## When to offer an ADR
+ 
 diff --git a/skills/matt-domain-modeling/SKILL.md b/skills/matt-domain-modeling/SKILL.md
-index a4438c6..1c48603 100644
+index a4438c6..e839dce 100644
 --- a/skills/matt-domain-modeling/SKILL.md
 +++ b/skills/matt-domain-modeling/SKILL.md
 @@ -1,12 +1,17 @@
@@ -125,20 +164,20 @@ index a4438c6..1c48603 100644
  description: Build and sharpen a project's domain model. Use when discussing codebase terminology, writing or editing a GLOSSARY.md, or recording or editing an ADR.
  ---
  
-+Before using this method, read the [CS integration rules](../team-workflow/references/matt-integration.md) for prerequisites and the shared knowledge entry.
++Before using this method, read the [knowledge and team rules](../team-workflow/references/matt-integration.md): project knowledge comes from team-knowledge (`tw brief`).
 +
 +
  # Domain Modeling
  
  Actively build and sharpen the project's domain model as you design. This is the *active* discipline: challenging terms, inventing edge-case scenarios, and writing the glossary and decisions down the moment they crystallise. (Merely *reading* `GLOSSARY.md` for vocabulary is not this skill: that's a one-line habit any skill can do. This skill is for when you're changing the model, not just consuming it.)
  
-+Use the original glossary and decision documents returned by CS. Apply CS's content-ownership rules when editing or creating these documents; retain the formats below.
++Team locations: when the project registers an original glossary or ADR directory (`tw read --list`), edit that original. Otherwise the glossary is `.tw/glossary.md` and decisions are `.tw/decisions/YYYY-MM-DD-<slug>.md` following the [team-knowledge writing rules](../team-knowledge/references/writing.md). Read `GLOSSARY.md` and `docs/adr/` below as these locations. Record resolved terms when the logical task or review node closes, not in the middle of a discussion. Keep the formats below.
 +
  ## File structure
  
  Most repos have a single context:
 diff --git a/skills/matt-grilling/SKILL.md b/skills/matt-grilling/SKILL.md
-index df69d99..a1932b5 100644
+index df69d99..a4a94d9 100644
 --- a/skills/matt-grilling/SKILL.md
 +++ b/skills/matt-grilling/SKILL.md
 @@ -1,8 +1,11 @@
@@ -148,25 +187,57 @@ index df69d99..a1932b5 100644
  description: Grill the user relentlessly about a plan, decision, or idea. Use when the user wants to stress-test their thinking, or uses any 'grill' trigger phrases.
  ---
  
-+Before using this method, read the [CS integration rules](../team-workflow/references/matt-integration.md) for prerequisites and the shared knowledge entry.
++Before using this method, read the [knowledge and team rules](../team-workflow/references/matt-integration.md): project knowledge comes from team-knowledge (`tw brief`).
 +
 +
  Interview the user relentlessly until you reach a shared understanding. Map this as a **design tree**: every decision branches into the decisions that hang off it.
  
  Work the tree in **rounds**. The **frontier** is every decision whose prerequisites are already settled: the questions you can ask _now_ without guessing at answers you haven't heard yet. Ask the whole frontier in one round: number each question and give your recommended answer. Then wait for the user's answers before the next round.
+diff --git a/skills/matt-implement/SKILL.md b/skills/matt-implement/SKILL.md
+index bd49e47..13a1eaa 100644
+--- a/skills/matt-implement/SKILL.md
++++ b/skills/matt-implement/SKILL.md
+@@ -1,17 +1,22 @@
+ ---
+-name: implement
++name: matt-implement
+ description: "Implement a piece of work based on a spec or set of tickets."
+ disable-model-invocation: true
+ ---
+ 
++Before using this method, read the [knowledge and team rules](../team-workflow/references/matt-integration.md): project knowledge comes from team-knowledge (`tw brief`).
++
++
+ Implement the work described by the user in the spec or tickets.
+ 
++For an existing team task, read the [team delivery rules](../team-workflow/references/team-delivery.md) and use `prepare` or `resume` to read its shared materials and actual implementation readiness before editing source or dispatching an implementer. Carry forward valid approvals and assignments; approved work starts without another kickoff confirmation. Use the task's own assessment and review path, including combined review for simple work. A standalone MATT call stays lightweight.
++
+ If the user passes a ticket reference, fetch it from the issue tracker and state its title before starting. If the reference is ambiguous, ask.
+ 
+-Call the Skill tool with "tdd" where possible, at pre-agreed seams.
++Use the bundled `matt-tdd` method when test-first development fits the task, at existing or agreed public boundaries.
+ 
+-Run typechecking regularly, single test files regularly, and the full test suite once at the end.
++Preserve known issue IDs and unresolved decisions through review and handoff. Match each acceptance to actual entrypoints and execution or manual observation evidence; retain unverified coverage explicitly. Run the appropriate focused checks, then the project-required wider checks for the actual risk. Report the actual results.
+ 
+-Once done, call the Skill tool with "code-review" to review the work.
++Once done, call the bundled skill `matt-code-review` to review the work.
+ 
+-Commit your work to the current branch.
++Finish the logical task under the shared knowledge and team rules, updating `.tw` knowledge in the same change. Commit only when requested or already authorized.
 diff --git a/skills/matt-implement-spec/SKILL.md b/skills/matt-implement-spec/SKILL.md
-index 1839237..3673188 100644
+index 1839237..3c8e812 100644
 --- a/skills/matt-implement-spec/SKILL.md
 +++ b/skills/matt-implement-spec/SKILL.md
-@@ -1,40 +1,42 @@
+@@ -1,40 +1,43 @@
  ---
 -name: implement-spec
 +name: matt-implement-spec
  description: "Implement the result of /to-spec and /to-tickets in code."
--disable-model-invocation: true
+ disable-model-invocation: true
  ---
  
-+Before using this method, read the [CS integration rules](../team-workflow/references/matt-integration.md) for prerequisites and the shared knowledge entry.
++Before using this method, read the [knowledge and team rules](../team-workflow/references/matt-integration.md): project knowledge comes from team-knowledge (`tw brief`).
 +
 +
  You have been provided a spec. This spec should have tickets associated with it, describing how to implement the spec.
@@ -211,44 +282,12 @@ index 1839237..3673188 100644
 +7. Freeze shared source during final validation; reuse one actual check batch across tasks. Confirm the parent business journey separately from child completion. Once all tickets are complete, call the bundled skill `matt-code-review` on the integration branch. Fix all issues raised by the code review in a single **implementer subagent**.
  
 -8. If a draft PR exists, mark it ready for review. Otherwise, resolve each ticket the way the issue tracker closes work, and report the integration branch.
-+8. Finish the logical task under the shared CS integration rules. Report the branch and unresolved acceptance. Change external issue or PR status only within existing authorization.
++8. Finish the logical task under the shared knowledge and team rules, updating `.tw` knowledge in the same change. Report the branch and unresolved acceptance. Change external issue or PR status only within existing authorization.
  
 -9. Clean up all **implementer subagent** worktrees.
 +9. Clean up only task-owned temporary worktrees after preserving their work.
-diff --git a/skills/matt-implement/SKILL.md b/skills/matt-implement/SKILL.md
-index bd49e47..e6da38a 100644
---- a/skills/matt-implement/SKILL.md
-+++ b/skills/matt-implement/SKILL.md
-@@ -1,17 +1,21 @@
- ---
--name: implement
-+name: matt-implement
- description: "Implement a piece of work based on a spec or set of tickets."
--disable-model-invocation: true
- ---
- 
-+Before using this method, read the [CS integration rules](../team-workflow/references/matt-integration.md) for prerequisites and the shared knowledge entry.
-+
-+
- Implement the work described by the user in the spec or tickets.
- 
-+For an existing team task, read the [team delivery rules](../team-workflow/references/team-delivery.md) and use `prepare` or `resume` to read its shared materials and actual implementation readiness before editing source or dispatching an implementer. Carry forward valid approvals and assignments; approved work starts without another kickoff confirmation. Use the task's own assessment and review path, including combined review for simple work. A standalone MATT call stays lightweight.
-+
- If the user passes a ticket reference, fetch it from the issue tracker and state its title before starting. If the reference is ambiguous, ask.
- 
--Call the Skill tool with "tdd" where possible, at pre-agreed seams.
-+Use the bundled `matt-tdd` method when test-first development fits the task, at existing or agreed public boundaries.
- 
--Run typechecking regularly, single test files regularly, and the full test suite once at the end.
-+Preserve known issue IDs and unresolved decisions through review and handoff. Match each acceptance to actual entrypoints and execution or manual observation evidence; retain unverified coverage explicitly. Run the appropriate focused checks, then the project-required wider checks for the actual risk. Report the actual results.
- 
--Once done, call the Skill tool with "code-review" to review the work.
-+Once done, call the bundled skill `matt-code-review` to review the work.
- 
--Commit your work to the current branch.
-+Finish the logical task under the shared CS integration rules. Commit only when requested or already authorized.
 diff --git a/skills/matt-pr/SKILL.md b/skills/matt-pr/SKILL.md
-index 84dd4fb..5f2670c 100644
+index 84dd4fb..304dd4d 100644
 --- a/skills/matt-pr/SKILL.md
 +++ b/skills/matt-pr/SKILL.md
 @@ -1,5 +1,5 @@
@@ -262,7 +301,7 @@ index 84dd4fb..5f2670c 100644
      url: "https://github.com/humanlayer/skills/blob/main/plugins/show-me/skills/show-me/SKILL.md"
  ---
  
-+Before using this method, read the [CS integration rules](../team-workflow/references/matt-integration.md) for prerequisites and the shared knowledge entry.
++Before using this method, read the [knowledge and team rules](../team-workflow/references/matt-integration.md): project knowledge comes from team-knowledge (`tw brief`).
 +
 +
  Use this template for writing the PR body:
@@ -273,12 +312,12 @@ index 84dd4fb..5f2670c 100644
  ## Sections
  
 -Skip all preambles and keep prose brief. Use the user's domain language from `GLOSSARY.md`.
-+Skip all preambles and keep prose brief. Use the domain language returned by the unified CS brief and its registered original documents.
++Skip all preambles and keep prose brief. Use the domain language returned by `tw brief` and its registered original documents.
  
  ### Summary
  
 diff --git a/skills/matt-prototype/SKILL.md b/skills/matt-prototype/SKILL.md
-index a004450..e42c3a2 100644
+index a004450..387d971 100644
 --- a/skills/matt-prototype/SKILL.md
 +++ b/skills/matt-prototype/SKILL.md
 @@ -1,8 +1,11 @@
@@ -288,7 +327,7 @@ index a004450..e42c3a2 100644
  description: Build a throwaway prototype to answer a design question. Use when the user wants to sanity-check whether a state model or logic feels right, or explore what a UI should look like.
  ---
  
-+Before using this method, read the [CS integration rules](../team-workflow/references/matt-integration.md) for prerequisites and the shared knowledge entry.
++Before using this method, read the [knowledge and team rules](../team-workflow/references/matt-integration.md): project knowledge comes from team-knowledge (`tw brief`).
 +
 +
  # Prototype
@@ -301,7 +340,7 @@ index a004450..e42c3a2 100644
 -6. **Capture it when done.** Fold any validated decision into the real code, then capture the prototype itself as a **primary source**: commit it to a throwaway branch, out of main, and leave a context pointer to that branch on the implementation issue. Capture the answer too (the verdict and the question it settled) in the issue or a commit. The main branch keeps only the validated decision.
 +6. **Capture it when done.** Fold any validated decision into the real code, then capture the prototype itself as a **primary source**: retain it in an explicitly temporary location, and use a throwaway branch or an issue pointer only when those actions are authorized. Capture the answer too (the verdict and the question it settled) in the issue or a commit. The main branch keeps only the validated decision.
 diff --git a/skills/matt-research/SKILL.md b/skills/matt-research/SKILL.md
-index fecee97..70f37a3 100644
+index fecee97..c114001 100644
 --- a/skills/matt-research/SKILL.md
 +++ b/skills/matt-research/SKILL.md
 @@ -1,12 +1,16 @@
@@ -312,7 +351,7 @@ index fecee97..70f37a3 100644
  ---
  
 -Spin up a **background agent** to do the research, so you keep working while it reads.
-+Before using this method, read the [CS integration rules](../team-workflow/references/matt-integration.md) for prerequisites and the shared knowledge entry.
++Before using this method, read the [knowledge and team rules](../team-workflow/references/matt-integration.md): project knowledge comes from team-knowledge (`tw brief`).
 +
 +
 +Research directly, or use an independent background agent when authorized and useful.
@@ -322,22 +361,22 @@ index fecee97..70f37a3 100644
  1. Investigate the question against **primary sources** (official docs, source code, specs, first-party APIs), not a secondary write-up of them. Follow every claim back to the source that owns it.
  2. Write the findings to a single Markdown file, citing each claim's source.
  3. Save it where the repo already keeps such notes; match the existing convention, and if there is none, put it somewhere sensible and say where.
-+4. For project findings that need future retrieval, follow CS's content-ownership rules for the existing document.
++4. For project findings that need future retrieval, edit the registered original document, or write a `.tw` entry following the team-knowledge writing rules.
 diff --git a/skills/matt-retro/SKILL.md b/skills/matt-retro/SKILL.md
-index 12149ac..5064266 100644
+index 12149ac..567c929 100644
 --- a/skills/matt-retro/SKILL.md
 +++ b/skills/matt-retro/SKILL.md
-@@ -1,44 +1,26 @@
+@@ -1,44 +1,27 @@
  ---
 -name: retro
 -description: "Conduct a retrospective on a coding session."
--disable-model-invocation: true
 +name: matt-retro
 +description: "Review a coding session to improve the agent's working environment when an environment retrospective or improvement is requested. Produces suggestions, not a code review or a routine task-completion step."
+ disable-model-invocation: true
  ---
  
 -The user has asked for a **retrospective**. You are suggesting improvements to the coding agent's **environment** to improve future runs.
-+Before using this method, read the [CS integration rules](../team-workflow/references/matt-integration.md) for prerequisites and the shared knowledge entry.
++Before using this method, read the [knowledge and team rules](../team-workflow/references/matt-integration.md): project knowledge comes from team-knowledge (`tw brief`).
  
 -## Steps
 +Suggest improvements to the coding agent's **environment** from the session the user identifies; default to the current session. Focus on the environment goal already in the task.
@@ -400,7 +439,7 @@ index a2f0bac..63d8d05 100644
  policy:
    allow_implicit_invocation: false
 diff --git a/skills/matt-tdd/SKILL.md b/skills/matt-tdd/SKILL.md
-index 01eadaa..29a6565 100644
+index 01eadaa..1157d24 100644
 --- a/skills/matt-tdd/SKILL.md
 +++ b/skills/matt-tdd/SKILL.md
 @@ -1,13 +1,16 @@
@@ -410,7 +449,7 @@ index 01eadaa..29a6565 100644
  description: Test-driven development. Use when the user wants to build features or fix bugs test-first, mentions "red-green-refactor", or wants integration tests.
  ---
  
-+Before using this method, read the [CS integration rules](../team-workflow/references/matt-integration.md) for prerequisites and the shared knowledge entry.
++Before using this method, read the [knowledge and team rules](../team-workflow/references/matt-integration.md): project knowledge comes from team-knowledge (`tw brief`).
 +
 +
  # Test-Driven Development
@@ -418,7 +457,7 @@ index 01eadaa..29a6565 100644
  TDD is the red → green loop. This skill is the reference that makes that loop produce tests worth keeping: what a good test is, where tests go, the anti-patterns, and the rules of the loop. Every section applies on every cycle: consult them before and during the loop, not after.
  
 -When exploring the codebase, read `GLOSSARY.md` (if it exists) so test names and interface vocabulary match the project's domain language, and respect ADRs in the area you're touching.
-+Before exploring, use the unified CS brief to read the registered glossary and relevant decisions; request full source documents through CS when excerpts are insufficient.
++Before exploring, run `tw brief` with the affected paths to read the glossary, rules, decisions and lessons; use `tw read` when an excerpt is not enough.
  
  ## What a good test is
  
@@ -449,18 +488,18 @@ index 01eadaa..29a6565 100644
 -- **Refactoring is not part of the loop.** It belongs to the review stage (see the `code-review` skill), not the red → green implementation cycle.
 +- **Refactoring is not part of the loop.** It belongs to the review stage (see the `matt-code-review` skill), not the red → green implementation cycle.
 diff --git a/skills/matt-to-spec/SKILL.md b/skills/matt-to-spec/SKILL.md
-index 3f52599..9ede260 100644
+index 3f52599..be5c776 100644
 --- a/skills/matt-to-spec/SKILL.md
 +++ b/skills/matt-to-spec/SKILL.md
-@@ -1,12 +1,14 @@
+@@ -1,12 +1,15 @@
  ---
 -name: to-spec
 +name: matt-to-spec
  description: "Turn the current conversation into a spec and publish it to the project issue tracker: no interview, just synthesis of what you've already discussed."
--disable-model-invocation: true
+ disable-model-invocation: true
  ---
  
-+Before using this method, read the [CS integration rules](../team-workflow/references/matt-integration.md) for prerequisites and the shared knowledge entry.
++Before using this method, read the [knowledge and team rules](../team-workflow/references/matt-integration.md): project knowledge comes from team-knowledge (`tw brief`).
 +
 +
  This skill takes the current conversation context and codebase understanding and produces a spec. Do NOT interview the user; just synthesize what you already know.
@@ -470,7 +509,7 @@ index 3f52599..9ede260 100644
  
  ## Process
  
-@@ -14,9 +16,11 @@ The issue tracker and triage label vocabulary should have been provided to you.
+@@ -14,9 +17,11 @@ The issue tracker and triage label vocabulary should have been provided to you.
  
  2. Sketch out the seams at which you're going to test the feature. Existing seams should be preferred to new ones. Use the highest seam possible. If new seams are needed, propose them at the highest point you can. The fewer seams across the codebase, the better - the ideal number is one.
  
@@ -484,7 +523,7 @@ index 3f52599..9ede260 100644
  
  <spec-template>
  
-@@ -30,7 +34,7 @@ The solution to the problem, from the user's perspective.
+@@ -30,7 +35,7 @@ The solution to the problem, from the user's perspective.
  
  ## User Stories
  
@@ -493,7 +532,7 @@ index 3f52599..9ede260 100644
  
  1. As an <actor>, I want a <feature>, so that <benefit>
  
-@@ -38,7 +42,7 @@ A LONG, numbered list of user stories. Each user story should be in the format o
+@@ -38,7 +43,7 @@ A LONG, numbered list of user stories. Each user story should be in the format o
  1. As a mobile bank customer, I want to see balance on my accounts, so that I can make better informed decisions about my spending
  </user-story-example>
  
@@ -503,18 +542,18 @@ index 3f52599..9ede260 100644
  ## Implementation Decisions
  
 diff --git a/skills/matt-to-tickets/SKILL.md b/skills/matt-to-tickets/SKILL.md
-index 9b77a01..3dbd1ed 100644
+index 9b77a01..d4f1a48 100644
 --- a/skills/matt-to-tickets/SKILL.md
 +++ b/skills/matt-to-tickets/SKILL.md
-@@ -1,14 +1,16 @@
+@@ -1,14 +1,17 @@
  ---
 -name: to-tickets
 +name: matt-to-tickets
  description: Break a plan, spec, or the current conversation into a set of tracer-bullet tickets, each declaring its blocking edges, published to the configured tracker (edges as text in one file per ticket locally, or native blocking links on a real tracker).
--disable-model-invocation: true
+ disable-model-invocation: true
  ---
  
-+Before using this method, read the [CS integration rules](../team-workflow/references/matt-integration.md) for prerequisites and the shared knowledge entry.
++Before using this method, read the [knowledge and team rules](../team-workflow/references/matt-integration.md): project knowledge comes from team-knowledge (`tw brief`).
 +
 +
  # To Tickets
@@ -526,7 +565,7 @@ index 9b77a01..3dbd1ed 100644
  
  ## Process
  
-@@ -24,7 +26,9 @@ Look for opportunities to prefactor the code to make the implementation easier.
+@@ -24,7 +27,9 @@ Look for opportunities to prefactor the code to make the implementation easier.
  
  ### 3. Draft vertical slices
  
@@ -537,7 +576,7 @@ index 9b77a01..3dbd1ed 100644
  
  <vertical-slice-rules>
  
-@@ -35,9 +39,9 @@ Break the work into **tracer bullet** tickets.
+@@ -35,9 +40,9 @@ Break the work into **tracer bullet** tickets.
  
  </vertical-slice-rules>
  
@@ -549,7 +588,7 @@ index 9b77a01..3dbd1ed 100644
  
  ### 4. Quiz the user
  
-@@ -53,28 +57,30 @@ Ask the user:
+@@ -53,28 +58,30 @@ Ask the user:
  - Are the blocking edges correct: does each ticket only depend on tickets that genuinely gate it?
  - Should any tickets be merged or split further?
  
@@ -586,7 +625,7 @@ index 9b77a01..3dbd1ed 100644
  
  - [ ] Acceptance criterion 1
  - [ ] Acceptance criterion 2
-@@ -98,7 +104,7 @@ The end-to-end behaviour this ticket makes work, from the user's perspective, no
+@@ -98,7 +105,7 @@ The end-to-end behaviour this ticket makes work, from the user's perspective, no
  
  ## Blocked by
  
@@ -596,7 +635,7 @@ index 9b77a01..3dbd1ed 100644
  </issue-template>
  
 diff --git a/skills/matt-writing-for-agents/SKILL.md b/skills/matt-writing-for-agents/SKILL.md
-index a37608d..150d2a1 100644
+index a37608d..6433268 100644
 --- a/skills/matt-writing-for-agents/SKILL.md
 +++ b/skills/matt-writing-for-agents/SKILL.md
 @@ -1,8 +1,11 @@
@@ -606,7 +645,7 @@ index a37608d..150d2a1 100644
  description: Writing documents for agents. Use when creating or editing skills, or modifying AGENTS.md or CLAUDE.md.
  ---
  
-+Before using this method, read the [CS integration rules](../team-workflow/references/matt-integration.md) for prerequisites and the shared knowledge entry.
++Before using this method, read the [knowledge and team rules](../team-workflow/references/matt-integration.md): project knowledge comes from team-knowledge (`tw brief`).
 +
 +
  Reference for writing any document an agent consumes: a skill, an `AGENTS.md` / `CLAUDE.md`, a doc reached by a pointer. The packaging differs; the writing does not: the same levers make each one predictable, since the agent takes the same _process_ every run rather than producing the same output.

@@ -63,6 +63,13 @@ class Brief(Case):
         self.assertIn('lessons/2026-10-14-retry-storm.md', result['abandoned'])
         self.assertEqual(self.tw_json('audit')[1]['abandoned_approaches'], 2)
 
+    def test_short_fragments_of_an_abandoned_head_do_not_trigger_reminders(self):
+        write(self.root, '.tw/decisions/2026-10-14-tooling.md', entry(
+            '迁移交给代理', '不写脚本。\n\n## 放弃过的做法\n- 重建工具：盘点、暂存、恢复\n  放弃原因：只管最新设计\n  来源：方案\n  关键词：重建工具',
+            scope=['self:README.md'], source=['s'], status='accepted'))
+        self.assertNotIn('decisions/2026-10-14-tooling.md', self.brief('--task', '恢复两个仓库的独立发布')['abandoned'])
+        self.assertIn('decisions/2026-10-14-tooling.md', self.brief('--task', '再做一个重建工具')['abandoned'])
+
     def test_overview_is_shown_up_to_its_own_limit(self):
         long = '。'.join(['订单服务负责下单、库存预留和品牌归档'] * 40)[:1150]
         write(self.root, '.tw/overview.md', entry('订单服务总览', long, source=['self:README.md']))

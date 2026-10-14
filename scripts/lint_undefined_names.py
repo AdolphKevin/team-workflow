@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Report names that are read but never bound, using the compiler's own scope tables.
 
-Shared byte-for-byte by team-workflow and CodeStable; keep both copies identical.
+Run by the team-workflow release check.
 Standard library only, Python 3.10+. No flow analysis: use-before-assignment is out of scope.
 """
 import argparse

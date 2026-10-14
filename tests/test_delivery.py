@@ -1,4 +1,4 @@
-"""Acceptance can precede CS completion; final delivery cannot bypass either review."""
+"""Acceptance and final delivery retain independent review and knowledge disposition."""
 import contextlib
 import copy
 import io
@@ -24,7 +24,6 @@ class DeliveryCases(unittest.TestCase):
     setUp = fixtures.WorkflowCases.setUp
     git = fixtures.WorkflowCases.git
     check = fixtures.WorkflowCases.check
-    fake_cs = fixtures.WorkflowCases.fake_cs
 
     def setup_task(self, complexity='simple', task_id=None, design_task_id=None, extra_check=False):
         self.check('import app; assert app.add(1,2)==3')
@@ -34,7 +33,7 @@ class DeliveryCases(unittest.TestCase):
             self.profile['required_checks']['code'].append('safety')
         if task_id:
             self.task['id'] = task_id
-        self.design = {'schema_version': 5, 'kind': 'design', 'id': 'D-add', 'revision': 1,
+        self.design = {'data_version': 1, 'kind': 'design', 'id': 'D-add', 'revision': 1,
             'task_id': design_task_id or self.task['id'], 'assessment': {'complexity': complexity, 'risks': [],
                 'effort': 'one hour', 'drivers': ['single function'], 'uncertainties': [], 'required_skills': ['Python']},
             'roles': {'design_owner': 'alice', 'implementation_owner': 'bob', 'acceptance_owner': 'carol'},
@@ -46,17 +45,16 @@ class DeliveryCases(unittest.TestCase):
         plans.plan(self.design)
         if self.task['id'] != self.design['task_id']:
             self.task.update(acceptance_scope='task', parent=self.design['task_id'])
-        self.skill = self.fake_cs()
-        write(self.root / '.team-workflow.json', self.profile)
+        fixtures.write_config(self.root, self.profile)
         self.write('task', self.task)
         self.write('design', self.design)
-        self.write('brief', knowledge.brief(self.root, self.task, self.skill, [], []))
+        self.write('brief', knowledge.brief(self.root, self.task, [], []))
         run, _ = validation.run_batch(self.root, self.profile, [self.task])
         self.runs = [run.relative_to(self.root).as_posix()]
         approval = designs.approval_draft(self.design, 'carol', 'Explicit plan and code approval',
                     code_digest=validation.source_digest(self.root, self.profile), run_refs=[artifact(self.root, run)])
         self.write('approval', approval)
-        self.report = {'schema_version': 6, 'task_id': self.task['id'], 'design': self.name('design'),
+        self.report = {'data_version': 1, 'task_id': self.task['id'], 'design': self.name('design'),
             'approvals': [self.name('approval')], 'brief': self.name('brief'), 'runs': self.runs, 'review': self.name('review')}
         review = delivery.review_template(self.root, self.profile, self.task, self.report)
         ref = artifact(self.root, run)
@@ -68,28 +66,28 @@ class DeliveryCases(unittest.TestCase):
         self.write('report', self.report)
 
     def name(self, name):
-        return '.team-workflow/' + name + '.json'
+        return '.tw/local/' + name + '.json'
 
     def write(self, name, value):
         write(self.root / self.name(name), value)
 
     def evidence_targets(self):
-        other = self.root / '.team-workflow/other-repository'
+        other = self.root / '.tw/local/other-repository'
         other.mkdir(parents=True)
         subprocess.check_call(['git', '-C', str(other), 'init', '-q'])
         subprocess.check_call(['git', '-C', str(other), 'remote', 'add', 'origin',
                                'https://github.com/example/evidence.git'])
         self.profile['external_inputs'] = {'other': {'kind': 'repository',
             'repository': 'example/evidence', 'role': 'build'}}
-        write(self.root / '.team-workflow/local.json', {'repositories': {'example/evidence': str(other)}})
-        write(self.root / '.team-workflow.json', self.profile)
+        write(self.root / '.tw/local/repositories.json', {'repositories': {'example/evidence': str(other)}})
+        fixtures.write_config(self.root, self.profile)
         return [(self.root, {}), (other, {'repository': 'example/evidence'})]
 
     def test_referenced_large_evidence_requires_explicit_override(self):
         for target, identity in self.evidence_targets():
             with self.subTest(identity=identity):
-                path = target / '.team-workflow/large.txt'
-                path.parent.mkdir(exist_ok=True)
+                path = target / '.tw/local/large.txt'
+                path.parent.mkdir(parents=True, exist_ok=True)
                 with path.open('wb') as handle:
                     handle.truncate(64 * 1024 * 1024 + 1)
                 ref = {**artifact(target, path), **identity}
@@ -99,8 +97,8 @@ class DeliveryCases(unittest.TestCase):
     def test_evidence_cli_persists_large_override_for_final_verification(self):
         for target, identity in self.evidence_targets():
             with self.subTest(identity=identity):
-                path = target / '.team-workflow/large.txt'
-                path.parent.mkdir(exist_ok=True)
+                path = target / '.tw/local/large.txt'
+                path.parent.mkdir(parents=True, exist_ok=True)
                 with path.open('wb') as handle:
                     handle.truncate(64 * 1024 * 1024 + 1)
                 args = ['evidence', '--root', str(self.root), '--path', path.relative_to(target).as_posix()]
@@ -120,8 +118,8 @@ class DeliveryCases(unittest.TestCase):
     def test_external_compiled_evidence_cannot_bypass_final_verification(self):
         for target, identity in self.evidence_targets():
             with self.subTest(identity=identity):
-                path = target / '.team-workflow/build.bin'
-                path.parent.mkdir(exist_ok=True)
+                path = target / '.tw/local/build.bin'
+                path.parent.mkdir(parents=True, exist_ok=True)
                 path.write_bytes(b'\x7fELFcompiled output')
                 ref = {**artifact(target, path), **identity}
                 with self.assertRaisesRegex(Invalid, 'compiled executable'):
@@ -131,22 +129,70 @@ class DeliveryCases(unittest.TestCase):
 
     def test_acceptance_needs_no_completed_knowledge_and_final_delivery_does(self):
         self.setup_task()
-        result = delivery.verify(self.root, self.profile, self.task, self.report, self.skill, 'acceptance')
+        result = delivery.verify(self.root, self.profile, self.task, self.report, 'acceptance')
         self.assertTrue(result['business_accepted'])
         self.assertFalse(result['delivery_complete'])
         self.assertFalse(result['closable'])
-        with self.assertRaisesRegex(Invalid, 'Knowledge completion'):
-            delivery.verify(self.root, self.profile, self.task, self.report, self.skill)
+        with self.assertRaisesRegex(Invalid, '最终交付需要业务验收记录'):
+            delivery.verify(self.root, self.profile, self.task, self.report)
         self.write('acceptance', result)
-        completion = knowledge.finish(self.root, self.profile, self.task, self.skill, 'CS-T',
-            self.root / self.name('brief'), 'none', 'Existing source owns the requirement', self.root / self.name('acceptance'))
-        self.write('knowledge', completion)
-        self.report['knowledge'] = self.name('knowledge')
-        delivered = delivery.verify(self.root, self.profile, self.task, self.report, self.skill)
+        self.report['acceptance'] = self.name('acceptance')
+        with self.assertRaisesRegex(Invalid, '知识处置'):
+            delivery.verify(self.root, self.profile, self.task, self.report)
+        self.report['knowledge'] = {'files': [], 'reason': 'Existing source owns the requirement'}
+        delivered = delivery.verify(self.root, self.profile, self.task, self.report)
         self.assertTrue(delivered['delivery_complete'])
         self.assertFalse(delivered['closable'])
         self.report['close_authorization'] = {'confirmed_by': 'carol', 'reference': 'Explicit user authorization to close this task'}
-        self.assertTrue(delivery.verify(self.root, self.profile, self.task, self.report, self.skill)['closable'])
+        self.assertTrue(delivery.verify(self.root, self.profile, self.task, self.report)['closable'])
+
+    def test_final_delivery_needs_this_tasks_current_acceptance_record(self):
+        self.setup_task()
+        accepted = delivery.verify(self.root, self.profile, self.task, self.report, 'acceptance')
+        self.report['acceptance'] = self.name('acceptance')
+        self.report['knowledge'] = {'files': [], 'reason': 'Existing source owns the requirement'}
+        for change, message in (({'business_accepted': False}, '不是通过的业务验收记录'),
+                                ({'kind': 'delivery-verification'}, '不是通过的业务验收记录'),
+                                ({'task_id': 'TASK-other'}, '其他任务'),
+                                ({'sections': {}}, '方案章节已变化'),
+                                ({'source_digest': '0' * 64}, '源码已变化')):
+            with self.subTest(change=change):
+                self.write('acceptance', {**accepted, **change})
+                with self.assertRaisesRegex(Invalid, message):
+                    delivery.verify(self.root, self.profile, self.task, self.report)
+        self.write('acceptance', accepted)
+        self.assertTrue(delivery.verify(self.root, self.profile, self.task, self.report)['delivery_complete'])
+
+    def test_final_delivery_rejects_an_acceptance_of_other_runs_or_reviews(self):
+        self.setup_task()
+        accepted = delivery.verify(self.root, self.profile, self.task, self.report, 'acceptance')
+        self.write('acceptance', accepted)
+        self.report.update(acceptance=self.name('acceptance'),
+                           knowledge={'files': [], 'reason': 'Existing source owns the requirement'})
+        rerun, _ = validation.run_batch(self.root, self.profile, [self.task])
+        ref = artifact(self.root, rerun)
+        self.write('approval-2', designs.approval_draft(self.design, 'carol', 'Reviewed the new run',
+                   code_digest=validation.source_digest(self.root, self.profile), run_refs=[ref]))
+        review = read(self.root / self.name('review'))
+        for axis in ('standards', 'spec'):
+            review[axis]['evidence'] = [ref]
+        review['acceptance'][0].update(evidence=[ref], observations=[plans.observation(ref)])
+        self.write('review-2', review)
+        self.report.update(runs=[rerun.relative_to(self.root).as_posix()], approvals=[self.name('approval-2')],
+                           review=self.name('review-2'))
+        self.assertTrue(delivery.verify(self.root, self.profile, self.task, self.report, 'acceptance')['business_accepted'])
+        with self.assertRaisesRegex(Invalid, '材料已变化，需要用当前材料重新验收'):
+            delivery.verify(self.root, self.profile, self.task, self.report)
+
+    def test_equivalent_paths_and_identical_copies_keep_the_acceptance(self):
+        self.setup_task()
+        self.report['runs'] = ['./' + p for p in self.runs]
+        accepted = delivery.verify(self.root, self.profile, self.task, self.report, 'acceptance')
+        self.write('acceptance', accepted)
+        (self.root / self.name('review-copy')).write_bytes((self.root / self.name('review')).read_bytes())
+        self.report.update(review=self.name('review-copy'), runs=self.runs, acceptance=self.name('acceptance'),
+                           knowledge={'files': [], 'reason': 'Existing source owns the requirement'})
+        self.assertTrue(delivery.verify(self.root, self.profile, self.task, self.report)['delivery_complete'])
 
     def test_automatic_observation_must_reference_selected_run(self):
         self.setup_task()
@@ -167,49 +213,46 @@ class DeliveryCases(unittest.TestCase):
                 review['acceptance'][0]['observations'] = [plans.observation(refs[0])]
                 self.write('review', review)
                 with self.assertRaisesRegex(Invalid, 'selected execution'):
-                    delivery.verify(self.root, self.profile, self.task, self.report, self.skill, 'acceptance')
+                    delivery.verify(self.root, self.profile, self.task, self.report, 'acceptance')
                 review['acceptance'][0]['observations'] = [plans.observation(refs[1])]
                 self.write('review', review)
-                self.assertTrue(delivery.verify(self.root, self.profile, self.task, self.report,
-                                               self.skill, 'acceptance')['business_accepted'])
+                self.assertTrue(delivery.verify(self.root, self.profile, self.task, self.report, 'acceptance')['business_accepted'])
 
     def test_removed_fixture_does_not_invalidate_finished_acceptance(self):
-        marker = self.root / '.team-workflow/fixture-id.txt'
+        marker = self.root / '.tw/local/fixture-id.txt'
         marker.parent.mkdir(exist_ok=True)
         marker.write_text('postgres-container-1')
-        identity = [sys.executable, '-c', "from pathlib import Path; print(Path('.team-workflow/fixture-id.txt').read_text())"]
+        identity = [sys.executable, '-c', "from pathlib import Path; print(Path('.tw/local/fixture-id.txt').read_text())"]
         self.check = lambda code, **kw: fixtures.WorkflowCases.check(
             self, code, environment={'kind': 'fixture', 'identity': identity}, **kw)
         self.setup_task()
-        accepted = delivery.verify(self.root, self.profile, self.task, self.report, self.skill, 'acceptance')
+        accepted = delivery.verify(self.root, self.profile, self.task, self.report, 'acceptance')
         self.assertEqual(accepted['environment_checked'], 'now')
         self.assertEqual(accepted['environment']['unit']['fixture']['identity'], 'postgres-container-1')
         self.write('acceptance', accepted)
+        self.report['acceptance'] = self.name('acceptance')
         marker.unlink()  # the isolated database was cleaned up after acceptance
         with self.assertRaisesRegex(Invalid, 'Cannot confirm environment identity'):
-            delivery.verify(self.root, self.profile, self.task, self.report, self.skill, 'acceptance')
-        completion = knowledge.finish(self.root, self.profile, self.task, self.skill, 'CS-T',
-            self.root / self.name('brief'), 'none', 'Existing source owns the requirement', self.root / self.name('acceptance'))
-        self.write('knowledge', completion)
-        self.report['knowledge'] = self.name('knowledge')
-        delivered = delivery.verify(self.root, self.profile, self.task, self.report, self.skill)
+            delivery.verify(self.root, self.profile, self.task, self.report, 'acceptance')
+        self.report['knowledge'] = {'files': [], 'reason': 'Existing source owns the requirement'}
+        delivered = delivery.verify(self.root, self.profile, self.task, self.report)
         self.assertTrue(delivered['delivery_complete'])
         self.assertEqual(delivered['environment_checked'], 'recorded at acceptance')
         self.assertEqual(delivered['environment'], accepted['environment'])
         (self.root / 'app.py').write_text('def add(a, b):\n    return b+a\n')
         # Changed code is still refused offline (here by the code approval bound to the source digest).
         with self.assertRaisesRegex(Invalid, '[Ss]ource|needs review'):
-            delivery.verify(self.root, self.profile, self.task, self.report, self.skill)
+            delivery.verify(self.root, self.profile, self.task, self.report)
 
     def test_missing_or_stale_combined_approval_cannot_accept(self):
         self.setup_task()
         self.report['approvals'] = []
         with self.assertRaisesRegex(Invalid, 'approval|review'):
-            delivery.verify(self.root, self.profile, self.task, self.report, self.skill, 'acceptance')
+            delivery.verify(self.root, self.profile, self.task, self.report, 'acceptance')
         self.report['approvals'] = [self.name('approval')]
         (self.root / 'app.py').write_text('def add(a,b): return a+b+0\n')
         with self.assertRaisesRegex(Invalid, 'approval|review'):
-            delivery.verify(self.root, self.profile, self.task, self.report, self.skill, 'acceptance')
+            delivery.verify(self.root, self.profile, self.task, self.report, 'acceptance')
 
     def test_late_brief_does_not_backdate_reading(self):
         self.setup_task()
@@ -217,22 +260,22 @@ class DeliveryCases(unittest.TestCase):
         value['at'] = '2099-01-01T00:00:00+00:00'
         self.write('brief', value)
         with self.assertRaisesRegex(Invalid, 'after execution'):
-            delivery.verify(self.root, self.profile, self.task, self.report, self.skill, 'acceptance')
+            delivery.verify(self.root, self.profile, self.task, self.report, 'acceptance')
 
     def test_weakening_required_checks_does_not_reuse_old_review(self):
         self.setup_task(extra_check=True)
         self.profile['checks']['unrelated'] = copy.deepcopy(self.profile['checks']['unit'])
-        self.assertTrue(delivery.verify(self.root, self.profile, self.task, self.report, self.skill, 'acceptance')['business_accepted'])
+        self.assertTrue(delivery.verify(self.root, self.profile, self.task, self.report, 'acceptance')['business_accepted'])
         self.profile['required_checks']['code'] = ['unit']
         with self.assertRaisesRegex(Invalid, 'validation policy'):
-            delivery.verify(self.root, self.profile, self.task, self.report, self.skill, 'acceptance')
+            delivery.verify(self.root, self.profile, self.task, self.report, 'acceptance')
 
     def test_prepare_context_and_verify_cli_roundtrip(self):
         self.setup_task()
         def cli(*args):
             output = io.StringIO()
             with contextlib.redirect_stdout(output):
-                code = workflow.main([*args, '--root', str(self.root), '--cs-skill', str(self.skill)])
+                code = workflow.main([*args, '--root', str(self.root)])
             return code, json.loads(output.getvalue())
         code, prepared = cli('prepare', '--task', self.name('task'), '--design', self.name('design'))
         self.assertEqual(code, 0, prepared)
@@ -251,7 +294,7 @@ class DeliveryCases(unittest.TestCase):
         self.design['sections'][1]['data']['checks'] = []
         self.design['sections'][1]['data']['verification'] = {'method': 'manual', 'coverage': plans.coverage('manual'), 'cases': []}
         self.write('design', self.design)
-        self.write('brief', knowledge.brief(self.root, self.task, self.skill, [], []))
+        self.write('brief', knowledge.brief(self.root, self.task, [], []))
         self.report['runs'] = []
         approval = designs.approval_draft(self.design, 'carol', 'Read the content and its scope',
                     code_digest=validation.source_digest(self.root, self.profile), run_refs=[])
@@ -266,13 +309,13 @@ class DeliveryCases(unittest.TestCase):
 
     def test_document_only_acceptance_does_not_invent_execution(self):
         self.manual_acceptance()
-        result = delivery.verify(self.root, self.profile, self.task, self.report, self.skill, 'acceptance')
+        result = delivery.verify(self.root, self.profile, self.task, self.report, 'acceptance')
         self.assertEqual(result['checks'], [])
 
     def test_manual_observer_must_not_be_the_implementer(self):
         self.manual_acceptance(observer=' BOB ')
         with self.assertRaisesRegex(Invalid, 'Manual observer must not be the implementation owner'):
-            delivery.verify(self.root, self.profile, self.task, self.report, self.skill, 'acceptance')
+            delivery.verify(self.root, self.profile, self.task, self.report, 'acceptance')
 
     def test_reviewer_must_not_be_the_implementer(self):
         self.setup_task()
@@ -280,14 +323,14 @@ class DeliveryCases(unittest.TestCase):
         review['reviewer'] = 'Bob'
         self.write('review', review)
         with self.assertRaisesRegex(Invalid, 'Reviewer must not be the implementation owner'):
-            delivery.verify(self.root, self.profile, self.task, self.report, self.skill, 'acceptance')
+            delivery.verify(self.root, self.profile, self.task, self.report, 'acceptance')
 
     def test_acceptance_needs_recorded_implementer_to_check_independence(self):
         self.setup_task()
         self.design['roles']['implementation_owner'] = ''
         self.write('design', self.design)
         with self.assertRaisesRegex(Invalid, 'approval is missing|recorded implementation owner'):
-            delivery.verify(self.root, self.profile, self.task, self.report, self.skill, 'acceptance')
+            delivery.verify(self.root, self.profile, self.task, self.report, 'acceptance')
 
     def test_acceptance_needs_confirmed_business_sources(self):
         self.setup_task()
@@ -297,7 +340,7 @@ class DeliveryCases(unittest.TestCase):
         self.assertIn('Acceptance scenario needs confirmed business sources: A1',
                       execution_environment(self.profile, self.task, self.design))
         with self.assertRaisesRegex(Invalid, 'confirmed business sources: A1'):
-            delivery.verify(self.root, self.profile, self.task, self.report, self.skill, 'acceptance')
+            delivery.verify(self.root, self.profile, self.task, self.report, 'acceptance')
 
     def test_scenario_sources_are_explicit_and_unique(self):
         self.setup_task()
@@ -324,7 +367,7 @@ class DeliveryCases(unittest.TestCase):
         import sys
         self.profile['checks']['unit']['environment'] = {'kind': 'fixture',
             'identity': [sys.executable, '-c', f'from pathlib import Path; Path({str(marker)!r}).write_text("bad"); print("fixture")']}
-        write(self.root / '.team-workflow.json', self.profile)
+        fixtures.write_config(self.root, self.profile)
         output = io.StringIO()
         with contextlib.redirect_stdout(output):
             code = workflow.main(['status', '--root', str(self.root), '--task', self.name('task'), '--report', self.name('report')])
@@ -352,31 +395,29 @@ class DeliveryCases(unittest.TestCase):
 
     def test_undeclared_automation_keeps_previous_result(self):
         self.setup_task()
-        result = delivery.verify(self.root, self.profile, self.task, self.report, self.skill, 'acceptance')
+        result = delivery.verify(self.root, self.profile, self.task, self.report, 'acceptance')
         self.assertEqual(result['automation_status'], 'not-declared')
         self.assertFalse(result['regression_pending'])
 
     def test_pending_automation_stays_visible_after_delivery(self):
         self.setup_task()
         self.declare_pending_automation()
-        accepted = delivery.verify(self.root, self.profile, self.task, self.report, self.skill, 'acceptance')
+        accepted = delivery.verify(self.root, self.profile, self.task, self.report, 'acceptance')
         self.assertTrue(accepted['business_accepted'])
         self.assertTrue(accepted['regression_pending'])
         self.assertEqual([r['id'] for r in accepted['automation_status']['pending_automation']], ['S2'])
         self.assertEqual([r['id'] for r in accepted['automation_status']['manual_only']], ['S3'])
         self.write('acceptance', accepted)
-        completion = knowledge.finish(self.root, self.profile, self.task, self.skill, 'CS-T',
-            self.root / self.name('brief'), 'none', 'Existing source owns the requirement', self.root / self.name('acceptance'))
-        self.write('knowledge', completion)
-        self.report['knowledge'] = self.name('knowledge')
-        delivered = delivery.verify(self.root, self.profile, self.task, self.report, self.skill)
+        self.report['acceptance'] = self.name('acceptance')
+        self.report['knowledge'] = {'files': [], 'reason': 'Existing source owns the requirement'}
+        delivered = delivery.verify(self.root, self.profile, self.task, self.report)
         self.assertTrue(delivered['delivery_complete'])
         self.assertTrue(delivered['regression_pending'])
         self.assertIn('not regression automation', delivered['assurance'])
         self.write('report', self.report)
         output = io.StringIO()
         with contextlib.redirect_stdout(output):
-            code = workflow.main(['verify', '--root', str(self.root), '--cs-skill', str(self.skill), '--task', self.name('task'),
+            code = workflow.main(['verify', '--root', str(self.root), '--task', self.name('task'),
                                   '--report', self.name('report'), '--format', 'text'])
         self.assertEqual(code, 0, output.getvalue())
         self.assertIn('regression_pending: True', output.getvalue())
@@ -390,11 +431,11 @@ class DeliveryCases(unittest.TestCase):
             original = pending[field]
             pending[field] = value
             with self.assertRaisesRegex(Invalid, message):
-                delivery.verify(self.root, self.profile, self.task, self.report, self.skill, 'acceptance')
+                delivery.verify(self.root, self.profile, self.task, self.report, 'acceptance')
             pending[field] = original
         pending['check'] = 'unit'
         with self.assertRaisesRegex(Invalid, 'Unknown fields'):
-            delivery.verify(self.root, self.profile, self.task, self.report, self.skill, 'acceptance')
+            delivery.verify(self.root, self.profile, self.task, self.report, 'acceptance')
 
     def test_automation_entries_reference_actual_scope_and_results(self):
         self.setup_task()
@@ -412,11 +453,11 @@ class DeliveryCases(unittest.TestCase):
             original = copy.deepcopy(entry[field])
             entry[field] = value
             with self.subTest(field=field, value=value), self.assertRaisesRegex(Invalid, message):
-                delivery.verify(self.root, self.profile, self.task, self.report, self.skill, 'acceptance')
+                delivery.verify(self.root, self.profile, self.task, self.report, 'acceptance')
             entry[field] = original
         del manual['owner']
         with self.assertRaisesRegex(Invalid, 'Missing fields: owner'):
-            delivery.verify(self.root, self.profile, self.task, self.report, self.skill, 'acceptance')
+            delivery.verify(self.root, self.profile, self.task, self.report, 'acceptance')
 
     def test_automated_regression_level_must_be_covered_by_the_check(self):
         import contracts
@@ -437,7 +478,7 @@ class DeliveryCases(unittest.TestCase):
         parent_task.pop('parent', None)
         def issue(url, task, parent_url=None):
             return {'html_url': url, 'body': '```team-workflow-task\n' + json.dumps(
-                {'schema_version': 5, 'parent': parent_url, 'task': task}) + '\n```',
+                {'data_version': 1, 'parent': parent_url, 'task': task}) + '\n```',
                 'assignees': [{'login': 'bob'}], 'comments_data': []}
         parent_issue, child_issue = issue(parent, parent_task), issue(child, self.task, parent)
         withdrawal, watching, count = None, False, 0
@@ -463,7 +504,7 @@ class DeliveryCases(unittest.TestCase):
                 'decision': 'changes-requested'})
             watching = True
             with self.assertRaisesRegex(Invalid, 'Platform requirements, approvals'):
-                delivery.verify(self.root, self.profile, self.task, self.report, self.skill, 'acceptance')
+                delivery.verify(self.root, self.profile, self.task, self.report, 'acceptance')
 
 
 if __name__ == '__main__':

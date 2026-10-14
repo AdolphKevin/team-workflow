@@ -2,7 +2,7 @@
 
 本页随 team-workflow 技能分发，供开发、测试、用户和代理共同执行，是业务验收、自动回归、
 缺陷处理和每周质量复盘的统一正文。团队任务及上述工作均读取本页。项目在自己的 AGENTS.md 或
-`.team-workflow.json` `context` 登记的引用文件里补充本仓专属内容（入口、路径、负向场景
+`.tw/config.json` `context` 登记的引用文件里补充本仓专属内容（入口、路径、负向场景
 清单、检查登记方式），但不得放宽这里的要求。环境操作步骤由各项目的真实验证操作手册
 承载，最低内容见第 6 节。工具字段与命令见[工具约定](contracts.md)，
 交付步骤见[团队协作与交付](team-delivery.md)。
@@ -30,7 +30,7 @@
 ## 2. 基本原则
 
 - 需求完成的标准是通过真实入口走完业务并核对数据结果，不是测试通过。单元、集成以及
-  `.team-workflow.json` 登记的检查只证明各自 `purpose` 声明的范围。
+  `.tw/config.json` 登记的检查只证明各自 `purpose` 声明的范围。
 - 预期结果来自已确认的 SOP、接口约定或独立事实；不得把当前实现的输出保存为正确答案。
   正向 SOP 断言应发生的结果，负向 SOP 断言不应发生的副作用。
 - 核对业务结果：记录是否落库、状态与数量、重复操作是否重复写入、权限与租户限制是否
@@ -91,13 +91,13 @@
 ### 3.5 子代理台账与中断恢复
 
 启动子代理前先写台账，说明目的和预计额度（代理数量及各自读取的大致范围）；输出写到
-台账给出的路径，不写到临时目录。`$WF` 为已安装技能的 `scripts/workflow.py`：
+台账给出的路径，不写到临时目录。`tw` 为 `python3 <team-knowledge 技能目录>/scripts/tw.py`：
 
 ```bash
-python3 "$WF" agents --ledger <名称> --plan <清单.json>          # 清单 [{"id","purpose"}]
-python3 "$WF" agents --ledger <名称> --mark <id> --status running
-python3 "$WF" agents --ledger <名称> --mark <id> --status completed   # 输出文件写入后
-python3 "$WF" agents --ledger <名称>                             # 继续工作前先读
+tw team agents --ledger <名称> --plan <清单.json>          # 清单 [{"id","purpose"}]
+tw team agents --ledger <名称> --mark <id> --status running
+tw team agents --ledger <名称> --mark <id> --status completed   # 输出文件写入后
+tw team agents --ledger <名称>                             # 继续工作前先读
 ```
 
 状态为 `planned`、`running`、`completed`、`failed`、`interrupted`、`degraded`，每次变更保留在
@@ -157,7 +157,7 @@ python3 "$WF" agents --ledger <名称>                             # 继续工�
 使结果通过。例如消息在路由或成员连接处丢失，规则计算正确的单元测试仍会通过，不能
 替代验证实际送达的链路回归。
 
-新增或修改的用例必须实际运行通过，再登记到 `.team-workflow.json` 的检查：覆盖范围写在该
+新增或修改的用例必须实际运行通过，再登记到 `.tw/config.json` 的检查：覆盖范围写在该
 检查的 `purpose`，未覆盖部分写入交付记录；数据库或服务数据按[接入指南](onboarding.md)
 声明夹具身份。运行入口按第 6 节维护。无法自动化的部分列为“仍需手动场景”，填写执行
 责任、触发时机、步骤和证据位置；可自动化但尚未完成的部分另列待办，不能混同。
@@ -206,7 +206,7 @@ python3 "$WF" agents --ledger <名称>                             # 继续工�
 
 ## 6. 真实验证操作手册的最低内容
 
-每个项目维护手册及可重复执行的自动回归入口，登记到 `.team-workflow.json` 的 `context`。
+每个项目维护手册及可重复执行的自动回归入口，登记到 `.tw/config.json` 的 `context`。
 各项目的入口和验证方式不同，手册按[项目验收方式与测试能力建设](test-capability.md)第 2 节
 为本项目设计，使用[项目验收方案](../templates/project-verification.md)记录，经项目开发与测试
 同事确认。
@@ -289,5 +289,5 @@ python3 "$WF" agents --ledger <名称>                             # 继续工�
 
 ## 9. 经验回写
 
-派遣中出现的问题和处理经验，当轮补充到项目的引用文件或操作手册；稳定结论按 CS 的
-知识规则沉淀，不在本页复制项目专属内容。
+派遣中出现的问题和处理经验，当轮补充到项目的引用文件或操作手册；稳定结论按 team-knowledge 的
+写作规范写进 `.tw/`，不在本页复制项目专属内容。

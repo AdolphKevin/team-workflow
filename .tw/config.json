@@ -1,0 +1,110 @@
+{
+  "format": "channelwill/team-workflow",
+  "data_version": 1,
+  "project": {
+    "id": "github.com/AdolphKevin/team-workflow",
+    "name": "team-workflow"
+  },
+  "context": [
+    "AGENTS.md",
+    "docs/design.md"
+  ],
+  "documents": [
+    {
+      "id": "design",
+      "title": "设计边界",
+      "source": "self:docs/design.md"
+    },
+    {
+      "id": "acceptance",
+      "title": "验收标准",
+      "source": "self:docs/acceptance.md"
+    },
+    {
+      "id": "project-rules",
+      "title": "维护仓规则",
+      "source": "self:AGENTS.md"
+    },
+    {
+      "id": "redesign",
+      "title": "合并重构方案",
+      "source": "self:docs/proposals/2026-10-14-unified-redesign.md"
+    }
+  ],
+  "checks": {
+    "unit": {
+      "argv": [
+        "python3",
+        "scripts/test.py",
+        "--junitxml",
+        "{output}/results.xml"
+      ],
+      "purpose": "验证知识运行时与团队流程：检索、检查、执行绑定、交付与交接",
+      "cwd": ".",
+      "timeout": 600,
+      "format": "junit",
+      "required_cases": [],
+      "required_env": [],
+      "report": "{output}/results.xml",
+      "artifacts": [
+        "{output}/results.evidence.json"
+      ],
+      "environment": {
+        "kind": "stateless"
+      },
+      "coverage": {
+        "level": "journey",
+        "entrypoints": [
+          "tw.py"
+        ],
+        "environment": "isolated-test-repositories",
+        "substitutes": [
+          "GitHub API fixtures"
+        ],
+        "isolation": "isolated",
+        "isolation_evidence": []
+      }
+    },
+    "release": {
+      "argv": [
+        "python3",
+        "scripts/check_release.py"
+      ],
+      "purpose": "发行检查：链接、篇幅预算、上游补丁反向恢复与技能清单",
+      "cwd": ".",
+      "timeout": 600,
+      "format": "command",
+      "required_cases": [],
+      "required_env": [],
+      "environment": {
+        "kind": "stateless"
+      },
+      "coverage": {
+        "level": "interface",
+        "entrypoints": [
+          "scripts/check_release.py"
+        ],
+        "environment": "repository-source",
+        "substitutes": [],
+        "isolation": "isolated",
+        "isolation_evidence": []
+      }
+    }
+  },
+  "required_checks": {
+    "code": [
+      "unit",
+      "release"
+    ],
+    "docs": [
+      "release"
+    ]
+  },
+  "risk_checks": {
+    "public-contract": [
+      "unit"
+    ]
+  },
+  "inputs": [],
+  "environment_versions": {}
+}

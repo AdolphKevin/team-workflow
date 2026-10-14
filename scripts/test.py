@@ -43,8 +43,8 @@ def main():
     args = parser.parse_args()
     root = Path(__file__).resolve().parents[1]
     sources = [{'repository': 'self', 'path': p.relative_to(root).as_posix(), 'sha256': hashlib.sha256(p.read_bytes()).hexdigest()}
-               for base in (root / 'skills/team-workflow/scripts', root / 'tests', root / 'scripts')
-               for p in sorted(base.glob('*.py'))]
+               for base in (root / 'skills/team-knowledge/scripts', root / 'tests', root / 'scripts')
+               for p in sorted(base.rglob('*.py'))]
     started = datetime.now(timezone.utc).isoformat()
     tests = unittest.defaultTestLoader.discover(str(root / 'tests'))
     result = unittest.TextTestRunner(verbosity=2, resultclass=Result).run(tests)

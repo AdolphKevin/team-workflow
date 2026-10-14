@@ -10,7 +10,7 @@
 需要把结果用于其他机器时，通过现有 CI 发布该检查目录的内容，保持
 `result.json` 位于产物压缩包的根目录。工具不会替用户发布产物。
 
-这份文件使用 `schema_version: 6`、`kind: portable-execution`，记录：
+这份文件使用 `data_version: 1`、`kind: portable-execution`，记录：
 
 - 检查编号、定义、命令、执行目录、实际运行仓库及原始用例结果。
 - 实际源码内容、执行器版本和环境的指纹，以及运行前后是否一致。
@@ -74,13 +74,13 @@
 
 ```json
 {
-  "schema_version": 5,
+  "data_version": 1,
   "task_id": "共同的总任务编号或 Issue URL",
   "joint": "example/core",
-  "requirement": {"repository":"example/core","task":".team-workflow/requirement.json","report":".team-workflow/requirement-report.json"},
+  "requirement": {"repository":"example/core","task":".tw/local/requirement.json","report":".tw/local/requirement-report.json"},
   "participants": [
-    {"repository":"example/core","commit":"完整提交编号","profile":".team-workflow/profile.json","task":".team-workflow/task.json","report":".team-workflow/report.json"},
-    {"repository":"example/gateway","commit":"完整提交编号","profile":".team-workflow/profile.json","task":".team-workflow/task.json","report":".team-workflow/report.json"}
+    {"repository":"example/core","commit":"完整提交编号","profile":".tw/config.json","task":".tw/local/task.json","report":".tw/local/report.json"},
+    {"repository":"example/gateway","commit":"完整提交编号","profile":".tw/config.json","task":".tw/local/task.json","report":".tw/local/report.json"}
   ],
   "dependencies": [
     {"repository":"example/common","commit":"完整提交编号"}
@@ -97,7 +97,7 @@
 修改或联合验证的仓库，必须列为参与方并完成自身交付。联合运行须在执行时覆盖
 清单中的所有参与方和构建依赖；本机外部文件不能充当共享仓库版本。
 
-`aggregate(root, manifest, repositories, cs_skill)` 逐仓调用交付核对，再核对
+`aggregate(root, manifest, repositories)` 逐仓调用交付核对，再核对
 联合检查的实际来源、全部输入、运行时间和原始结果。输入、任务、交付材料或平台
 进度在核对期间变化时不能通过。结果分别返回清单当前固定的 `versions` 和实际
 运行所用的 `tested_versions`；相同内容的新提交不会抹去原始执行版本。

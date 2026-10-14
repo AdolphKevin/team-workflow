@@ -2,7 +2,7 @@ name: Validate workflow
 
 on:
   push:
-    branches: [main, 'codex/**']
+    branches: [main, 'codex/**', 'feature/**']
   pull_request:
   workflow_dispatch:
 
@@ -37,20 +37,5 @@ jobs:
           retention-days: 30
       - name: Verify release source and upstream provenance
         run: python3 scripts/check_release.py
-      - name: Fetch independent CS default branch
-        run: |
-          python3 - <<'PY'
-          import os, subprocess
-          from pathlib import Path
-          target = Path(os.environ['RUNNER_TEMP']) / 'workflow-cs'
-          subprocess.run(['git', 'clone', '--depth', '1', 'https://github.com/AdolphKevin/codestable-compact.git', str(target)], check=True)
-          subprocess.run(['git', '-C', str(target), 'rev-parse', 'HEAD'], check=True)
-          PY
-      - name: Verify the knowledge bridge with real CS
-        run: python3 scripts/check_cs_knowledge.py --cs-skill "$RUNNER_TEMP/workflow-cs/skills/cs"
-      - name: Verify acceptance and delivery with real CS
-        run: python3 scripts/check_cs_delivery.py --cs-skill "$RUNNER_TEMP/workflow-cs/skills/cs"
-      - name: Verify parallel branches with real CS
-        run: python3 scripts/check_parallel.py --cs-skill "$RUNNER_TEMP/workflow-cs/skills/cs"
       - name: Build the distributable plugin
         run: python3 scripts/package.py --output "$RUNNER_TEMP/team-workflow.zip"

@@ -20,7 +20,7 @@ def config_problems(config):
     problems = [f'config.json 不使用字段：{key}' for key in config if key not in KEYS]
     if config.get('format') != FORMAT:
         problems.append(f'config.json 的 format 必须是 "{FORMAT}"')
-    if config.get('data_version') != DATA_VERSION:
+    if type(config.get('data_version')) is not int or config.get('data_version') != DATA_VERSION:
         problems.append(f'config.json 的 data_version 必须是 {DATA_VERSION}')
     project = config.get('project')
     if not (isinstance(project, dict) and set(project) == {'id', 'name'} and all(isinstance(v, str) and v.strip() for v in project.values())):
@@ -185,7 +185,7 @@ class Project:
             mapping = self.mapping()
             for alias, value in declared.items():
                 expected = value.get('id') if isinstance(value, dict) else None
-                self._shared[alias] = resolve(alias, mapping.get(alias), expected)
+                self._shared[alias] = resolve(alias, mapping.get(alias) or mapping.get(expected) or mapping.get((expected or '').removeprefix('github.com/')), expected)
         return self._shared
 
 

@@ -12,7 +12,7 @@ def sources():
 
 
 def plan(value):
-    value['schema_version'] = 5
+    value['data_version'] = 1
     value.setdefault('issues', [])
     acceptance = [r for r in value['sections'] if r['type'] == 'acceptance']
     global_data = next(r['data'] for r in value['sections'] if r['id'] == 'scope-global')

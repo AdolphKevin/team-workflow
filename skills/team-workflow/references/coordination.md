@@ -8,7 +8,7 @@
 
 ## 平台任务与方案
 
-Issue 正文使用 `team-workflow-task` 代码块。外层字段是 `schema_version: 5`、
+Issue 正文使用 `team-workflow-task` 代码块。外层字段是 `data_version: 1`、
 `parent` 和 `task`；没有总任务时 `parent` 为 `null`。内层 `task` 使用当前任务
 格式，在目标、基准提交、风险和验收条件之外增加：
 
@@ -74,7 +74,7 @@ Issue 正文使用 `team-workflow-task` 代码块。外层字段是 `schema_vers
 确认位置、联合验收责任人。显式提供依赖清单时不能漏掉配置中的任何仓库。
 
 `resume` 返回当前要求、完整方案与历史、评审结论、分别记录的责任、按实际路径
-读取的 CS 简报、交接记录及待确认进度。它使用实际改动和源码内容核对批准与范围，
+读取的知识简报（`tw brief`）、交接记录及待确认进度。它使用实际改动和源码内容核对批准与范围，
 并在结束前再次读取平台，发现读取期间的新进度或指派变化。没有交接时仍可准备
 方案和评审，但不能声明已具备完整接手材料。
 
@@ -110,7 +110,7 @@ Issue 正文使用 `team-workflow-task` 代码块。外层字段是 `schema_vers
 `error_code: issue-not-adopted`。准备好任务（和共享方案）后运行：
 
 ```bash
-python3 "$WF" issue-draft --root "$PROJECT" --task "$TASK" [--design "$DESIGN"] \
+tw team issue-draft --root "$PROJECT" --task "$TASK" [--design "$DESIGN"] \
   [--with-task "$SIBLING_TASK"] [--reviewer <评审人>]
 ```
 
@@ -123,7 +123,7 @@ python3 "$WF" issue-draft --root "$PROJECT" --task "$TASK" [--design "$DESIGN"] 
 交接有三类：方案交接（`design`）、实施交接（`implementation`）和收尾说明（`close`）。被指派人只有
 实施负责人一人、没有修改或联合的其他仓库、也没有跨服务风险时，最终 `verify` 不要求先发布实施交接：
 它核对全部条件后在结果的 `close_note` 中给出一份收尾说明草稿，包含平实语言摘要和结构化记录
-（业务验收与知识回写的文件指纹、CS 记录版本、知识处置，以及已有的关闭授权）。收尾说明由实施负责人
+（业务验收的文件指纹、知识处置——改动的 `.tw` 条目或不需要的理由——以及已有的关闭授权）。收尾说明由实施负责人
 写给自己（`creator` 与 `owner` 相同），`remaining` 为空，`verified` 引用业务验收。工具不发布它；
 用户发布后，`resume` 返回 `closed: true`，再次 `verify` 直接使用已发布的记录。其他情况仍须先发布
 实施交接，`verify` 会说明原因。
