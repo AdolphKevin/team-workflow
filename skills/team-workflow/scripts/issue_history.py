@@ -1,6 +1,6 @@
 """Retain issues actually submitted for review, including failed verification attempts."""
 from artifacts import directory
-from common import artifact_valid, now, read, require
+from common import RECORD_SCHEMA, artifact_valid, now, read, require
 from contracts import issues, reconcile
 
 
@@ -31,4 +31,4 @@ def capture(request, task, review, section_ids=None):
     rows = review.get('findings', [])
     issues(rows, section_ids)
     reconcile(known(request.root, task['id']), rows)
-    request.publish('review-input.json', {'schema_version': 5, 'task_id': task['id'], 'at': now(), 'issues': rows})
+    request.publish('review-input.json', {'schema_version': RECORD_SCHEMA, 'task_id': task['id'], 'at': now(), 'issues': rows})

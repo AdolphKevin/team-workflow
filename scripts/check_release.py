@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 """Offline release checks, including byte-for-byte upstream reconstruction."""
 import hashlib
+import importlib.util
 import json
 from pathlib import Path
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -20,6 +22,8 @@ def check(root=ROOT):
     version = (root / 'VERSION').read_text().strip()
     assert manifest['name'] == 'team-workflow' and manifest['version'] == version
     assert f"VERSION = '{version}'" in (root / 'skills/team-workflow/scripts/common.py').read_text()
+    template = json.loads((root / 'skills/team-workflow/templates/profile.json').read_text())
+    assert template.get('workflow_version', version) == version, 'profile template workflow_version must match VERSION'
     catalog = json.loads((root / '.agents/plugins/marketplace.json').read_text())
     assert catalog['name'] == 'team-workflow'
     assert len(catalog['plugins']) == 1
@@ -70,7 +74,35 @@ def check(root=ROOT):
                 target = link.split('#')[0]
                 assert (path.parent / target).is_file(), f'broken file link: {path.relative_to(root)} -> {link}'
     assert not (root / 'skills/cs').exists(), 'CS must remain an independent dependency'
-    return {'ok': True, 'version': version, 'upstream_files': len(lock['files']), 'source_files_checked': len(files)}
+    shipped = json.loads((root / 'skills/team-workflow/MANIFEST.json').read_text())
+    sys.path.insert(0, str(root / 'skills/team-workflow/scripts'))
+    import common
+    assert shipped == common.manifest(root / 'skills/team-workflow'), \
+        'skills/team-workflow/MANIFEST.json is stale; run python3 scripts/package.py --manifest'
+    names = lint_names(root)
+    imported = import_scripts(root)
+    return {'ok': True, 'version': version, 'upstream_files': len(lock['files']), 'source_files_checked': len(files),
+            'undefined_name_lint': {'files': names['files'], 'lint_version': names['lint_version']},
+            'scripts_imported': imported, 'skill_manifest_files': len(shipped['files'])}
+
+
+def lint_names(root):
+    spec = importlib.util.spec_from_file_location('lint_undefined_names', root / 'scripts/lint_undefined_names.py')
+    lint = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(lint)
+    result = lint.check([root / 'scripts', root / 'skills', root / 'tests'], root=root.resolve())
+    assert result['ok'], 'undefined names: ' + json.dumps(result['findings'], ensure_ascii=False)
+    return result
+
+
+def import_scripts(root):
+    """Import every tool module in a fresh interpreter so import-time errors fail the release."""
+    scripts = root / 'skills/team-workflow/scripts'
+    modules = sorted(p.stem for p in scripts.glob('*.py'))
+    code = 'import importlib, sys\nsys.path.insert(0, sys.argv[1])\nfor name in sys.argv[2:]: importlib.import_module(name)'
+    result = subprocess.run([sys.executable, '-I', '-c', code, str(scripts), *modules], text=True, capture_output=True)
+    assert result.returncode == 0, result.stderr
+    return len(modules)
 
 
 if __name__ == '__main__':

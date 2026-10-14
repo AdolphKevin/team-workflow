@@ -203,7 +203,7 @@ def run(skill):
             approval = designs.approval_draft(design, 'carol', 'Fixture reviewer accepted actual plan and code',
                 code_digest=validation.source_digest(root, profile), run_refs=[run_ref])
             write(root / '.team-workflow/approval.json', approval)
-            report = {'schema_version': 5, 'task_id': name, 'design': '.team-workflow/design.json',
+            report = {'schema_version': 6, 'task_id': name, 'design': '.team-workflow/design.json',
                 'approvals': ['.team-workflow/approval.json'], 'brief': '.team-workflow/brief.json',
                 'runs': [run_ref['path']], 'review': '.team-workflow/review.json'}
             review = delivery.review_template(root, profile, task, report)
@@ -217,7 +217,7 @@ def run(skill):
             accepted_path = root / '.team-workflow/acceptance.json'
             write(accepted_path, acceptance)
             payload = root / '.team-workflow/learn-input.json'
-            learning = knowledge.completion_template(root, profile, task, skill, accepted_path)
+            learning = knowledge.completion_template(root, profile, task, skill, [accepted_path])
             supplied = task_payload(name)
             learning['task'].update(supplied['task'])
             learning['items'] = supplied['items']

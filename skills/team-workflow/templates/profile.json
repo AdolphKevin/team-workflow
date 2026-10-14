@@ -54,5 +54,15 @@
     ]
   },
   "external_inputs": {},
-  "workflow_version": "0.7.0-rc.1"
+  "workflow_version": "0.8.0-rc.1",
+  "accounts": [
+    {
+      "id": "__REPLACE__",
+      "kind": "synthetic",
+      "environment": "__REPLACE__",
+      "login": "agent-after-authorization",
+      "isolation": "__REPLACE__",
+      "credential_env": []
+    }
+  ]
 }

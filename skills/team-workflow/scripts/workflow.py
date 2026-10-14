@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Team workflow command line. Every record uses the current contract (schema_version 5)."""
+"""Team workflow command line. Configurations, tasks and plans use schema 5; local evidence uses schema 6."""
 import argparse
 import json
 from pathlib import Path
@@ -16,7 +16,7 @@ def parser():
                                       'resume', 'handoff', 'progress', 'task-export', 'delivery-template', 'import-result',
                                       'status', 'agents', 'prepare', 'design-draft',
                                       'approval-draft', 'design-diff', 'schema', 'cleanup', 'knowledge-template',
-                                      'guidance'])
+                                      'guidance', 'adopt', 'issue-draft', 'metrics'])
     p.add_argument('--root', type=Path, default=Path.cwd())
     p.add_argument('--profile', type=Path, default=Path('.team-workflow.json'))
     p.add_argument('--task', type=Path)
@@ -26,7 +26,8 @@ def parser():
     p.add_argument('--design-history', action='append', default=[], type=Path)
     p.add_argument('--dependency', action='append', default=[], type=Path, help='Verified predecessor inputs {section,task,report}')
     p.add_argument('--context', type=Path, help='Prepared context artifact; resolves task/design/brief inputs')
-    p.add_argument('--acceptance', type=Path, help='Actual business acceptance result')
+    p.add_argument('--acceptance', action='append', default=[], type=Path,
+                   help='Actual business acceptance result; repeat for each --with-task sharing one CS record')
     p.add_argument('--final-brief', type=Path, help='Re-read knowledge after writeback; original brief is retained')
     p.add_argument('--phase', choices=['acceptance', 'delivery'], default='delivery')
     p.add_argument('--kind', choices=['design', 'implementation'], default='implementation')
@@ -41,6 +42,8 @@ def parser():
     p.add_argument('--review', type=Path)
     p.add_argument('--check', action='append', help='Run only selected checks; verification still requires all mandatory checks')
     p.add_argument('--cs-skill', type=Path)
+    p.add_argument('--allow-modified-tool', action='store_true',
+                   help='Run verification with a modified installation; recorded as tool.override in results')
     p.add_argument('--cs-task-id')
     p.add_argument('--brief', type=Path)
     p.add_argument('--knowledge', type=Path)
@@ -61,14 +64,45 @@ def parser():
     p.add_argument('--mark', help='Sub-agent ID whose ledger status changes')
     p.add_argument('--status', dest='agent_status', help='New sub-agent status')
     p.add_argument('--scope', choices=['project', 'global', 'all'], default='all', help='guidance targets')
+    p.add_argument('--reviewer', help='issue-draft: the named person asked to review the design')
+    p.add_argument('--grant', choices=['synthetic-login'],
+                   help='prepare: record the user\'s permission for the agent to sign in to declared synthetic accounts')
+    p.add_argument('--confirmed-by', help='prepare --grant: the user who gave the permission')
+    p.add_argument('--since', help='metrics: only requests started at or after this ISO time')
+    p.add_argument('--cleanup-scope', choices=['requests', 'all'], default='requests',
+                   help='cleanup: finished task requests only, or also unreferenced batches, imports and stale leases')
+    p.add_argument('--older-than', type=int, default=14, help='cleanup --cleanup-scope all: minimum age in days')
+    p.add_argument('--allow-large-evidence', action='store_true',
+                   help='evidence: accept a file above the size limit (compiled executables are never accepted)')
     p.add_argument('--home', type=Path, help='Home directory holding per-user agent files (default: current user)')
     p.add_argument('--file', help='Project-relative rules file for guidance (default: AGENTS.md); CLAUDE.md imports it')
     return p
 
 
+def _terminated(signum, frame):
+    # Unwind normally: running checks are killed with their process group and validation markers are removed.
+    raise SystemExit(128 + signum)
+
+
 def main(argv=None):
+    import signal
+    import threading
+    previous = (signal.signal(signal.SIGTERM, _terminated)
+                if threading.current_thread() is threading.main_thread() else None)
+    try:
+        return _main(argv)
+    finally:
+        if previous is not None:
+            signal.signal(signal.SIGTERM, previous)
+
+
+def _main(argv=None):
     args = parser().parse_args(argv)
     root = args.root.resolve()
+    if args.allow_modified_tool:
+        import os
+        from common import ALLOW_MODIFIED
+        os.environ[ALLOW_MODIFIED] = '1'
     token = LOCATIONS.set({'repositories': {}, 'inputs': {}})
     import commands
     try:
@@ -102,11 +136,15 @@ def main(argv=None):
         return 0 if result.get('ok', True) else 1
     except (Invalid, OSError, ValueError, TypeError, KeyError) as exc:
         result = {'ok': False, 'scope': args.command, 'status': 'incomplete', 'problem': str(exc),
-                  'error_code': 'invalid-or-incomplete-input',
-                  'next_action': 'Inspect the named input and preserve prior evidence.'}
+                  'error_code': getattr(exc, 'error_code', 'invalid-or-incomplete-input'),
+                  'next_action': getattr(exc, 'next_action', None) or 'Inspect the named input and preserve prior evidence.'}
         if isinstance(exc, versioning.Outdated):
             result.update(error_code=exc.error_code, next_action=exc.next_action, version=exc.version)
         print(json.dumps(result, ensure_ascii=False))
+        return 1
+    except Exception as exc:
+        import commands
+        print(json.dumps({'scope': args.command, **commands.tool_defect(exc)}, ensure_ascii=False))
         return 1
     finally:
         LOCATIONS.reset(token)

@@ -1,6 +1,8 @@
 # 工具约定
 
-所有任务、配置和记录使用本页的格式（`schema_version: 5`），工具不读取其他格式。运行环境为
+配置、任务、方案及平台记录使用 `schema_version: 5`；工具在本地生成的证据（执行、导入、评审、交付报告、
+验收、知识简报与完成、准备上下文）使用 `schema_version: 6`。第六版之前的证据保留为历史，不用于新的验收，
+由 `adopt` 列出需要重跑的任务。运行环境为
 Python 3.10+、Git 和项目自身的测试依赖。通用工具只使用标准库。
 
 下文 `$WF` 是已安装技能的 `scripts/workflow.py` 路径，`$PROJECT` 是项目目录，
@@ -14,6 +16,15 @@ python3 "$WF" schema --root "$PROJECT"
 python3 "$WF" project --root "$PROJECT" --cs-skill "$CS_SKILL"
 python3 "$WF" guidance --root "$PROJECT" [--scope project|global|all] [--file AGENTS.md] [--apply]
 ```
+
+`project` 同时核对安装完整性：`tool.status` 为 `intact`、`modified`（列出 `changed`、`missing`、
+`unexpected`）或 `unknown`（缺少 `MANIFEST.json`）。不是 `intact` 时返回 `error_code: tool-modified`，
+`verify` 与 `knowledge` 拒绝执行；发现工具缺陷时报告缺陷并重装，不修改已安装的技能。确需带改动运行时加
+`--allow-modified-tool`，结果中的 `tool.override` 为真并随记录保留（该选项只覆盖 team-workflow 自身，不覆盖 CS）。
+CS 须声明 `contract_version: 1`、`task-source-acceptances` 与 `install-integrity` 能力，且其 `integrity.status` 为
+`intact`；凡是调用 CS 的命令（`project`、`prepare`、`brief`、`knowledge-template`、`knowledge` 和最终 `verify`）
+在 CS 被修改时返回 `error_code: tool-modified`。业务验收阶段的 `verify` 不调用 CS，只使用准备时取得的知识简报。
+工具自身缺陷返回 `error_code: tool-defect`，保留请求目录作为证据。
 
 `project` 的 `version.status` 为 `current` 或 `tool-outdated`。项目配置的格式或
 `workflow_version` 高于已安装工具时，所有读取该配置的命令返回 `tool-outdated`，先更新
@@ -77,6 +88,8 @@ python3 "$WF" status --root "$PROJECT" --context "$CONTEXT" --format text
 平台任务也可用 `prepare --issue <完整Issue链接>` 读取共享任务和方案。已有批准使用
 可重复的 `--approval`，历史方案用可重复的 `--design-history`，从第 1 版保留完整快照。
 读取平台失败时报告缺口，不退回本地材料后声称平台交付完成。
+所请求的 Issue 缺少任务块时返回 `issue-not-adopted`；已接入的子 Issue 所引用的父 Issue 缺块时，
+返回 `parent-issue-not-adopted`，并指向父 Issue 的地址及 `issue-draft --task <parent-task.json>` 补齐命令。
 
 `resume` 和 `status` 只读，不生成新的上下文文件。后续命令复用已有 `--context`；缺少时以当前方案和已有批准运行 `prepare`，无需再次请求批准。
 
@@ -102,7 +115,24 @@ python3 "$WF" run --root "$PROJECT" --task "$TASK" --with-task "$OTHER_TASK"
 
 任务、项目默认及风险检查取并集；`--with-task` 可重复。同一批次每项检查执行一次，
 各任务仍单独验收。可重复 `--check` 做聚焦运行，最终核查仍要求全部必要检查。
-结果绑定源码内容、逻辑依赖、检查定义及环境；源码或环境在运行期间变化不能通过。
+结果绑定源码内容、逻辑依赖、执行定义及环境；源码或环境在运行期间变化不能通过。
+
+任务方案的范围（`scope`）要包含实际改动的全部文件，测试文件也算在内；否则验收报告未映射的文件。实施后再次运行
+`prepare` 会取得新的知识简报，之前的执行早于这次阅读，需要重新运行检查和评审，因此修正方案范围最好在运行检查前完成。
+
+执行定义是实际执行的内容（命令、目录、报告格式、环境声明、覆盖范围等）。`required_cases`、
+`purpose` 和 `timeout` 只影响结果判定，不属于执行定义：修改它们后，核查用保存的原始报告按当前登记
+重新判定，不需要重跑；验收结果的 `re_evaluated` 列出这些检查及原判定，`summary_markdown` 用平实语言说明。
+第六版记录在交接和收尾说明中也采用相同的重新判定，保留原记录的状态与原始报告。
+`run` 报告缺少登记用例时会列出报告中实际的用例名，便于发现前缀写错。`verify` 的输出直接包含 `summary_markdown`，
+`--format text` 时打印出来。登记变化仍会改变评审策略，需要重新生成评审。
+
+每项检查独立选取结果。一份批次中某项检查过期，只影响这一项：用 `run --check <该项>` 聚焦重跑，
+再把新旧记录一起传给 `--run`。核查为每项检查选用当前有效的最新结果，过期或被替代的记录列在
+`superseded_execution` 中。环境只在业务验收（`verify --phase acceptance`）时实际核对；之后的
+`knowledge` 与最终 `verify` 使用验收时记录的环境（`environment_checked: recorded at acceptance`），
+隔离数据库等夹具清理后已完成的验收仍然有效。源码、定义、评审和平台在每一步都重新核对。
+旧候选的原始报告不符合当前用例要求时，只记录该候选的问题，继续选择其它候选；导入记录也遵守离线环境核查规则。
 知识文件、暂存布局和无关流程配置变化不会自动重复业务测试。运行期间的协作标记位于 `.team-workflow/validation-active/`；共享目录保持稳定。标记不拦截编辑器写入，起止指纹也不证明期间绝无改动。
 
 本地评审输入写在任务输入目录，例如：
@@ -156,6 +186,21 @@ python3 "$WF" knowledge-template --root "$PROJECT" --context "$CONTEXT" \
 把返回的 `artifact.path` 复制为待填写的 `$CS_PAYLOAD`。继续同一任务加 `--cs-task-id`。
 工具通过 CS 的公开模板接口生成输入，保留实际验收引用与结构化任务关联；省略验收时
 只生成 `in-progress` 和空 `items`。工作流不执行 CS 写入。
+
+多个 Issue 共用一次实现时共用一条 CS 任务记录，各自保留验收。用 `--with-task` 列出其余任务，
+`--acceptance` 按任务重复：
+
+```bash
+python3 "$WF" knowledge-template --root "$PROJECT" --context "$CONTEXT" \
+  --with-task "$TASK_150" --with-task "$TASK_152" \
+  --acceptance "$ACCEPTANCE_149" --acceptance "$ACCEPTANCE_150" --acceptance "$ACCEPTANCE_152" \
+  --cs-task-id "$CS_TASK_ID" --cs-skill "$CS_SKILL"
+```
+
+草稿写入 `task.source.workflow_acceptances`（每项 `{path, sha256, task_id, issue?}`）和每个任务的
+`external_refs`。全部任务都有验收时才为 `completed`，否则保持 `in-progress` 并在
+`pending_acceptance` 列出待验收任务，可以逐个补齐。CS 按 `path` 合并该列表，提交较短的旧列表不会丢失
+已有条目。之后每个任务分别运行 `knowledge`，只传自己的一份验收；工具核对 CS 记录包含该验收的当前指纹。
 
 填写实际结果、验证和知识处置，不把未通过验收的
 工作标为完成。外部关联写入 `task.external_refs`，不依赖请求正文包含链接。
@@ -246,17 +291,46 @@ python3 "$WF" verify --root "$PROJECT" --context "$CONTEXT" \
 ## 重试与清理
 
 材料按任务和请求分目录保存。`--request-id` 用于同一完成请求的重试：同编号且输入相同
-返回原结果；变更输入或需要重跑时使用新编号，保留失败及中断材料。`--out` 只接受运行
+返回原结果；`--allow-modified-tool`、`prepare --grant` 和 `--confirmed-by` 也属于请求输入。
+变更这些选项、其它输入或需要重跑时使用新编号，保留失败及中断材料。`--out` 只接受运行
 目录下的新文件，已有路径拒绝覆盖。失败输出给出原因及下一步；不要改指纹消除错误。
 
 ```bash
-python3 "$WF" cleanup --root "$PROJECT" > "$CLEANUP_PLAN"
+python3 "$WF" cleanup --root "$PROJECT" [--cleanup-scope all --older-than 14] > "$CLEANUP_PLAN"
 python3 "$WF" cleanup --root "$PROJECT" --apply --plan "$CLEANUP_PLAN"
 ```
+
+`--cleanup-scope all` 另外清理超过指定天数且未被任何记录引用的 `batches/`、`imports/` 目录和已结束进程留下的
+验证标记。手工 `--out` 输出及其他目录不归工具管理，只在 `unmanaged` 中列出大小，从不删除。`totals` 给出
+总体积、可回收体积和最大的 20 个文件。
+
+证据只保存评审者能阅读的内容。`evidence` 与评审证据拒绝编译后的可执行文件（ELF、Mach-O、PE）；
+构建产物用构建提交和命令说明，不复制进运行目录。超过 64 MiB 的文件需显式 `--allow-large-evidence`。
+使用该选项时，引用中保存 `allow_large_evidence: true`；最终核查按引用中的布尔标记重新检查大小。
+未带标记的引用仍受 64 MiB 限制，本地与外部仓库相同；标记不能覆盖编译产物限制。
 
 计划放在项目外，先核对预览再显式应用。期间材料变化会要求重新预览；只清理已结束
 任务中未被引用的请求目录。完成证明必须覆盖当时的请求清单；同一任务后来出现新请求或旧请求被改写时，整个任务重新受保护。在途任务、共享批准历史和全部被引用证据保留，不用清理
 代替修复缺口。发布、提交、合并、关闭任务和技能安装仍沿用已有授权。
+
+## 进度、恢复与统计
+
+```bash
+python3 "$WF" status --root "$PROJECT" --context "$CONTEXT" --format text
+python3 "$WF" metrics --root "$PROJECT" [--task "$TASK"] [--since 2026-10-01] [--format text]
+```
+
+`status` 根据工具已记录的请求列出任务步骤（准备、运行检查、评审、业务验收、知识草稿、知识核对、最终交付），
+每步为 `done`、`pending`、`stale`（源码已变需重做）、`failed`、`running-or-interrupted` 或
+`not-recorded`（工具没有记录，可能已在工具外完成，或较早的失败已被后续成功步骤取代）；最近一次尝试被中断或失败时
+显示该状态并作为下一步。执行步骤读取每项结果的源码指纹（声明依赖提交编号的检查还比较提交）；知识完成记录与
+知识草稿读取其引用的验收记录，源码变化时也显示 `stale`。此项核查只读取材料，不执行环境命令。
+`next_step.next_command` 已填入当前上下文和已产生文件的路径，`$WF`、`$PROJECT`、
+`$CS_SKILL` 及尚未产生的文件用变量或占位符标出。使用 `--allow-modified-tool` 产生的结果只在没有正常结果时采用，并标注。
+会话中断后先运行它再继续。任务开始后团队流程规则（技能入口、参考页、分发指引）有变化时，`rules_changed` 为真。
+
+`metrics` 只读本机运行目录，按任务统计各命令的请求次数、失败与未完成次数、耗时，以及每项检查的运行和重跑次数，
+供每周复盘参考；它不联网，也不是质量结论。
 
 ## 前置任务与只读状态
 
@@ -296,7 +370,8 @@ python3 "$WF" cleanup --root "$PROJECT" --apply --plan "$CLEANUP_PLAN"
 
 评审的每个验收项新增非空 `observations`：自动观察为
 `{kind:"execution",run:{path,sha256},check:"检查编号",cases:["实际用例编号"]}`，其中运行必须
-已经列入本任务的 `runs` 并通过原始报告核对；人工观察为
+已经列入本任务的 `runs`，且正是该检查选中的有效记录，并通过原始报告核对；不能引用失败或已被替代的记录来
+借用另一记录的通过结果。人工观察为
 `{kind:"manual",observer,at,steps,result,coverage,evidence:[{path,sha256}]}`，时间含时区，
 步骤和证据非空。纯文档可使用人工观察，不能把只有源码链接的描述当成已经运行。
 

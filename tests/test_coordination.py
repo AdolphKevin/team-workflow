@@ -270,6 +270,20 @@ class CoordinationCases(unittest.TestCase):
         self.assertFalse(omitted['ok'])
         self.assertIn('Declared dependency missing', str(omitted['gaps']))
 
+    def test_local_only_files_in_a_build_dependency_are_named_and_excludable(self):
+        self.prepare()
+        library = self.dependency('build')
+        (library / '.DS_Store').write_bytes(b'finder')
+        with patch.object(github_read, 'api', side_effect=self.github):
+            self.establish_design()
+            dirty = coordination.draft(self.root, self.profile, self.url, self.handoff(), self.skill, kind='design')
+            self.assertFalse(dirty['ok'])
+            self.assertIn('Unshared working changes: example/library: .DS_Store', str(dirty['gaps']))
+            self.assertIn('.git/info/exclude', str(dirty['gaps']))
+            (library / '.git/info/exclude').write_text('.DS_Store\n')
+            clean = coordination.draft(self.root, self.profile, self.url, self.handoff(), self.skill, kind='design')
+        self.assertTrue(clean['ok'], clean['gaps'])
+
     def test_modified_dependency_requires_its_actual_responsibility(self):
         self.prepare()
         self.dependency('modified')
@@ -445,6 +459,30 @@ class CoordinationCases(unittest.TestCase):
             self.publish_fixture(draft, 'alice')
             resumed = coordination.resume(self.root, self.profile, self.url, self.skill, completed_tasks=['T0'])
         self.assertTrue(resumed['ready_to_implement'], resumed)
+
+
+    def test_completed_implementation_handoff_reads_original_verification_records(self):
+        self.prepare()
+        import validation
+        from common import artifact
+        run, _ = validation.run_batch(self.root, self.profile, [self.task])
+        finished = {'creator': 'bob', 'owner': 'carol', 'done': ['Implemented addition'], 'remaining': [],
+                    'questions': [], 'next': 'Carol accepts the addition result.'}
+        self.issue['assignees'].append({'login': 'carol'})
+        with patch.object(github_read, 'api', side_effect=self.github):
+            self.establish_design()
+            cases = [([artifact(self.root, run)], None),
+                     ([artifact(self.root, self.root / 'app.py')], 'Handoff needs original execution/acceptance records'),
+                     ([], 'Completed handoff needs original verification records')]
+            for verified, gap in cases:
+                with self.subTest(gap=gap):
+                    draft = coordination.draft(self.root, self.profile, self.url, dict(finished, verified=verified),
+                                               self.skill, kind='implementation')
+                    if gap is None:
+                        self.assertTrue(draft['ok'], draft)
+                    else:
+                        self.assertFalse(draft['ok'])
+                        self.assertTrue(any(gap in item for item in draft['gaps']), draft['gaps'])
 
 
 class ReadClient(unittest.TestCase):

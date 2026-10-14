@@ -6,11 +6,18 @@ business acceptance and permission to close belong to the delivery verifier.
 import json
 import re
 
-from common import Invalid, VERSION, digest, obj, require, strings, task_valid, text
+from common import Invalid, VERSION, digest, obj, read, require, strings, task_valid, text
 import designs
 import github_read as github
 import knowledge
 import validation
+
+
+class MissingTaskBlock(Invalid):
+    """Keep the issue identity when a shared task or its parent lacks structured input."""
+    def __init__(self, issue_url):
+        self.issue_url = issue_url
+        super().__init__(issue_url + ': Missing team-workflow-task block; keep the MATT spec and add its structured record')
 
 
 def block(body, name, required=True):
@@ -72,7 +79,9 @@ def pending_progress(issue, row):
 
 
 def task_source(issue):
-    value = block(issue.get('body'), 'task')
+    value = block(issue.get('body'), 'task', required=False)
+    if value is None:
+        raise MissingTaskBlock(issue['html_url'])
     obj(value, {'schema_version', 'parent', 'task'})
     require(isinstance(value['task'], dict), 'Expected a structured task object')
     require(value['schema_version'] == 5 and value['task'].get('schema_version') == 5,
@@ -233,9 +242,11 @@ def _read(issue):
             'history_digest': digest(seen), 'platform_history': seen}
 
 
-def load(url):
-    """Read task, versioned design, explicit approvals and all outstanding progress."""
-    issue = github.issue(url)
+def load(url, issue=None):
+    """Read task, versioned design, explicit approvals and all outstanding progress.
+
+    issue: a fetched issue with a drafted body, used to prepare records before the body is posted."""
+    issue = issue or github.issue(url)
     state = _read(issue)
     design_state = state
     parent = state['source']['parent']
@@ -300,16 +311,20 @@ def _markdown(name, row, heading):
 
 def _draft_result(name, url, row, gaps=()):
     headings = {'design': '方案记录', 'approval': '方案评审', 'handoff': '工作交接', 'progress': '工作进度'}
+    heading = '收尾说明' if row.get('handoff_kind') == 'close' else headings[name]
+    body = _markdown(name, row, heading)
+    if row.get('handoff_kind') == 'close':
+        body = body.replace('\n\n```', '\n\n' + row['close']['summary'].strip() + '\n\n```', 1)
     return {'schema_version': 5, 'kind': name + '-draft', 'ok': not gaps,
-            'issue': url, 'record': row, 'markdown': _markdown(name, row, headings[name]),
+            'issue': url, 'record': row, 'markdown': body,
             'history_digest': row.get('history_digest'), 'gaps': list(gaps),
             'assurance': 'continuation-only', 'delivery': 'not-evaluated',
             'publication': 'draft-only; re-read history before an authorized append, then resume'}
 
 
-def draft_design(url, design, resolution=None):
+def draft_design(url, design, resolution=None, issue=None):
     designs.validate_design(design)
-    state = load(url)
+    state = load(url, issue)
     require(design['task_id'] == url, 'Append the design to its own task issue')
     require(not state['design'] or state['design_issue'] == url,
             'Update the shared design on its own task issue')
@@ -352,14 +367,58 @@ def draft_approval(url, value):
     return _draft_result('approval', url, row)
 
 
+HANDOFF_KINDS = ('design', 'implementation', 'close')
+NO_HANDOFF = 'No confirmed handoff; establish current progress before continuing'
+
+
+def closable_alone(state, profile):
+    """Why one person cannot close this task with a single note (empty when they can)."""
+    reasons = []
+    implementer = state['roles'].get('implementation_owner')
+    if state['owners'] != [implementer]:
+        reasons.append('the implementer is not the single assignee')
+    shared = sorted(v['repository'] for v in profile.get('external_inputs', {}).values()
+                    if v.get('kind') == 'repository' and v.get('role', 'build') != 'build')
+    if shared:
+        reasons.append('modified or joint repositories need their own responsibility: ' + ', '.join(shared))
+    if 'cross-service' in state['task']['risks']:
+        reasons.append('cross-service work needs a joint verification owner')
+    return reasons
+
+
+def closing(root, profile, url, cs_skill, completed_tasks, close):
+    """The record that hands over or closes delivered work: a posted handoff, or a drafted close note."""
+    continuation = resume(root, profile, url, cs_skill, completed_tasks)
+    current = continuation.get('current')
+    if current and current['handoff_kind'] in ('implementation', 'close') and not current['remaining']:
+        require(continuation['ok'], 'Delivery handoff incomplete: ' + str(continuation['gaps']))
+        require(not continuation.get('pending_progress'), 'Handoff still has unfinished work or unconfirmed progress')
+        return current, None
+    require(not current or current['handoff_kind'] == 'design',
+            'Handoff still has unfinished work or unconfirmed progress')
+    reasons = closable_alone(continuation, profile)
+    gaps = [gap for gap in continuation['gaps'] if gap not in (NO_HANDOFF, 'New progress has not been confirmed in the current handoff')]
+    require(not reasons and not gaps, 'Delivery handoff incomplete: ' + '; '.join(gaps + reasons)
+            + ('; post an implementation handoff instead of a close note' if reasons else ''))
+    implementer = continuation['roles']['implementation_owner']
+    note = draft(root, profile, url, {
+        'creator': implementer, 'owner': implementer, 'done': ['Business acceptance and knowledge write-back recorded'],
+        'verified': [close['acceptance']], 'remaining': [],
+        'next': 'Close the issue once the named close authorization is recorded.',
+        'included_progress': [{'id': item['id'], 'digest': item['digest']} for item in continuation['progress']]},
+        cs_skill, kind='close', completed_tasks=completed_tasks, close=close)
+    require(note['ok'], 'Close note incomplete: ' + '; '.join(note['gaps']))
+    return note['record'], note
+
+
 def _validate_handoff(row):
     obj(row, {'schema_version', 'kind', 'task', 'requirements', 'history_digest', 'previous',
               'handoff_kind', 'creator', 'owner', 'roles', 'design', 'approved_sections',
               'source_digest', 'versions', 'done', 'verified', 'remaining', 'questions', 'next',
               'references', 'participants', 'contracts', 'dependencies', 'joint_owner',
-              'included_progress', 'workflow_version'}, {'resolution'})
+              'included_progress', 'workflow_version'}, {'resolution', 'close'})
     require(row['schema_version'] == 5 and row['kind'] == 'handoff', 'Expected version 5 handoff')
-    require(row['handoff_kind'] in ('design', 'implementation'), 'Unknown handoff kind')
+    require(row['handoff_kind'] in HANDOFF_KINDS, 'Unknown handoff kind')
     github.issue_ref(row['task'])
     for name in ('creator', 'owner', 'next', 'workflow_version'):
         text(row[name])
@@ -369,6 +428,21 @@ def _validate_handoff(row):
     role = 'design_owner' if row['handoff_kind'] == 'design' else 'implementation_owner'
     require(row['creator'] == row['roles'][role], 'Handoff creator must confirm their declared role')
     require(row['owner'] in row['roles'].values(), 'Handoff receiver needs a declared responsibility')
+    require((row['handoff_kind'] == 'close') == ('close' in row), 'Close details belong only to a close note')
+    if row['handoff_kind'] == 'close':
+        require(row['owner'] == row['creator'] and row['remaining'] == [],
+                'Close note is written by the implementer for themselves with nothing remaining')
+        close = obj(row['close'], {'acceptance', 'knowledge', 'cs_task_id', 'cs_task_revision', 'disposition', 'summary'},
+                    {'close_authorization'})
+        for name in ('acceptance', 'knowledge'):
+            obj(close[name], {'path', 'sha256'})
+            text(close[name]['path']); _hash(close[name]['sha256'])
+        text(close['cs_task_id']); text(close['summary'])
+        require(type(close['cs_task_revision']) is int and close['disposition'] in ('none', 'reused', 'updated', 'added'),
+                'Close note needs the recorded knowledge revision and disposition')
+        if 'close_authorization' in close:
+            authorization = obj(close['close_authorization'], {'confirmed_by', 'reference'})
+            text(authorization['confirmed_by']); text(authorization['reference'])
     obj(row['design'], {'id', 'revision'})
     text(row['design']['id'])
     require(type(row['design']['revision']) is int and row['design']['revision'] > 0, 'Invalid design revision')
@@ -485,7 +559,9 @@ def _handoff_gaps(root, profile, state, row, status, documents):
         if versions.get(repo) != {'repository': repo, 'commit': version['commit'], 'content': version['content']}:
             gaps.append('Source version missing or different: ' + repo)
         if not version['clean']:
-            gaps.append('Unshared working changes: ' + repo)
+            changes = version.get('changes', [])
+            gaps.append('Unshared working changes: ' + repo + (': ' + ', '.join(changes) if changes else '')
+                        + ' (commit them, or add local-only files such as .DS_Store to .git/info/exclude)')
     if set(versions) != set(current['repositories']):
         gaps.append('Handoff repository set differs from declared source inputs')
     if current['files']:
@@ -509,8 +585,11 @@ def _handoff_gaps(root, profile, state, row, status, documents):
         checked = set()
         for ref in row['verified']:
             path = evidence(root, profile, ref)
-            value = read(path)
-            require(value.get('schema_version') == 5 and value.get('kind') in
+            try:
+                value = read(path)
+            except Invalid:
+                value = {}
+            require(isinstance(value, dict) and value.get('schema_version') in (5, 6) and value.get('kind') in
                     {'execution', 'imported-execution', 'acceptance'},
                     'Handoff needs original execution/acceptance records, not source-file links')
             if 'repository' not in ref:
@@ -521,12 +600,19 @@ def _handoff_gaps(root, profile, state, row, status, documents):
                 target = external_path(root, ref['repository'], entry)
                 other_profile = profile_valid(read(target / '.team-workflow.json'), target)
                 validation.inspect_record(target, other_profile, value)
-        if row['handoff_kind'] == 'implementation' and not row['remaining']:
+        if row['handoff_kind'] in ('implementation', 'close') and not row['remaining']:
             require(set(task_valid(state['task'], profile, root)) <= checked,
                     'Completed handoff omits required original check results')
+        if row['handoff_kind'] == 'close':
+            reasons = closable_alone(state, profile)
+            require(not reasons, 'A close note cannot stand in for a handoff: ' + '; '.join(reasons))
+            from delivery import evidence as material
+            for name in ('acceptance', 'knowledge'):
+                material(root, profile, row['close'][name])
+            require(row['close']['acceptance'] in row['verified'], 'Close note must cite its business acceptance')
     except (Invalid, ValueError, TypeError, KeyError) as exc:
         gaps.append(str(exc))
-    if row['handoff_kind'] == 'implementation' and not row['remaining'] and not row['verified']:
+    if row['handoff_kind'] in ('implementation', 'close') and not row['remaining'] and not row['verified']:
         gaps.append('Completed handoff needs original verification records')
     declared = {value['repository']: value.get('role', 'build')
                 for value in profile.get('external_inputs', {}).values() if value['kind'] == 'repository'}
@@ -623,7 +709,7 @@ def resume(root, profile, url, cs_skill, completed_tasks=()):
         except (Invalid, KeyError, TypeError) as exc:
             gaps.append(str(exc))
     if not state['current']:
-        gaps.append('No confirmed handoff; establish current progress before continuing')
+        gaps.append(NO_HANDOFF)
     if not state['owners']:
         gaps.append('Task has no assigned owner')
     if state['pending_progress']:
@@ -634,15 +720,17 @@ def resume(root, profile, url, cs_skill, completed_tasks=()):
         gaps.append('Platform changed while reading; refresh requirements, responsibilities and progress')
     gaps += fresh['gaps']
     gaps = sorted(set(gaps))
+    closed = bool(state['current'] and state['current']['handoff_kind'] == 'close')
     return {**state, 'kind': 'continuation', 'ok': not gaps, 'scope': 'continuation-only',
-            'knowledge': brief, 'approval_status': status, 'ready_to_implement': not gaps,
-            'closable': False, 'delivery': 'not-evaluated', 'gaps': gaps}
+            'knowledge': brief, 'approval_status': status, 'ready_to_implement': not gaps and not closed,
+            'closed': closed, 'closable': False, 'delivery': 'not-evaluated', 'gaps': gaps}
 
 
-def draft(root, profile, url, progress, cs_skill, kind='implementation', completed_tasks=()):
+def draft(root, profile, url, progress, cs_skill, kind='implementation', completed_tasks=(), close=None):
     state = load(url)
     task_valid(state['task'], profile, root)
-    require(kind in ('design', 'implementation'), 'Handoff kind must be design or implementation')
+    require(kind in HANDOFF_KINDS, 'Handoff kind must be design, implementation or close')
+    require((kind == 'close') == (close is not None), 'A close note is drafted by final delivery verification')
     require(state['design'] is not None, 'Missing versioned design')
     status = _approval(root, profile, state, completed_tasks)
     allowed = {'creator', 'owner', 'done', 'verified', 'remaining', 'questions', 'next',
@@ -682,6 +770,8 @@ def draft(root, profile, url, progress, cs_skill, kind='implementation', complet
            'included_progress': list(included.values())}
     if resolution:
         row['resolution'] = resolution
+    if close is not None:
+        row['close'] = close
     _validate_handoff(row)
     brief = _knowledge(root, state['task'], state['design'], cs_skill)
     documents = knowledge.call(cs_skill, root, ['documents', 'list'])

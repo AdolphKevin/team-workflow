@@ -104,6 +104,30 @@ Issue 正文使用 `team-workflow-task` 代码块。外层字段是 `schema_vers
 这个确认也会失效。方案、批准、交接分别整理各自的冲突，不能用一次交接消除
 未确认的方案分歧。
 
+## 接入已有 Issue
+
+只有说明、没有 `team-workflow-task` 代码块的 Issue 会让读取平台的命令返回
+`error_code: issue-not-adopted`。准备好任务（和共享方案）后运行：
+
+```bash
+python3 "$WF" issue-draft --root "$PROJECT" --task "$TASK" [--design "$DESIGN"] \
+  [--with-task "$SIBLING_TASK"] [--reviewer <评审人>]
+```
+
+结果按 Issue 给出新正文（原有说明逐字保留，只替换或追加结构化代码块）、方案所在 Issue 的方案评论、
+给具体评审人的评审请求，以及发布顺序。共用父方案的子任务须写 `parent` 和 `acceptance_scope: task`。
+工具不修改 GitHub；草稿按 `next_steps` 顺序由用户发布，评审人明确确认后再用 `approval-draft` 生成批准记录。
+
+## 单人任务的收尾说明
+
+交接有三类：方案交接（`design`）、实施交接（`implementation`）和收尾说明（`close`）。被指派人只有
+实施负责人一人、没有修改或联合的其他仓库、也没有跨服务风险时，最终 `verify` 不要求先发布实施交接：
+它核对全部条件后在结果的 `close_note` 中给出一份收尾说明草稿，包含平实语言摘要和结构化记录
+（业务验收与知识回写的文件指纹、CS 记录版本、知识处置，以及已有的关闭授权）。收尾说明由实施负责人
+写给自己（`creator` 与 `owner` 相同），`remaining` 为空，`verified` 引用业务验收。工具不发布它；
+用户发布后，`resume` 返回 `closed: true`，再次 `verify` 直接使用已发布的记录。其他情况仍须先发布
+实施交接，`verify` 会说明原因。
+
 所有协作读取和草稿都返回 `delivery: not-evaluated`；接手结果始终保留
 `closable: false`。最终交付命令另行核对实际执行、代码审查、知识回写和当前平台。
 交付检查需要调用完整 `resume` 并在结束前重读平台，不能只读取验收链接或检查

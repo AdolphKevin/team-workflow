@@ -1,12 +1,11 @@
-"""Version 5 execution: reusable content-bound results, separate task acceptance."""
+"""Execution records: reusable content-bound results, separate task acceptance."""
 import os
-from pathlib import Path
 import platform
 import sys
 import uuid
 
-from common import (Invalid, artifact, artifact_valid, create, digest, external_path, git,
-                    inside, now, read, require, sha, snapshot, task_valid, text)
+from common import (Invalid, LEGACY_RECORD_SCHEMA, RECORD_SCHEMA, artifact, artifact_valid, create, digest,
+                    external_path, git, inside, now, read, require, sha, snapshot, task_valid, text)
 from execution import decode, execute, output_path, redact
 
 
@@ -64,9 +63,17 @@ def changed_paths(root, task):
                   and n != '.team-workflow.json')
 
 
+EVALUATION_FIELDS = ('required_cases', 'purpose', 'timeout')
+
+
+def execution_definition(check):
+    """What was executed. Which cases are required is evaluated later from the original report."""
+    return digest({k: v for k, v in check.items() if k not in EVALUATION_FIELDS})
+
+
 def producer():
-    directory = Path(__file__).parent
-    return {name: sha(directory / name) for name in ('execution.py', 'validation.py')}
+    from execution import DECODER_VERSION
+    return {'schema': RECORD_SCHEMA, 'decoder': DECODER_VERSION}
 
 
 def environment(root, profile, check):
@@ -97,11 +104,14 @@ def environment(root, profile, check):
     return result
 
 
-def check_binding(root, profile, check, remote=False):
-    expected = check.get('environment', {}).get('target') if remote else None
-    return {'source': digest(source(root, profile, check.get('revision_sensitive', False))),
-            'definition': digest(check), 'environment': expected if expected is not None else environment(root, profile, check),
-            'producer': producer()}
+def check_binding(root, profile, check, remote=False, live=True):
+    """Inputs a result depends on. Offline (live=False) omits the environment, which acceptance recorded."""
+    binding = {'source': digest(source(root, profile, check.get('revision_sensitive', False))),
+               'definition': execution_definition(check), 'producer': producer()}
+    if live:
+        expected = check.get('environment', {}).get('target') if remote else None
+        binding['environment'] = expected if expected is not None else environment(root, profile, check)
+    return binding
 
 
 def capture(root, profile, key, directory, portable=False):
@@ -177,7 +187,7 @@ def _run_batch(root, profile, tasks, selected=None, directory=None, portable=Fal
         except (Invalid, OSError, ValueError) as exc:
             rows.append({'id': key, 'status': 'incomplete', 'state': 'unavailable', 'exit_code': None,
                          'source_unchanged': False, 'detail': str(exc), 'cases': {}, 'artifacts': []})
-    record = {'schema_version': 5, 'kind': 'execution', 'id': identifier, 'project': profile['project'],
+    record = {'schema_version': RECORD_SCHEMA, 'kind': 'execution', 'id': identifier, 'project': profile['project'],
               'tasks': required, 'task_digests': {t['id']: digest(t) for t in tasks},
               'started_at': started, 'finished_at': now(),
               'provenance': {'head': git(root, 'rev-parse', 'HEAD').decode().strip()},
@@ -188,60 +198,120 @@ def _run_batch(root, profile, tasks, selected=None, directory=None, portable=Fal
     return path, record
 
 
-def verify_runs(root, profile, task, paths):
+def verify_runs(root, profile, task, paths, live=True):
+    """Select one current, passing result for every required check.
+
+    A stale row no longer invalidates its whole batch: other rows stay usable and a focused
+    re-run of only the stale check completes the set. The original report is re-evaluated
+    with the current required cases, so a registration fix needs no re-run.
+    """
     required = set(task_valid(task, profile, root))
-    results, records = {}, []
+    candidates = {key: [] for key in required}
+    records, bindings = [], {}
+
+    def current(key):
+        if key not in bindings:
+            bindings[key] = check_binding(root, profile, profile['checks'][key], live=live)
+        return bindings[key]
+
     for name in paths:
         record = read(inside(root, name))
         require(isinstance(record, dict), 'Invalid execution record: ' + str(name))
-        if record.get('schema_version') == 5 and record.get('kind') == 'imported-execution':
+        if record.get('schema_version') == RECORD_SCHEMA and record.get('kind') == 'imported-execution':
             import portable
-            row, manifest = portable.validate_import(root, profile, record)
-            key = row['id']
+            key = (record.get('result') or {}).get('id')
             if key in required:
-                require(key not in results, 'Duplicate result; select one current result for each check')
-                results[key] = row
+                try:
+                    row, _ = portable.validate_import(root, profile, record, live=live)
+                    candidates[key].append((name, record.get('started_at', ''), row, None))
+                except (Invalid, OSError, ValueError, KeyError) as exc:
+                    candidates[key].append((name, '', None, str(exc)))
                 records.append(record)
             continue
-        require(record.get('schema_version') == 5 and record.get('kind') == 'execution', 'Expected v5 execution record')
+        require(record.get('schema_version') != LEGACY_RECORD_SCHEMA,
+                f'{name} was produced before schema {RECORD_SCHEMA}; re-run its checks once with the current tool')
+        require(record.get('schema_version') == RECORD_SCHEMA and record.get('kind') == 'execution',
+                f'Expected schema {RECORD_SCHEMA} execution record')
         require(record.get('project') == profile['project'], 'Execution project mismatch')
-        require(record.get('source_unchanged') is True, 'Execution source changed while running')
         for row in record.get('results', []):
             key = row.get('id')
             if key not in required:
                 continue
-            require(key not in results, 'Duplicate result; select one current result for each check')
-            check = profile['checks'][key]
-            require(row.get('coverage') == check.get('coverage'), 'Original execution coverage differs: ' + key)
-            current = check_binding(root, profile, check)
-            for part in ('definition', 'source', 'environment', 'producer'):
-                require(row.get('binding', {}).get(part) == current[part], 'Execution ' + part + ' changed: ' + key)
-            require(row.get('source_unchanged') is True and row.get('status') == 'passed'
-                    and row.get('state') == 'finished' and row.get('exit_code') == 0, 'Check did not pass: ' + key)
-            artifacts = row.get('artifacts', [])
-            for item in artifacts:
-                artifact_valid(root, item)
-            stdout = [a for a in artifacts if a['path'].endswith('/stdout.txt')]
-            require(len(stdout) == 1, 'Missing original stdout: ' + key)
-            out = inside(root, stdout[0]['path']).parent
-            require(row.get('argv') == [a.replace('{output}', str(out)) for a in check['argv']]
-                    and row.get('cwd') == check['cwd'] and row.get('repository') == check.get('repository'),
-                    'Recorded command or repository mismatch')
-            expected = ['stdout.txt', 'stderr.txt'] + [v[len('{output}/'):] for v in check.get('artifacts', [])]
-            if check.get('report'):
-                expected.append(check['report'][len('{output}/'):])
-            captured = {a['path']: a['sha256'] for a in artifacts}
-            require(all((out / n).relative_to(root).as_posix() in captured for n in expected), 'Missing original artifact')
-            native = out / check['report'][len('{output}/'):] if check.get('report') else None
-            decoded = decode(check, {'state': row['state'], 'exit_code': row['exit_code'],
-                                    'stdout': (out / 'stdout.txt').read_text()}, native)
-            require(decoded[0] == 'passed' and decoded[1] == row.get('cases'), 'Original report does not confirm result')
-            if check.get('review'):
-                scenario_review(root, out, check, captured)
-            results[key] = row
+            problem = row_problem(root, profile, key, row, current, record)
+            evaluated = None
+            if problem is None:
+                try:
+                    evaluated = reevaluate(root, profile, key, row)
+                except (Invalid, OSError, ValueError, KeyError, TypeError) as exc:
+                    problem = str(exc)
+            candidates[key].append((name, record.get('started_at', ''), evaluated, problem))
         records.append(record)
-    require(required <= results.keys(), 'Required execution missing: ' + ', '.join(sorted(required - results.keys())))
-    return {'checks': sorted(required), 'records': records, 'results': results}
+    results, selected_runs, superseded = {}, {}, []
+    for key in sorted(required):
+        usable = sorted((c for c in candidates[key] if c[3] is None), key=lambda c: c[1])
+        reasons = [f'{c[0]}: {c[3]}' for c in candidates[key] if c[3] is not None]
+        require(bool(usable), 'Required execution missing or stale: ' + key + (' (' + '; '.join(reasons) + ')' if reasons else ''))
+        chosen = usable[-1]
+        results[key] = chosen[2]
+        selected_runs[key] = inside(root, chosen[0]).relative_to(root).as_posix()
+        superseded += [{'check': key, 'path': c[0], 'reason': c[3]} for c in candidates[key] if c[3] is not None]
+        superseded += [{'check': key, 'path': c[0], 'reason': 'A newer current result was selected'} for c in usable[:-1]]
+    return {'checks': sorted(required), 'records': records, 'results': results,
+            'selected_runs': selected_runs, 'superseded': superseded}
+
+
+def row_problem(root, profile, key, row, current, record):
+    """Why this row cannot stand for the current check, or None."""
+    check = profile['checks'][key]
+    try:
+        require(record.get('source_unchanged') is True and row.get('source_unchanged') is True,
+                'Execution source changed while running: ' + key)
+        require(row.get('coverage') == check.get('coverage'), 'Original execution coverage differs: ' + key)
+        binding = current(key)
+        for part in binding:
+            require(row.get('binding', {}).get(part) == binding[part], 'Execution ' + part + ' changed: ' + key)
+        require(row.get('state') == 'finished' and row.get('exit_code') == 0, 'Check did not pass: ' + key)
+        original_files(root, check, row)
+        return None
+    except (Invalid, OSError, ValueError, KeyError, TypeError) as exc:
+        return str(exc)
+
+
+def original_files(root, check, row, *, portable=False):
+    artifacts = row.get('artifacts', [])
+    for item in artifacts:
+        artifact_valid(root, item)
+    stdout = [a for a in artifacts if a['path'].endswith('/stdout.txt')]
+    require(len(stdout) == 1, 'Missing original stdout: ' + row['id'])
+    out = inside(root, stdout[0]['path']).parent
+    argv = check['argv'] if portable else [a.replace('{output}', str(out)) for a in check['argv']]
+    require(row.get('argv') == argv
+            and row.get('cwd') == check['cwd'] and row.get('repository') == check.get('repository'),
+            'Recorded command or repository mismatch')
+    expected = ['stdout.txt', 'stderr.txt'] + [v[len('{output}/'):] for v in check.get('artifacts', [])]
+    if check.get('report'):
+        expected.append(check['report'][len('{output}/'):])
+    captured = {a['path']: a['sha256'] for a in artifacts}
+    require(all((out / n).relative_to(root).as_posix() in captured for n in expected), 'Missing original artifact')
+    return out, captured
+
+
+def reevaluate(root, profile, key, row, *, portable=False):
+    """Decode the original report under the current required cases; this, not the stored status, decides."""
+    check = profile['checks'][key]
+    out, captured = original_files(root, check, row, portable=portable)
+    native = out / check['report'][len('{output}/'):] if check.get('report') else None
+    status, cases, detail = decode(check, {'state': row['state'], 'exit_code': row['exit_code'],
+                                           'stdout': (out / 'stdout.txt').read_text()}, native)
+    require(status == 'passed', f'Original report does not confirm result: {key}: {detail}')
+    require(row.get('status') != 'passed' or cases == row.get('cases'), 'Original report does not confirm result: ' + key)
+    if check.get('review'):
+        scenario_review(root, out, check, captured)
+    if row.get('status') == 'passed':
+        return row
+    return {**row, 'status': 'passed', 'cases': cases, 'detail': detail,
+            'evaluation': {'original_status': row.get('status'), 'original_detail': row.get('detail'),
+                           'reason': 'Re-evaluated from the original report with the current required cases'}}
 
 
 def inspect_record(root, profile, record, seen=None):
@@ -250,7 +320,8 @@ def inspect_record(root, profile, record, seen=None):
     Continuation uses this limited check. Final verification still checks current
     source, environment and provider provenance through verify_runs.
     """
-    require(isinstance(record, dict) and record.get('schema_version') == 5, 'Expected original fifth-version record')
+    require(isinstance(record, dict) and record.get('schema_version') in (LEGACY_RECORD_SCHEMA, RECORD_SCHEMA),
+            'Expected an original execution or acceptance record')
     seen = set(seen or ())
     identity = digest(record)
     require(identity not in seen, 'Shared verification record cycle')
@@ -264,8 +335,7 @@ def inspect_record(root, profile, record, seen=None):
         for name in record['report']['runs']:
             checked.update(inspect_record(root, profile, read(inside(root, name)), seen))
         return checked
-    require(record.get('kind') in {'execution', 'imported-execution'} and record.get('schema_version') == 5,
-            'Expected original fifth-version execution')
+    require(record.get('kind') in {'execution', 'imported-execution'}, 'Expected original execution')
     rows = record.get('results') if record['kind'] == 'execution' else [record.get('result')]
     require(isinstance(rows, list) and bool(rows) and all(isinstance(r, dict) for r in rows),
             'Missing original execution results')
@@ -275,9 +345,15 @@ def inspect_record(root, profile, record, seen=None):
         key = row['id']
         require(key in profile['checks'], 'Original check is not declared by this project')
         check = profile['checks'][key]
-        require(row.get('status') == 'passed' and row.get('state') == 'finished' and row.get('exit_code') == 0,
+        require(row.get('state') == 'finished' and row.get('exit_code') == 0,
                 'Original check did not pass')
-        require(row.get('binding', {}).get('definition') == digest(check), 'Shared check definition changed')
+        definition = execution_definition(check) if record['schema_version'] == RECORD_SCHEMA else digest(check)
+        require(row.get('binding', {}).get('definition') == definition, 'Shared check definition changed')
+        if record['schema_version'] == RECORD_SCHEMA:
+            reevaluate(root, profile, key, row, portable=record['kind'] == 'imported-execution')
+            checked.add(key)
+            continue
+        require(row.get('status') == 'passed', 'Original check did not pass')
         artifacts = row.get('artifacts', [])
         for ref in artifacts:
             artifact_valid(root, ref)

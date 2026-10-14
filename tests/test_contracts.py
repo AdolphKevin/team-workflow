@@ -234,16 +234,18 @@ class BusinessEvidence(unittest.TestCase):
         accepted = self.verify()
         self.write('acceptance', accepted)
         path = self.root / self.name('acceptance')
-        draft = knowledge.completion_template(self.root, self.profile, self.task, self.skill, path)
+        draft = knowledge.completion_template(self.root, self.profile, self.task, self.skill, [path])
         self.assertEqual(draft['task']['status'], 'completed')
-        self.assertEqual(draft['task']['source']['workflow_acceptance'], artifact(self.root, path))
+        self.assertEqual(draft['task']['source']['workflow_acceptances'],
+                         [{**artifact(self.root, path), 'task_id': self.task['id']}])
+        self.assertEqual(knowledge.pending_acceptance(draft, [self.task]), [])
 
     def test_knowledge_rejects_an_unbound_or_stale_completion(self):
         self.setup_task()
         self.write('acceptance', self.verify())
         path = self.root / self.name('acceptance')
         script = self.skill / 'scripts/cs_knowledge.py'
-        script.write_text(script.read_text().replace('"source":source', '"source":{}'))
+        script.write_text(script.read_text().replace('"task":{"source":source', '"task":{"source":{}'))
         with self.assertRaisesRegex(Invalid, 'reference the actual'):
             knowledge.finish(self.root, self.profile, self.task, self.skill, 'CS-T',
                 self.root / self.name('brief'), 'none', 'No new rule', path)
@@ -251,7 +253,7 @@ class BusinessEvidence(unittest.TestCase):
         review['spec']['summary'] = 'Changed after acceptance'
         self.write('review', review)
         with self.assertRaises(Invalid):
-            knowledge.completion_template(self.root, self.profile, self.task, self.skill, path)
+            knowledge.completion_template(self.root, self.profile, self.task, self.skill, [path])
 
     def test_knowledge_scope_cannot_use_an_unrelated_repository_path(self):
         self.setup_task()
@@ -318,9 +320,9 @@ class BusinessEvidence(unittest.TestCase):
 
     def test_shared_reference_cannot_be_a_json_pass_without_original_outputs(self):
         self.setup_task()
-        fabricated = {'schema_version': 5, 'kind': 'execution', 'source_unchanged': True,
+        fabricated = {'schema_version': 6, 'kind': 'execution', 'source_unchanged': True,
                       'results': [{'id': 'unit', 'status': 'passed', 'state': 'finished', 'exit_code': 0,
-                          'binding': {'definition': __import__('common').digest(self.profile['checks']['unit'])},
+                          'binding': {'definition': validation.execution_definition(self.profile['checks']['unit'])},
                           'cases': {}, 'artifacts': []}]}
         with self.assertRaisesRegex(Invalid, 'original stdout'):
             validation.inspect_record(self.root, self.profile, fabricated)

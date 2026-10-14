@@ -27,7 +27,7 @@ npx skills add AdolphKevin/codestable-compact -g --skill '*' --agent claude-code
 npx skills add AdolphKevin/team-workflow -g --skill '*' --agent claude-code codex cursor
 ```
 
-项目使用 `schema_version: 5` 的配置与任务格式。从已安装技能获得模板和字段说明：
+项目使用 `schema_version: 5` 的配置与任务格式，工具生成的本地证据使用 `schema_version: 6`。从已安装技能获得模板和字段说明：
 
 ```bash
 python3 <team-workflow技能目录>/scripts/workflow.py schema --root <项目目录>

@@ -76,6 +76,27 @@ class ParallelMaterials(unittest.TestCase):
         self.assertFalse(list((self.root / '.team-workflow/tasks').glob('*/requests/interrupted/**/run.json')))
         self.assertTrue(self.result(self.start(args + ['--request-id', 'new-attempt']))['ok'])
 
+    def test_terminated_run_stops_its_check_and_is_reported_as_interrupted(self):
+        marker = self.root / '.team-workflow/child.pid'
+        args = self.prepare('import os, time; from pathlib import Path; '
+                            f'Path(r"{marker}").write_text(str(os.getpid())); time.sleep(30)')
+        process = self.start(args + ['--request-id', 'terminated'])
+        deadline = time.monotonic() + 10
+        while not marker.exists() and time.monotonic() < deadline:
+            time.sleep(0.05)
+        child = int(marker.read_text())
+        process.send_signal(signal.SIGTERM)
+        process.communicate(timeout=10)
+        self.assertEqual(process.returncode, 128 + signal.SIGTERM)
+        time.sleep(0.2)
+        with self.assertRaises(ProcessLookupError):
+            os.kill(child, 0)  # the check's process group was stopped with the tool
+        self.assertEqual(list((self.root / '.team-workflow/validation-active').glob('*.json')), [])
+        import checklist
+        steps = checklist.steps(self.root, self.task, snapshot(self.root, self.profile)['digest'], task_arg='t.json')
+        self.assertEqual(next(r for r in steps['steps'] if r['id'] == 'run')['state'], 'running-or-interrupted')
+        self.assertEqual(steps['next_step']['id'], 'run')
+
     def test_output_competition_is_atomic_and_failed_empty_output_is_retryable(self):
         args = self.prepare()
         # task exports compete for one explicitly requested filename, without replacing it.

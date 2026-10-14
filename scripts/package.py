@@ -4,14 +4,39 @@ import argparse
 import hashlib
 import json
 from pathlib import Path
+import sys
 import zipfile
+
+ROOT = Path(__file__).resolve().parents[1]
+SKILL = ROOT / 'skills/team-workflow'
+
+
+def skill_manifest():
+    sys.path.insert(0, str(SKILL / 'scripts'))
+    import common
+    return common.manifest(SKILL)
+
+
+def write_manifest():
+    path = SKILL / 'MANIFEST.json'
+    path.write_text(json.dumps(skill_manifest(), indent=2, sort_keys=True) + '\n')
+    return path
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--output', required=True, type=Path)
+    parser.add_argument('--output', type=Path)
+    parser.add_argument('--manifest', action='store_true', help='Regenerate skills/team-workflow/MANIFEST.json only')
     args = parser.parse_args()
-    root = Path(__file__).resolve().parents[1]
+    root = ROOT
+    if args.manifest:
+        path = write_manifest()
+        print(json.dumps({'manifest': path.relative_to(root).as_posix(), 'files': len(skill_manifest()['files'])}))
+        return
+    if args.output is None:
+        parser.error('--output is required unless --manifest is given')
+    if json.loads((SKILL / 'MANIFEST.json').read_text()) != skill_manifest():
+        parser.error('MANIFEST.json is stale; run scripts/package.py --manifest')
     output = args.output.resolve()
     if output.is_relative_to(root):
         parser.error('Archive must be outside the plugin directory')

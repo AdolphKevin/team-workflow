@@ -2,7 +2,7 @@
 import json
 from pathlib import Path
 
-from common import (Invalid, artifact, digest, inside, location_settings, now,
+from common import (RECORD_SCHEMA, Invalid, artifact, digest, evidence_file, inside, location_settings, now,
                     profile_valid, read, require, task_valid)
 import knowledge
 import validation
@@ -27,6 +27,11 @@ def readable(result):
         item = result.get(key)
         if isinstance(item, dict) and item.get('path'):
             lines.append(key + ': ' + item['path'])
+    if result.get('summary_markdown'):
+        lines += ['', result['summary_markdown']]
+    if result.get('close_note'):
+        lines += ['--- 收尾说明草稿（原样发布到 Issue）---', result['close_note']['markdown']]
+    lines += result.get('step_lines', []) + result.get('lines', [])
     for name, path in result.get('templates', {}).items():
         lines.append('模板 ' + name + ': ' + path)
     for target in result.get('targets', []):
@@ -60,7 +65,7 @@ def references(root, values):
 def report_input(args, root, task):
     for name in ('design', 'brief'):
         require(getattr(args, name) is not None, 'Missing --' + name + '; supply the existing artifact or use prepare with current approvals and --context')
-    result = {'schema_version': 5, 'task_id': task['id'], 'design': local(root, args.design).relative_to(root).as_posix(),
+    result = {'schema_version': RECORD_SCHEMA, 'task_id': task['id'], 'design': local(root, args.design).relative_to(root).as_posix(),
               'approvals': references(root, args.approval), 'design_history': references(root, args.design_history),
               'brief': local(root, args.brief).relative_to(root).as_posix(), 'runs': references(root, args.run),
               'review': local(root, args.review).relative_to(root).as_posix() if args.review else ''}
@@ -114,12 +119,16 @@ def dispatch(args, root):
         return {'ok': True, 'summary': '第五版模板与字段说明',
                 'templates': {p.stem: str(p) for p in sorted(directory.glob('*.json'))},
                 'reference': str(Path(__file__).resolve().parents[1] / 'references/contracts.md'),
-                'versions': {'profile': [5], 'task': [5], 'new_records': 5},
+                'versions': {'profile': [5], 'task': [5], 'design_and_platform_records': 5, 'evidence_records': RECORD_SCHEMA},
                 'next_action': 'Read the installed template; replace every placeholder and retain the task format version.'}
+    if args.command == 'adopt':
+        import adopt
+        return adopt.apply(root, args.profile.as_posix()) if args.apply else adopt.plan(root, args.profile.as_posix())
     if args.command == 'cleanup':
         import cleanup
         require(not (args.apply and args.dry_run), 'Choose cleanup preview or apply')
-        return cleanup.apply(root, read(args.plan)) if args.apply else cleanup.preview(root)
+        return (cleanup.apply(root, read(args.plan)) if args.apply
+                else cleanup.preview(root, args.cleanup_scope, args.older_than))
     if args.command == 'aggregate':
         import portable
         mappings = {key: (root / Path(path).expanduser()).resolve() for key, path in location_settings(root)['repositories'].items()}
@@ -127,7 +136,8 @@ def dispatch(args, root):
     if args.context:
         from common import artifact_valid
         context = read(local(root, args.context))
-        require(context.get('schema_version') == 5 and context.get('kind') == 'prepared-context', 'Expected prepared context')
+        require(context.get('schema_version') == RECORD_SCHEMA and context.get('kind') == 'prepared-context',
+                f'Expected a schema {RECORD_SCHEMA} prepared context; run prepare again')
         for key in ('task', 'design', 'brief'):
             path = artifact_valid(root, context[key])
             if getattr(args, key) is None:
@@ -137,10 +147,34 @@ def dispatch(args, root):
         if not args.design_history:
             args.design_history = [artifact_valid(root, r) for r in context['design_history']]
     profile = profile_valid(read(local(root, args.profile)), root)
+    if args.command == 'metrics':
+        import metrics
+        from artifacts import directory
+        task_ids = [read(local(root, args.task))['id']] if args.task else [args.issue] if args.issue else sorted(
+            {read(p).get('task_id') for p in (root / '.team-workflow/tasks').glob('*/requests/*/request.json')} - {None})
+        rows = [metrics.task_metrics(root, task_id, args.since) for task_id in task_ids]
+        return {'ok': True, 'kind': 'workflow-metrics', 'read_only': True, 'metrics': rows,
+                'summary': f'{len(rows)} 个任务的本机运行统计；只辅助复盘，不是质量结论。',
+                'lines': [line for row in rows for line in metrics.render(row)]}
+    if args.command == 'issue-draft':
+        import issue_draft
+        require(bool(args.task), 'issue-draft needs --task (the structured task for the issue)')
+        return issue_draft.draft(root, profile, read(local(root, args.task)),
+                                 read(local(root, args.design)) if args.design else None,
+                                 [read(local(root, p)) for p in args.with_task], args.reviewer)
     platform = None
     if args.issue:
         import coordination
-        platform = coordination.load(args.issue)
+        try:
+            platform = coordination.load(args.issue)
+        except coordination.MissingTaskBlock as exc:
+            requested = exc.issue_url == args.issue
+            task_input = '<task.json>' if requested else '<parent-task.json>'
+            return {'ok': False, 'error_code': 'issue-not-adopted' if requested else 'parent-issue-not-adopted',
+                    'problem': str(exc),
+                    'next_action': f'Draft the structured issue body first: python3 "$WF" issue-draft --root "$PROJECT" '
+                                   f'--task {task_input} [--design <design.json>] [--with-task <sibling.json>] '
+                                   f'[--reviewer <name>]  (issue {exc.issue_url})'}
     task = read(local(root, args.task)) if args.task else platform['task'] if platform else None
     if args.command == 'project':
         try:
@@ -148,10 +182,25 @@ def dispatch(args, root):
             knowledge.supported(knowledge.call(skill, root, ['--check'], bootstrap=True))
             cs = {'status': 'ready'}
         except Invalid as exc:
-            cs = {'status': 'incomplete', 'reason': str(exc), 'problem': str(exc)}
+            cs = {'status': 'incomplete', 'reason': str(exc), 'problem': str(exc), 'error_code': exc.error_code}
         import versioning
-        return {'ok': cs['status'] == 'ready', 'schema_version': 5, 'cs': cs, 'version': versioning.status(profile),
-                'scope': 'project-configuration', 'summary': '已核对项目配置与 CS 能力。'}
+        from common import ALLOW_MODIFIED, integrity
+        import os
+        tool = {**integrity(), 'override': os.environ.get(ALLOW_MODIFIED) == '1'}
+        ready = cs['status'] == 'ready'
+        result = {'ok': ready, 'schema_version': 5, 'cs': cs, 'version': versioning.status(profile),
+                  'tool': tool, 'scope': 'project-configuration',
+                  'summary': '项目配置与 CS 能力可用。' if ready else 'CS 不可用或不完整，见 cs.reason。'}
+        if not ready:
+            result.update(error_code=cs.get('error_code', 'cs-incomplete'), problem=cs['reason'],
+                          next_action=('Reinstall CS from its release; do not patch installed files.'
+                                       if cs.get('error_code') == 'tool-modified' else 'Install a CS release with the required contract.'))
+        if tool['status'] != 'intact' and not tool['override']:
+            changed = tool['changed'] + tool['missing'] + tool['unexpected']
+            result.update(ok=False, error_code='tool-modified',
+                          problem=f'Installed team-workflow differs from its release: {", ".join(changed[:5]) or tool.get("reason", "")}',
+                          next_action='Reinstall with `npx skills update -g`; report tool defects instead of patching the installed skill.')
+        return result
     if args.command == 'evidence':
         from common import external_path
         refs = []
@@ -160,9 +209,12 @@ def dispatch(args, root):
                 values = [v for v in profile.get('external_inputs', {}).values() if v.get('repository') == args.evidence_repository]
                 require(len(values) == 1, 'Evidence repository must be declared')
                 target = external_path(root, args.evidence_repository, values[0])
-                refs.append({'repository': args.evidence_repository, **artifact(target, inside(target, name))})
+                path = evidence_file(inside(target, name), args.allow_large_evidence)
+                refs.append({'repository': args.evidence_repository, **artifact(target, path)})
             else:
-                refs.append(artifact(root, local(root, name)))
+                refs.append(artifact(root, evidence_file(local(root, name), args.allow_large_evidence)))
+            if args.allow_large_evidence:
+                refs[-1]['allow_large_evidence'] = True
         return {'ok': True, 'artifacts': refs}
     if args.command == 'import-result':
         import portable
@@ -170,7 +222,8 @@ def dispatch(args, root):
         from cleanup import guard
         locator_path = local(root, args.result)
         inputs = {'command': 'import-result', 'locator': artifact(root, locator_path),
-                  'profile': digest(profile), 'source': validation.source_digest(root, profile)}
+                  'profile': digest(profile), 'source': validation.source_digest(root, profile),
+                  'options': {'allow_modified_tool': args.allow_modified_tool}}
         with guard(root):
             request = Request(root, 'imports:' + profile['project'], inputs, args.request_id)
         if request.cached is not None:
@@ -200,10 +253,12 @@ def dispatch(args, root):
         return {'ok': True, 'source_digest': validation.source_digest(root, profile), 'task_digest': digest(task)}
     from artifacts import Request
     input_files = {}
-    for name in ('task', 'design', 'brief', 'review', 'report', 'knowledge', 'progress', 'record', 'acceptance', 'final_brief'):
+    for name in ('task', 'design', 'brief', 'review', 'report', 'knowledge', 'progress', 'record', 'final_brief'):
         value = getattr(args, name, None)
         if value:
             input_files[name] = artifact(root, local(root, value))
+    if args.acceptance:
+        input_files['acceptance'] = [artifact(root, local(root, p)) for p in args.acceptance]
     inputs = {'command': args.command, 'phase': args.phase, 'task': digest(task), 'profile': digest(profile),
               'files': input_files, 'source': validation.source_digest(root, profile),
               'approvals': [artifact(root, local(root, p)) for p in args.approval],
@@ -212,7 +267,9 @@ def dispatch(args, root):
               'batch': [read(local(root, p)) for p in args.with_task],
               'dependencies': [read(local(root, p)) for p in args.dependency],
               'options': {'check': args.check, 'kind': args.kind, 'path': args.path, 'symbol': args.symbol,
-                          'cs_task_id': args.cs_task_id, 'disposition': args.disposition, 'reason': args.reason}}
+                          'cs_task_id': args.cs_task_id, 'disposition': args.disposition, 'reason': args.reason,
+                          'allow_modified_tool': args.allow_modified_tool,
+                          'grant': args.grant, 'confirmed_by': args.confirmed_by}}
     from cleanup import guard
     with guard(root):
         request = Request(root, task['id'], inputs, args.request_id)
@@ -223,15 +280,29 @@ def dispatch(args, root):
         return request.finish(result)
     except (Invalid, OSError, ValueError, TypeError, KeyError) as exc:
         return request.finish({'ok': False, 'status': 'incomplete', 'problem': str(exc),
-                               'error_code': 'invalid-or-incomplete-input',
-                               'next_action': 'Correct the named input and use a new request ID; keep the failed request for diagnosis.'})
+                               'error_code': getattr(exc, 'error_code', 'invalid-or-incomplete-input'),
+                               'next_action': getattr(exc, 'next_action', None) or
+                               'Correct the named input and use a new request ID; keep the failed request for diagnosis.'})
+    except Exception as exc:
+        return request.finish(tool_defect(exc))
+
+
+def tool_defect(exc):
+    """An unexpected exception is a tool bug: keep evidence and say so instead of blaming the input."""
+    import traceback
+    frames = traceback.extract_tb(exc.__traceback__)[-3:]
+    return {'ok': False, 'status': 'incomplete', 'error_code': 'tool-defect', 'problem': repr(exc),
+            'traceback': [f'{Path(f.filename).name}:{f.lineno} {f.name}' for f in frames],
+            'next_action': 'Report this as a team-workflow defect with the request directory; evidence is retained. '
+                           'Do not patch the installed skill.'}
 
 
 def produce(args, root, profile, task, platform, request):
     def emit(value, name):
         return {'ok': value.get('ok', True), 'artifact': request.publish(name, value, args.out),
                 **{k: value[k] for k in ('summary', 'gaps', 'problem', 'next_action', 'implementation_ready',
-                                       'business_accepted', 'delivery_complete', 'regression_pending', 'automation_status', 'closable', 'acceptance_scope', 'scope', 'validation_active', 'verification_gaps') if k in value}}
+                                       'business_accepted', 'delivery_complete', 'regression_pending', 'automation_status', 'closable', 'acceptance_scope', 'scope', 'validation_active', 'verification_gaps',
+                                       'summary_markdown', 'close_note', 're_evaluated', 'tool', 'environment_checked', 'pending_acceptance') if k in value}}
     if args.command == 'task-export':
         return {**emit(task, 'task.json'), 'summary': '仅导出任务；实施和交付条件尚未核对。', 'implementation_ready': False, 'business_accepted': False}
     if args.command == 'prepare':
@@ -254,7 +325,9 @@ def produce(args, root, profile, task, platform, request):
         from validation_session import active
         environment_gaps = execution_environment(profile, task, design)
         running = active(root)
-        context = {'schema_version': 5, 'kind': 'prepared-context', 'at': now(),
+        from common import rules_digest
+        login = login_policy(profile, args)
+        context = {'schema_version': RECORD_SCHEMA, 'kind': 'prepared-context', 'at': now(),
                    'task': request.publish('task.json', task), 'design': request.publish('design.json', design),
                    'brief': request.publish('brief.json', brief), 'source_at_start': validation.source_digest(root, profile),
                    'approvals': [request.publish(f'approval-{i}.json', v) for i, v in enumerate(approvals)],
@@ -262,9 +335,14 @@ def produce(args, root, profile, task, platform, request):
                    'predecessors': [request.publish(f'predecessor-{i}.json', v) for i, v in enumerate(predecessors)],
                    'implementation_ready': readiness['implementation_ready'] and not running,
                    'validation_active': running, 'verification_gaps': environment_gaps,
+                   'rules_digest': rules_digest(), 'login_policy': login['policy'],
+                   'authorizations': login['granted'], 'authorizations_needed': login['needed'],
                    'ok': not platform or not platform['gaps'], 'gaps': platform['gaps'] if platform else [],
                    'summary': '任务与知识材料已准备，请实际阅读简报和方案。',
-                   'next_action': 'Implement within the approved scope.' if readiness['implementation_ready'] and not running else 'Obtain confirmation for the named plan sections.',
+                   'next_action': (('Before signing in to any declared test account, ask the user: '
+                                    + login['needed'][0]['question'] + ' ') if login['needed'] else '')
+                                  + ('Implement within the approved scope.' if readiness['implementation_ready'] and not running
+                                     else 'Obtain confirmation for the named plan sections.'),
                    'knowledge_claim': 'captured for reading; not evidence that knowledge was used'}
         return {**emit(context, 'context.json'), **{k: context[k] for k in ('task', 'design', 'brief')}}
     if args.command == 'brief':
@@ -313,19 +391,27 @@ def produce(args, root, profile, task, platform, request):
         return {'ok': ok, 'scope': 'execution-only',
                 'artifact': request.publish('run.json', record, args.out) if args.out else artifact(root, path),
                 'checks': [{'id': r['id'], 'status': r['status'], 'detail': r['detail']} for r in record['results']],
-                **({} if ok else {'problem': 'A check failed or its source/environment changed', 'next_action': 'Inspect per-check original reports, fix the failure and use a new request ID.'})}
+                **({} if ok else {'problem': 'A check failed or its source/environment changed: ' + '; '.join(
+                    f'{r["id"]}: {r["detail"]}' for r in record['results'] if r['status'] != 'passed'),
+                    'next_action': 'Read each failed check above. If the command itself ran but a registered required case name is wrong, '
+                                   'correct required_cases and verify again: the original report is re-evaluated without a re-run. '
+                                   'Otherwise fix the failure and run only that check with --check and a new request ID.'})}
     if args.command == 'knowledge-template':
-        from knowledge import completion_template
+        from knowledge import completion_template, pending_acceptance
+        siblings = [read(local(root, p)) for p in args.with_task]
         payload = completion_template(root, profile, task, knowledge.skill_path(args.cs_skill),
-                    local(root, args.acceptance) if args.acceptance else None, args.cs_task_id)
+                    [local(root, p) for p in args.acceptance], args.cs_task_id, siblings)
+        pending = pending_acceptance(payload, [task, *siblings])
         return {**emit(payload, 'cs-input.json'), 'scope': 'draft-only',
                 'completion_allowed': payload['task']['status'] == 'completed',
-                'summary': '知识草稿已生成；仍需填写实际结果并通过 CS 预览和应用。'}
+                'pending_acceptance': pending,
+                'summary': '知识草稿已生成；仍需填写实际结果并通过 CS 预览和应用。' + (
+                    '' if not pending else '共用这条知识记录的任务尚未全部验收，记录保持进行中：' + '、'.join(pending))}
     if args.command == 'knowledge':
-        require(bool(args.acceptance and args.cs_task_id and args.disposition and args.reason and args.brief),
-                'knowledge requires --acceptance, --cs-task-id, --brief, --disposition and --reason')
+        require(bool(len(args.acceptance) == 1 and args.cs_task_id and args.disposition and args.reason and args.brief),
+                'knowledge requires this task\'s own --acceptance (exactly one), --cs-task-id, --brief, --disposition and --reason')
         value = knowledge.finish(root, profile, task, knowledge.skill_path(args.cs_skill), args.cs_task_id,
-                    local(root, args.brief), args.disposition, args.reason, local(root, args.acceptance),
+                    local(root, args.brief), args.disposition, args.reason, local(root, args.acceptance[0]),
                     local(root, args.final_brief) if args.final_brief else None)
         return emit(value, 'knowledge.json')
     if args.command in ('review-template', 'delivery-template'):
@@ -343,7 +429,56 @@ def produce(args, root, profile, task, platform, request):
     raise Invalid('Unsupported command: ' + args.command)
 
 
+def login_policy(profile, args):
+    declared = profile.get('accounts', [])
+    agent = [row['id'] for row in declared if row['login'] == 'agent-after-authorization']
+    policy = {'user_signs_in': [row['id'] for row in declared if row['login'] == 'user'] + ['(any undeclared account)'],
+              'agent_after_authorization': agent}
+    granted = []
+    if args.grant:
+        require(args.grant == 'synthetic-login' and bool(agent), 'No declared synthetic account can be authorized')
+        require(bool(args.confirmed_by and args.confirmed_by.strip()), '--grant needs --confirmed-by <the user who authorized it>')
+        granted.append({'id': 'synthetic-login', 'accounts': agent, 'confirmed_by': args.confirmed_by, 'at': now()})
+    needed = [] if granted or not agent else [{
+        'id': 'synthetic-login', 'accounts': agent,
+        'question': '是否授权代理在本任务中登录以下项目声明的本地隔离测试账号：' + '、'.join(agent)
+                    + '？真实账号仍由你本人在真实浏览器登录。'}]
+    return {'policy': policy, 'granted': granted, 'needed': needed}
+
+
+def task_steps(args, root, profile, task):
+    import checklist
+    from common import rules_digest
+    context = read(local(root, args.context)) if args.context else None
+    value = checklist.steps(root, task, validation.source_digest(root, profile), args.context,
+                            args.task.as_posix() if args.task else None, profile=profile)
+    if context:
+        value['authorizations'] = context.get('authorizations', [])
+        value['rules_changed'] = context.get('rules_digest') not in (None, rules_digest())
+    return value
+
+
 def status(args, root, profile, task, platform=None):
+    progress = task_steps(args, root, profile, task)
+    value = _status(args, root, profile, task, platform)
+    import checklist
+    value['steps'] = progress['steps']
+    value['next_step'] = progress['next_step']
+    for key in ('authorizations', 'rules_changed'):
+        if key in progress:
+            value[key] = progress[key]
+    value['step_lines'] = checklist.render(progress)
+    if any(row['state'] == 'done' for row in progress['steps'][3:]):
+        value['summary'] = '已有验收或交付记录；按下列步骤继续。' if progress['next_step'] else '工具步骤已全部完成。'
+        value['next_action'] = progress['next_step']['next_command'] if progress['next_step'] else value.get('next_action')
+        value.pop('missing', None)
+        value.pop('stale', None)
+    if progress.get('rules_changed'):
+        value['step_lines'].append('注意：开始任务后团队流程规则已更新；按当前规则核对已完成的步骤。')
+    return value
+
+
+def _status(args, root, profile, task, platform=None):
     if args.report:
         import delivery
         report = read(local(root, args.report))

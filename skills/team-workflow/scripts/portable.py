@@ -13,7 +13,7 @@ import stat
 import uuid
 import zipfile
 
-from common import (Invalid, artifact, artifact_valid, create, digest, git, inside, now, obj,
+from common import (RECORD_SCHEMA, Invalid, artifact, artifact_valid, create, digest, git, inside, now, obj,
                     profile_valid, read, require, reserved, sha, snapshot, text)
 import github_read as github
 
@@ -44,12 +44,13 @@ def source_state(root, profile):
         state = snapshot(path, {'inputs': inputs})
         changes = git(path, 'diff', 'HEAD', '--name-only', '-z').split(b'\0')
         changes += git(path, 'ls-files', '--others', '--exclude-standard', '-z').split(b'\0')
-        clean = not any(n and not reserved(n.decode()) for n in changes)
+        dirty = sorted({n.decode() for n in changes if n and not reserved(n.decode())})
         # Explicit ignored input files are not represented by the commit.
         tracked = {n.decode() for n in git(path, 'ls-files', '-z').split(b'\0') if n}
-        clean = clean and set(state['files']) <= tracked
+        dirty += sorted(set(state['files']) - tracked - set(dirty))
         require(repo not in repositories, 'Duplicate repository identity in external inputs')
-        repositories[repo] = {'commit': state['head'], 'content': digest(state['files']), 'clean': clean}
+        repositories[repo] = {'commit': state['head'], 'content': digest(state['files']), 'clean': not dirty,
+                              'changes': dirty[:20]}
 
     capture(root, profile['inputs'])
     for name, item in profile.get('external_inputs', {}).items():
@@ -150,7 +151,7 @@ def capture(directory, profile, row, before_source, after_source, started, finis
         captured[name] = {'path': name, 'sha256': value['sha256']}
     execution = {**row, 'argv': list(check['argv']), 'artifacts': list(captured.values())}
     execution.pop('portable', None)
-    manifest = {'schema_version': 5, 'kind': 'portable-execution', 'project': profile['project'],
+    manifest = {'schema_version': RECORD_SCHEMA, 'kind': 'portable-execution', 'project': profile['project'],
                 'execution': execution, 'source_before': before_source, 'source_after': after_source,
                 'started_at': started, 'finished_at': finished,
                 'run_context': ({'repository': os.environ.get('GITHUB_REPOSITORY'),
@@ -168,7 +169,7 @@ def _source(value):
     require(isinstance(value['files'], dict), 'Portable external inputs must be a map')
     for repo, row in value['repositories'].items():
         github.repository(repo)
-        obj(row, {'commit', 'content', 'clean'})
+        obj(row, {'commit', 'content', 'clean'}, {'changes'})
         require(re.fullmatch(r'[a-f0-9]{40}|[a-f0-9]{64}', text(row['commit'])), 'Expected original full commit')
         require(re.fullmatch(r'[a-f0-9]{64}', text(row['content'])), 'Expected source content fingerprint')
         require(row['clean'] is True, 'Portable source contains unshared changes: ' + repo)
@@ -186,15 +187,15 @@ def _time(start, finish):
         raise Invalid('Invalid portable execution timestamps') from exc
 
 
-def validate_result(root, profile, manifest, directory, *, remote=False):
+def validate_result(root, profile, manifest, directory, *, remote=False, live=True):
     """Re-decode originals and return a normalized local view, without changing them."""
     import validation
     from execution import decode
     profile_valid(profile, root)
     obj(manifest, {'schema_version', 'kind', 'project', 'execution', 'source_before', 'source_after',
                    'started_at', 'finished_at', 'run_context'})
-    require(manifest['schema_version'] == 5 and manifest['kind'] == 'portable-execution',
-            'Expected portable execution schema version 5')
+    require(manifest['schema_version'] == RECORD_SCHEMA and manifest['kind'] == 'portable-execution',
+            f'Expected portable execution schema version {RECORD_SCHEMA}; re-run the CI job with the current tool')
     require(profile.get('schema_version') == 5 and manifest['project'] == profile['project'], 'Portable project mismatch')
     _time(manifest['started_at'], manifest['finished_at'])
     _source(manifest['source_before'])
@@ -213,12 +214,11 @@ def validate_result(root, profile, manifest, directory, *, remote=False):
     _source(current_sources)
     require(set(current_sources['repositories']) == set(manifest['source_after']['repositories'])
             and current_sources['files'] == manifest['source_after']['files'], 'Portable source inputs differ')
-    current = validation.check_binding(root, profile, check, remote=remote)
+    current = validation.check_binding(root, profile, check, remote=remote, live=live)
     obj(row['binding'], {'source', 'definition', 'environment', 'producer'})
     for part in current:
         require(row['binding'][part] == current[part], 'Imported execution ' + part + ' changed: ' + key)
-    require(row['status'] == 'passed' and row['state'] == 'finished' and row['exit_code'] == 0,
-            'Original execution did not pass: ' + key)
+    require(row['state'] == 'finished' and row['exit_code'] == 0, 'Original execution did not pass: ' + key)
     require(isinstance(row['artifacts'], list), 'Missing original artifact list')
     paths, artifacts = {}, []
     for value in row['artifacts']:
@@ -235,12 +235,16 @@ def validate_result(root, profile, manifest, directory, *, remote=False):
     native = paths[check['report'][len('{output}/'):]] if check.get('report') else None
     decoded = decode(check, {'state': row['state'], 'exit_code': row['exit_code'],
                             'stdout': paths['stdout.txt'].read_text(encoding='utf-8')}, native)
-    require(decoded[0] == 'passed' and decoded[1] == row['cases'],
+    require(decoded[0] == 'passed' and (row['status'] != 'passed' or decoded[1] == row['cases']),
             'Original reports do not confirm the claimed cases: ' + decoded[2])
     if check.get('review'):
         from validation import scenario_review
         scenario_review(root, directory, check, {value['path']: value['sha256'] for value in artifacts})
-    return {**row, 'artifacts': artifacts,
+    evaluated = {} if row['status'] == 'passed' else {
+        'status': 'passed', 'cases': decoded[1], 'detail': decoded[2],
+        'evaluation': {'original_status': row['status'], 'original_detail': row['detail'],
+                       'reason': 'Re-evaluated from the original report with the current required cases'}}
+    return {**row, **evaluated, 'artifacts': artifacts,
             'argv': [arg.replace('{output}', str(directory)) for arg in check['argv']]}
 
 
@@ -292,7 +296,7 @@ def import_result(root, profile, locator, directory=None):
     _provider_source(locator, receipt, manifest)
     fresh = provider(locator)
     require(fresh == receipt, 'Provider run or artifact changed during import')
-    record = {'schema_version': 5, 'kind': 'imported-execution', 'project': profile['project'],
+    record = {'schema_version': RECORD_SCHEMA, 'kind': 'imported-execution', 'project': profile['project'],
               'locator': locator, 'retrieved_at': now(), 'started_at': manifest['started_at'],
               'finished_at': manifest['finished_at'], 'source_unchanged': True,
               'archive': artifact(root, directory / 'archive.zip'), 'manifest': artifact(root, manifest_path),
@@ -306,11 +310,12 @@ def import_result(root, profile, locator, directory=None):
     return path, record
 
 
-def validate_import(root, profile, record):
+def validate_import(root, profile, record, *, live=True):
     obj(record, {'schema_version', 'kind', 'project', 'locator', 'retrieved_at', 'started_at', 'finished_at',
                  'source_unchanged', 'archive', 'manifest', 'provider_digest', 'result', 'tested_source',
                  'import_source', 'assurance'})
-    require(record['schema_version'] == 5 and record['kind'] == 'imported-execution', 'Expected imported execution version 5')
+    require(record['schema_version'] == RECORD_SCHEMA and record['kind'] == 'imported-execution',
+            f'Expected imported execution version {RECORD_SCHEMA}; import the result again with the current tool')
     require(record['project'] == profile['project'] and record['source_unchanged'] is True, 'Imported execution identity changed')
     receipt = provider(record['locator'])
     archive = artifact_valid(root, record['archive'])
@@ -319,7 +324,7 @@ def validate_import(root, profile, record):
     path = artifact_valid(root, record['manifest'])
     manifest = read(path)
     _archive_matches(archive, path.parent, manifest)
-    result = validate_result(root, profile, manifest, path.parent, remote=True)
+    result = validate_result(root, profile, manifest, path.parent, remote=True, live=live)
     _provider_source(record['locator'], receipt, manifest)
     require(record['started_at'] == manifest['started_at'] and record['finished_at'] == manifest['finished_at']
             and record['tested_source'] == manifest['source_before'], 'Imported provenance differs from original execution')
@@ -333,14 +338,15 @@ def _joint_results(root, profile, report, required):
     found = {}
     for name in report['runs']:
         record = read(inside(root, name))
-        if record.get('schema_version') == 5 and record.get('kind') == 'imported-execution':
+        if record.get('schema_version') == RECORD_SCHEMA and record.get('kind') == 'imported-execution':
             row, manifest = validate_import(root, profile, record)
             if row['id'] not in required:
                 continue
             require(row['id'] not in found, 'Duplicate joint check evidence')
             found[row['id']] = manifest
             continue
-        require(record.get('schema_version') == 5 and record.get('kind') == 'execution', 'Joint evidence must use v5 execution')
+        require(record.get('schema_version') == RECORD_SCHEMA and record.get('kind') == 'execution',
+                f'Joint evidence must use schema {RECORD_SCHEMA} execution')
         for row in record['results']:
             if row['id'] not in required:
                 continue
@@ -402,8 +408,8 @@ def aggregate(root, manifest, repositories, cs_skill):
         profile = profile_valid(read(paths['profile']), checkout)
         require(profile['schema_version'] == 5, 'Joint delivery requires schema_version 5 profiles')
         task, report = read(paths['task']), read(paths['report'])
-        require(task.get('schema_version') == 5 and report.get('schema_version') == 5,
-                'Joint delivery requires v5 task and report records')
+        require(task.get('schema_version') == 5 and report.get('schema_version') == RECORD_SCHEMA,
+                f'Joint delivery requires v5 tasks and schema {RECORD_SCHEMA} reports')
         if task['id'].startswith('https://github.com/'):
             from coordination import load
             platform = load(task['id'])
@@ -468,7 +474,7 @@ def aggregate(root, manifest, repositories, cs_skill):
         fields = ('requirements', 'history_digest', 'design_history_digest', 'owners')
         require(not after['gaps'] and all(after[key] == before[key] for key in fields),
                 'Platform requirements, assignments or progress changed during joint verification')
-    return {'schema_version': 5, 'kind': 'joint-delivery', 'ok': True, 'scope': 'joint-team-delivery',
+    return {'schema_version': RECORD_SCHEMA, 'kind': 'joint-delivery', 'ok': True, 'scope': 'joint-team-delivery',
             'status': 'complete', 'task_id': manifest['task_id'], 'versions': expected,
             'tested_versions': [{'check': key, 'repositories': {repo: value['commit']
                 for repo, value in captured['source_before']['repositories'].items()}}

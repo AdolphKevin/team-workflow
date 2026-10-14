@@ -1,22 +1,26 @@
-"""Version 5 business acceptance and final delivery are separate read-only decisions."""
+"""Business acceptance and final delivery are separate read-only decisions."""
 from datetime import datetime
 
-from common import (artifact, artifact_valid, digest, external_path, inside, obj, read,
-                    require, sha, strings, task_valid, text)
+from common import (RECORD_SCHEMA, artifact, artifact_valid, digest, evidence_file, external_path, inside, obj, read,
+                    require, sha, strings, task_valid, text, tool_gate)
 import knowledge
 import validation
 
 
 def evidence(root, profile, item):
+    obj(item, {'path', 'sha256'} | ({'repository'} if 'repository' in item else set()),
+        {'allow_large_evidence'})
+    allow_large = item.get('allow_large_evidence', False)
+    require(type(allow_large) is bool, 'Evidence allow_large_evidence must be a boolean')
     if 'repository' not in item:
-        return artifact_valid(root, item)
-    obj(item, {'repository', 'path', 'sha256'})
+        ref = {'path': item['path'], 'sha256': item['sha256']}
+        return evidence_file(artifact_valid(root, ref), allow_large=allow_large)
     entries = [v for v in profile.get('external_inputs', {}).values() if v.get('repository') == item['repository']]
     require(len(entries) == 1, 'Evidence repository is not a declared input')
     target = external_path(root, item['repository'], entries[0])
     path = inside(target, item['path'])
     require(path.is_file() and sha(path) == item['sha256'], 'External evidence changed')
-    return path
+    return evidence_file(path, allow_large=allow_large)
 
 
 def design_material(root, profile, task, report, completed_tasks=()):
@@ -37,6 +41,25 @@ def design_material(root, profile, task, report, completed_tasks=()):
     return design, approvals, status, selected
 
 
+def design_problem(status):
+    """Name what blocks the design, instead of dumping the whole status."""
+    parts = list(status.get('gaps', []))
+    scope = status.get('scope', {})
+    if scope.get('unmapped'):
+        parts.append('changed files outside every task section scope (add them, tests included, to a task scope): '
+                     + ', '.join(scope['unmapped'][:10]))
+    if scope.get('outside_selection'):
+        parts.append('changed files belong to sections not selected by this task: ' + ', '.join(scope['outside_selection'][:10]))
+    for key in ('missing', 'stale'):
+        if status.get(key):
+            parts.append(f'{key} approval for sections: ' + ', '.join(status[key]))
+    if status.get('required_pending_decisions'):
+        parts.append('pending decisions: ' + ', '.join(str(v) for v in status['required_pending_decisions']))
+    if not status.get('history_complete', True):
+        parts.append('design history is incomplete; pass earlier revisions with --design-history')
+    return '; '.join(parts) or 'design review is incomplete'
+
+
 def passed(row, label):
     require(isinstance(row, dict) and row.get('status') == 'passed', f'{label} has not passed')
     text(row.get('summary'))
@@ -48,7 +71,7 @@ def review_template(root, profile, task, report):
     known = {v['id']: v for v in issue_history.known(root, task['id'])}
     known.update({v['id']: v for v in design.get('issues', [])})
     pending = {'status': 'pending', 'summary': '', 'evidence': []}
-    return {'schema_version': 5, 'kind': 'review', 'task_id': task['id'],
+    return {'schema_version': RECORD_SCHEMA, 'kind': 'review', 'task_id': task['id'],
             'task_digest': digest(task), 'source_digest': validation.source_digest(root, profile),
             'validation_policy': review_policy(root, profile, task),
             'sections': selected, 'reviewer': '', 'standards': dict(pending), 'spec': dict(pending),
@@ -64,7 +87,8 @@ def review_policy(root, profile, task):
 
 
 def check_review(root, profile, task, review, selected, design, status, execution, run_paths):
-    require(review.get('schema_version') == 5 and review.get('kind') == 'review', 'Expected v5 code review')
+    require(review.get('schema_version') == RECORD_SCHEMA and review.get('kind') == 'review',
+            f'Expected a schema {RECORD_SCHEMA} code review; regenerate it with review-template')
     require(review.get('task_digest') == digest(task) and review.get('task_id') == task['id'], 'Review belongs to another task/version')
     require(review.get('source_digest') == validation.source_digest(root, profile), 'Review does not cover current source')
     require(review.get('sections') == selected, 'Review does not cover current approved sections')
@@ -98,15 +122,21 @@ def check_review(root, profile, task, review, selected, design, status, executio
     require(assessed == {r['id'] for r in task['acceptance']}, 'Acceptance coverage mismatch')
 
 
-def verify(root, profile, task, report, cs_skill=None, phase='delivery', _seen=None):
+def verify(root, profile, task, report, cs_skill=None, phase='delivery', _seen=None, live=None):
+    """live: re-run environment identity commands. Only the first acceptance does; later checks of the
+    same acceptance (knowledge, delivery) rely on the environment it recorded, so a removed fixture
+    no longer invalidates finished evidence. Source, definitions, reviews and platform are always rechecked."""
     import designs
     import coordination
     from common import now
     require(phase in ('acceptance', 'delivery'), 'Unknown verification phase')
+    live = phase == 'acceptance' if live is None else live
+    tool = tool_gate()
     task_valid(task, profile, root)
     obj(report, {'schema_version', 'task_id', 'design', 'approvals', 'brief', 'runs', 'review'},
         {'knowledge', 'design_history', 'close_authorization', 'dependencies', 'automation'})
-    require(report['schema_version'] == 5 and report['task_id'] == task['id'], 'Expected v5 delivery for this task')
+    require(report['schema_version'] == RECORD_SCHEMA and report['task_id'] == task['id'],
+            f'Expected a schema {RECORD_SCHEMA} delivery report for this task; regenerate it with delivery-template')
     strings(report['runs'])
     strings(report['approvals'])
     import issue_history
@@ -130,7 +160,7 @@ def verify(root, profile, task, report, cs_skill=None, phase='delivery', _seen=N
         dep_task_path, dep_report_path = inside(root, dependency['task']), inside(root, dependency['report'])
         dep_task, dep_report = read(dep_task_path), read(dep_report_path)
         require(dependency['section'] in dep_task.get('section_ids', []), 'Dependency evidence belongs to another section')
-        proof = verify(root, profile, dep_task, dep_report, cs_skill, 'acceptance', seen)
+        proof = verify(root, profile, dep_task, dep_report, cs_skill, 'acceptance', seen, live)
         current_design = read(inside(root, report['design']))
         require(dep_task.get('design_id') == task['design_id'] and proof['sections'][dependency['section']]
                 == designs.fingerprints(current_design)['sections'][dependency['section']], 'Dependency uses a different plan section')
@@ -143,11 +173,11 @@ def verify(root, profile, task, report, cs_skill=None, phase='delivery', _seen=N
     from contracts import unsourced
     missing = unsourced(task, design)
     require(not missing, 'Acceptance scenario needs confirmed business sources: ' + ', '.join(missing))
-    require(status.get('local_review_valid') is True, 'Design coverage/history needs review: ' + str(status))
-    require(status.get('acceptance_ready') is True, 'Current design/code approval is missing: ' + str(status))
-    execution = validation.verify_runs(root, profile, task, report['runs'])
+    require(status.get('local_review_valid') is True, 'Design coverage/history needs review: ' + design_problem(status))
+    require(status.get('acceptance_ready') is True, 'Current design/code approval is missing: ' + design_problem(status))
+    execution = validation.verify_runs(root, profile, task, report['runs'], live=live)
     initial = read(inside(root, report['brief']))
-    require(initial.get('schema_version') == 5 and initial.get('kind') == 'knowledge-brief'
+    require(initial.get('schema_version') == RECORD_SCHEMA and initial.get('kind') == 'knowledge-brief'
             and initial.get('task_id') == task['id'] and initial.get('task_digest') == digest(task),
             'Initial knowledge reading is missing or belongs to another task/version')
     reused = []
@@ -165,14 +195,20 @@ def verify(root, profile, task, report, cs_skill=None, phase='delivery', _seen=N
     materials = [artifact(root, inside(root, report[p])) for p in ('design', 'brief', 'review')]
     materials += [artifact(root, inside(root, p)) for p in report['approvals'] + report['runs'] + report.get('design_history', [])]
     materials += dependency_materials
-    result = {'schema_version': 5, 'kind': 'acceptance' if phase == 'acceptance' else 'delivery-verification',
+    result = {'schema_version': RECORD_SCHEMA, 'kind': 'acceptance' if phase == 'acceptance' else 'delivery-verification',
               'ok': True, 'at': now(), 'phase': phase, 'task_id': task['id'], 'task_digest': digest(task),
               'source_digest': before, 'sections': selected, 'checks': execution['checks'], 'materials': materials,
               'scope': 'business-acceptance' if phase == 'acceptance' else 'team-delivery',
               'acceptance_scope': task['acceptance_scope'], 'report': dict(report), 'issues': review['findings'],
               'observations': {r['id']: r['observations'] for r in review['acceptance']},
               'business_accepted': True, 'delivery_complete': False, 'closable': False,
-              'reused_execution': reused, 'automation_status': regression,
+              'reused_execution': reused, 'automation_status': regression, 'tool': tool,
+              'superseded_execution': execution['superseded'],
+              're_evaluated': [{'check': key, **row['evaluation']} for key, row in sorted(execution['results'].items())
+                               if row.get('evaluation')],
+              'environment': {key: row.get('binding', {}).get('environment')
+                              for key, row in sorted(execution['results'].items())},
+              'environment_checked': 'now' if live else 'recorded at acceptance',
               'regression_pending': regression != 'not-declared' and bool(regression['pending_automation']),
               'assurance': 'content-bound records and explicit reviews; delivery_complete covers acceptance, knowledge '
                            'and handoff records, not regression automation (see automation_status); '
@@ -181,7 +217,8 @@ def verify(root, profile, task, report, cs_skill=None, phase='delivery', _seen=N
         require(bool(report.get('knowledge')), 'Knowledge completion is required after business acceptance')
         completed_path = inside(root, report['knowledge'])
         completed = read(completed_path)
-        require(completed.get('schema_version') == 5 and completed.get('kind') == 'knowledge-completion', 'Expected v5 knowledge completion')
+        require(completed.get('schema_version') == RECORD_SCHEMA and completed.get('kind') == 'knowledge-completion',
+                f'Expected a schema {RECORD_SCHEMA} knowledge completion')
         require(completed.get('task_id') == task['id'] and completed.get('task_digest') == digest(task), 'Knowledge completion belongs to another task/version')
         for ref in completed.get('files', []):
             artifact_valid(root, ref)
@@ -190,6 +227,7 @@ def verify(root, profile, task, report, cs_skill=None, phase='delivery', _seen=N
         acceptance_path = artifact_valid(root, completed['acceptance'])
         prior_acceptance = read(acceptance_path)
         require(prior_acceptance.get('sections') == selected, 'Business acceptance has stale design sections')
+        result['environment'] = prior_acceptance.get('environment', result['environment'])
         for ref in prior_acceptance.get('materials', []):
             artifact_valid(root, ref)
         latest_path = artifact_valid(root, completed['final_brief'])
@@ -198,15 +236,24 @@ def verify(root, profile, task, report, cs_skill=None, phase='delivery', _seen=N
         for field in ('cs_task_revision', 'query_state', 'files', 'external_refs'):
             require(fresh[field] == completed.get(field), 'Knowledge completion changed: ' + field)
         if platform_state is not None:
-            continuation = coordination.resume(root, profile, task['id'], knowledge.skill_path(cs_skill), completed_tasks=completed_tasks)
-            require(continuation.get('ok') is True, 'Delivery handoff incomplete: ' + str(continuation.get('gaps')))
-            current = continuation.get('current')
+            import summary
+            close = {'acceptance': artifact(root, acceptance_path), 'knowledge': artifact(root, completed_path),
+                     'cs_task_id': completed['cs_task_id'], 'cs_task_revision': completed['cs_task_revision'],
+                     'disposition': completed['disposition'],
+                     'summary': summary.render({**result, 'delivery_complete': True, 'closable': bool(report.get('close_authorization')),
+                                                'close_authorization': report.get('close_authorization', {}),
+                                                'knowledge_disposition': summary.disposition(completed)},
+                                               task, profile)}
+            if report.get('close_authorization'):
+                close['close_authorization'] = report['close_authorization']
+            current, note = coordination.closing(root, profile, task['id'], knowledge.skill_path(cs_skill),
+                                                 completed_tasks, close)
             from contracts import reconcile, unresolved
-            reconcile(review['findings'], current.get('questions', []) if current else [])
+            reconcile(review['findings'], current.get('questions', []))
             require(not unresolved(current.get('questions', []), status['required_sections'], 'acceptance'),
                     'Handoff still has unresolved issues')
-            require(current and not current.get('remaining')
-                    and not continuation.get('pending_progress'), 'Handoff still has unfinished work or unconfirmed progress')
+            if note is not None:
+                result['close_note'] = {k: note[k] for k in ('record', 'markdown', 'publication')}
         result['materials'].extend([artifact(root, completed_path), artifact(root, acceptance_path)])
         result['delivery_complete'] = True
         from artifacts import directory
@@ -219,6 +266,9 @@ def verify(root, profile, task, report, cs_skill=None, phase='delivery', _seen=N
             text(authorization['confirmed_by']); text(authorization['reference'])
             result['closable'] = True
             result['close_authorization'] = authorization
+    import summary
+    result['summary_markdown'] = summary.render({**result, 'knowledge_disposition': (
+        summary.disposition(completed) if phase == 'delivery' else None)}, task, profile)
     if platform_state is not None:
         latest = coordination.load(task['id'])
         observed = ('requirements', 'history_digest', 'design_requirements', 'design_history_digest', 'owners')
@@ -247,6 +297,8 @@ def check_observations(root, profile, design, row, execution, run_paths):
             require(path.relative_to(root).as_posix() in run_paths, 'Observation run was not verified for this task')
             key = observation['check']
             require(key in section['data']['checks'] and key in execution['results'], 'Observation check does not cover this acceptance')
+            require(path.relative_to(root).as_posix() == execution['selected_runs'][key],
+                    'Observation must reference the selected execution for this check')
             record = read(path)
             identifiers = [r['id'] for r in record.get('results', [])] if record['kind'] == 'execution' else [record['result']['id']]
             require(key in identifiers, 'Observation check belongs to another run')

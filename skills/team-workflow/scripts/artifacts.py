@@ -1,9 +1,10 @@
 """Task-local request claims and complete, immutable output publication."""
 import os
 import re
+import time
 import uuid
 
-from common import Invalid, artifact, create, digest, git, inside, now, read, require, sha
+from common import VERSION, Invalid, artifact, create, digest, git, inside, now, read, require, sha
 
 
 def directory(root, task_id, request_id=None):
@@ -22,7 +23,9 @@ class Request:
         except Invalid as exc:
             raise Invalid('Ignore .team-workflow/ before generating local materials') from exc
         require(bool(ignored), 'Ignore .team-workflow/ before generating local materials')
-        claim = {'task_id': task_id, 'input_digest': digest(inputs), 'pid': os.getpid(), 'started_at': now()}
+        claim = {'task_id': task_id, 'input_digest': digest(inputs), 'pid': os.getpid(), 'started_at': now(),
+                 'command': inputs.get('command'), 'phase': inputs.get('phase')}
+        self.started = time.monotonic()
         if isinstance(inputs.get('task'), str) and re.fullmatch(r'[a-f0-9]{64}', inputs['task']):
             claim['task_digest'] = inputs['task']
         try:
@@ -62,7 +65,8 @@ class Request:
 
     def finish(self, result):
         result = {**result, 'request_id': self.directory.name,
-                  'request_directory': self.directory.relative_to(self.root).as_posix()}
+                  'request_directory': self.directory.relative_to(self.root).as_posix(),
+                  'finished_at': now(), 'seconds': round(time.monotonic() - self.started, 3), 'workflow_version': VERSION}
         # Bind the files this request actually produced, including nested native reports.
         result['request_artifacts'] = [{'path': path.relative_to(self.root).as_posix(), 'sha256': sha(path)} for path in sorted(self.directory.rglob('*'))
             if path.is_file() and path.name != 'request.json' and not path.name.startswith('.')]

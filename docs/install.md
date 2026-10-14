@@ -19,6 +19,12 @@ npx skills list -g            # 核对来源与安装位置
 `npx skills update` 跟随默认分支，推送到 `main` 即发布；锁文件 `~/.agents/.skill-lock.json` 记录实际安装的目录哈希，
 工具版本以 `workflow.py version` 输出为准。
 
+技能目录带有 `MANIFEST.json`，记录随发行的每个文件的指纹。`workflow.py version` 与 `project` 报告
+`integrity`：已安装文件被修改、缺失或多出文件时为 `modified`，`verify` 与 `knowledge` 拒绝执行。
+不要直接修改 `~/.agents/skills/` 下的文件；发现工具缺陷时在本仓修复并发布，再运行 `npx skills update -g`。
+修改本仓 `skills/team-workflow/` 后运行 `python3 scripts/package.py --manifest` 重新生成清单，
+`scripts/check_release.py` 会拒绝过期清单。
+
 ## 插件方式（可选）
 
 根目录 `plugin.json`（Codex、Cursor）与 `.claude-plugin/plugin.json`（Claude Code）仍作为插件入口保留，
@@ -46,7 +52,7 @@ CS 独立安装并完成项目知识初始化。工具通过公开命令与返�
 
 ## 版本切换
 
-0.7.0-rc.1 是候选版，只接受 `schema_version: 5` 的配置、任务和记录。任务开始记录实际工作流与 CS 版本，不在一次检查执行期间替换工具。新增能力不要求重建知识库。
+0.8.0-rc.1 是候选版：配置、任务、方案和平台记录使用 `schema_version: 5`，本地证据使用 `schema_version: 6`；升级后运行 `adopt` 列出需要重跑的旧证据。任务开始记录实际工作流与 CS 版本，不在一次检查执行期间替换工具。新增能力不要求重建知识库。
 
 集中升级只更新共享插件与独立 CS。项目中的业务测试、原文登记和必要配置继续由所属项目维护。每次发行核对 [MATT 来源](../upstream/matt.lock.json)、适配补丁和许可，发布升级说明与实际验收范围。
 

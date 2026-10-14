@@ -12,6 +12,8 @@ from unittest.mock import patch
 
 SCRIPTS = Path(__file__).resolve().parents[1] / 'skills/team-workflow/scripts'
 sys.path.insert(0, str(SCRIPTS))
+# The source tree changes during development; integrity gates are proven in test_integrity.py.
+os.environ.setdefault('TEAM_WORKFLOW_ALLOW_MODIFIED_TOOL', '1')
 from common import Invalid, artifact, profile_valid, snapshot, task_valid, write
 import execution
 import validation
@@ -71,7 +73,7 @@ class WorkflowCases(unittest.TestCase):
         (wiki / 'INDEX.md').write_text('Project knowledge')
         (wiki / 'task.md').write_text(self.task['id'] + '\ncompleted')
         write(self.root / '.codestable/config.json', {'version': '2.1.0'})
-        (skill / 'scripts/bootstrap.py').write_text('import json\nprint(json.dumps({"ok":True,"skill_version":"2.1.0","capabilities":["documents","receipt-check","task-files","task-external-refs","exclusive-plan-file","review-actions"]}))')
+        (skill / 'scripts/bootstrap.py').write_text('import json\nprint(json.dumps({"ok":True,"skill_version":"2.1.0","contract_version":1,"integrity":{"status":"intact","changed":[],"missing":[],"unexpected":[]},"capabilities":["documents","receipt-check","task-files","task-external-refs","exclusive-plan-file","review-actions","task-source-acceptances","install-integrity"]}))')
         reply = {'ok': True, 'state': '0'*64, 'kind': 'receipt-check', 'read_only': True, 'query_state': {}, 'changed': [], 'receipt': {'query_state': {}}, 'task_status': 'completed', 'canonical_task_id': 'CS-T', 'task_revision': 1,
                  'files': ['.codestable/wiki/task.md'],
                  'records': [{'id': 'CS-T', 'path': '.codestable/wiki/task.md', 'relations': ['task-note']} ]}
@@ -83,7 +85,7 @@ class WorkflowCases(unittest.TestCase):
             + 'root=Path(sys.argv[sys.argv.index("--root")+1])\n'
             + 'if "template" in sys.argv:\n'
             + ' p=root/".team-workflow/acceptance.json"\n'
-            + ' source={"workflow_acceptance":{"path":str(p.relative_to(root)),"sha256":hashlib.sha256(p.read_bytes()).hexdigest()}} if p.exists() else {}\n'
+            + ' ' + 'source={"workflow_acceptances":[dict({"path":str(p.relative_to(root)),"sha256":hashlib.sha256(p.read_bytes()).hexdigest(),"task_id":json.loads(p.read_text())["task_id"]},**({"issue":reply["external_refs"][0]["id"]} if reply["external_refs"][0]["system"]=="github" else {}))]} if p.exists() else {}' + '\n'
             + ' reply={"ok":True,"task":{"source":source,"status":"completed","summary":"fixture","result":"fixture","scopes":reply["scopes"]},"items":[]}\n'
             + 'print(json.dumps(reply))\n')
         return skill
@@ -99,7 +101,44 @@ class WorkflowCases(unittest.TestCase):
         self.assertEqual(status, 1)
         self.assertFalse(result['ok'])
         self.assertEqual(result['cs']['status'], 'incomplete')
-        self.assertIn('receipt-check', result['cs']['reason'])
+        self.assertIn('contract', result['cs']['reason'])
+
+    def test_project_rejects_modified_or_incomplete_cs_install(self):
+        skill = self.fake_cs()
+        write(self.root / '.team-workflow.json', self.profile)
+        bootstrap = skill / 'scripts/bootstrap.py'
+        original = bootstrap.read_text()
+        cases = [(original.replace('"status":"intact","changed":[]', '"status":"modified","changed":["scripts/knowledge.py"]'),
+                  'scripts/knowledge.py'),
+                 (original.replace(',"install-integrity"', ''), 'install-integrity')]
+        for script, reason in cases:
+            with self.subTest(reason=reason):
+                bootstrap.write_text(script)
+                output = io.StringIO()
+                with contextlib.redirect_stdout(output):
+                    status = workflow.main(['project', '--root', str(self.root), '--cs-skill', str(skill)])
+                self.assertEqual(status, 1)
+                self.assertIn(reason, json.loads(output.getvalue())['cs']['reason'])
+
+    def test_unexpected_exception_is_reported_as_tool_defect_with_response(self):
+        import commands
+        write(self.root / '.team-workflow.json', self.profile)
+        write(self.root / '.team-workflow/task.json', self.task)
+        output = io.StringIO()
+        with patch.object(commands, 'produce', side_effect=NameError("name 'read' is not defined")), \
+                contextlib.redirect_stdout(output):
+            status = workflow.main(['task-export', '--root', str(self.root), '--task', '.team-workflow/task.json',
+                                    '--request-id', 'defect'])
+        result = json.loads(output.getvalue())
+        self.assertEqual(status, 1)
+        self.assertEqual(result['error_code'], 'tool-defect')
+        self.assertIn('NameError', result['problem'])
+        self.assertIn('installed skill', result['next_action'])
+        responses = list((self.root / '.team-workflow/tasks').glob('*/requests/defect/response.json'))
+        self.assertEqual(len(responses), 1)
+        with patch.object(commands, 'dispatch', side_effect=RuntimeError('boom')), contextlib.redirect_stdout(io.StringIO()) as raw:
+            self.assertEqual(workflow.main(['snapshot', '--root', str(self.root), '--task', '.team-workflow/task.json']), 1)
+        self.assertEqual(json.loads(raw.getvalue())['error_code'], 'tool-defect')
 
     def test_deleted_and_untracked_files_change_fingerprint(self):
         old = snapshot(self.root, self.profile)

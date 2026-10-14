@@ -3,6 +3,8 @@ import contextlib
 import copy
 import io
 import json
+import subprocess
+import sys
 import unittest
 from unittest.mock import patch
 
@@ -54,7 +56,7 @@ class DeliveryCases(unittest.TestCase):
         approval = designs.approval_draft(self.design, 'carol', 'Explicit plan and code approval',
                     code_digest=validation.source_digest(self.root, self.profile), run_refs=[artifact(self.root, run)])
         self.write('approval', approval)
-        self.report = {'schema_version': 5, 'task_id': self.task['id'], 'design': self.name('design'),
+        self.report = {'schema_version': 6, 'task_id': self.task['id'], 'design': self.name('design'),
             'approvals': [self.name('approval')], 'brief': self.name('brief'), 'runs': self.runs, 'review': self.name('review')}
         review = delivery.review_template(self.root, self.profile, self.task, self.report)
         ref = artifact(self.root, run)
@@ -70,6 +72,62 @@ class DeliveryCases(unittest.TestCase):
 
     def write(self, name, value):
         write(self.root / self.name(name), value)
+
+    def evidence_targets(self):
+        other = self.root / '.team-workflow/other-repository'
+        other.mkdir(parents=True)
+        subprocess.check_call(['git', '-C', str(other), 'init', '-q'])
+        subprocess.check_call(['git', '-C', str(other), 'remote', 'add', 'origin',
+                               'https://github.com/example/evidence.git'])
+        self.profile['external_inputs'] = {'other': {'kind': 'repository',
+            'repository': 'example/evidence', 'role': 'build'}}
+        write(self.root / '.team-workflow/local.json', {'repositories': {'example/evidence': str(other)}})
+        write(self.root / '.team-workflow.json', self.profile)
+        return [(self.root, {}), (other, {'repository': 'example/evidence'})]
+
+    def test_referenced_large_evidence_requires_explicit_override(self):
+        for target, identity in self.evidence_targets():
+            with self.subTest(identity=identity):
+                path = target / '.team-workflow/large.txt'
+                path.parent.mkdir(exist_ok=True)
+                with path.open('wb') as handle:
+                    handle.truncate(64 * 1024 * 1024 + 1)
+                ref = {**artifact(target, path), **identity}
+                with self.assertRaisesRegex(Invalid, 'exceeds 64 MiB'):
+                    delivery.evidence(self.root, self.profile, ref)
+
+    def test_evidence_cli_persists_large_override_for_final_verification(self):
+        for target, identity in self.evidence_targets():
+            with self.subTest(identity=identity):
+                path = target / '.team-workflow/large.txt'
+                path.parent.mkdir(exist_ok=True)
+                with path.open('wb') as handle:
+                    handle.truncate(64 * 1024 * 1024 + 1)
+                args = ['evidence', '--root', str(self.root), '--path', path.relative_to(target).as_posix()]
+                if identity:
+                    args += ['--evidence-repository', identity['repository']]
+                output = io.StringIO()
+                with contextlib.redirect_stdout(output):
+                    code = workflow.main([*args, '--allow-large-evidence'])
+                result = json.loads(output.getvalue())
+                self.assertEqual(code, 0, result)
+                ref = result['artifacts'][0]
+                self.assertIs(ref.get('allow_large_evidence'), True)
+                self.assertEqual(delivery.evidence(self.root, self.profile, ref), path)
+                with self.assertRaisesRegex(Invalid, 'must be a boolean'):
+                    delivery.evidence(self.root, self.profile, {**ref, 'allow_large_evidence': 'true'})
+
+    def test_external_compiled_evidence_cannot_bypass_final_verification(self):
+        for target, identity in self.evidence_targets():
+            with self.subTest(identity=identity):
+                path = target / '.team-workflow/build.bin'
+                path.parent.mkdir(exist_ok=True)
+                path.write_bytes(b'\x7fELFcompiled output')
+                ref = {**artifact(target, path), **identity}
+                with self.assertRaisesRegex(Invalid, 'compiled executable'):
+                    delivery.evidence(self.root, self.profile, ref)
+                with self.assertRaisesRegex(Invalid, 'compiled executable'):
+                    delivery.evidence(self.root, self.profile, {**ref, 'allow_large_evidence': True})
 
     def test_acceptance_needs_no_completed_knowledge_and_final_delivery_does(self):
         self.setup_task()
@@ -89,6 +147,59 @@ class DeliveryCases(unittest.TestCase):
         self.assertFalse(delivered['closable'])
         self.report['close_authorization'] = {'confirmed_by': 'carol', 'reference': 'Explicit user authorization to close this task'}
         self.assertTrue(delivery.verify(self.root, self.profile, self.task, self.report, self.skill)['closable'])
+
+    def test_automatic_observation_must_reference_selected_run(self):
+        self.setup_task()
+        original = self.root / self.runs[0]
+        focused, _ = validation.run_batch(self.root, self.profile, [self.task], selected=['unit'])
+        self.report['runs'] = [*self.runs, focused.relative_to(self.root).as_posix()]
+        for original_status in ('passed', 'failed'):
+            with self.subTest(original_status=original_status):
+                record = read(original)
+                record['results'][0].update(status=original_status, exit_code=0 if original_status == 'passed' else 1)
+                write(original, record)
+                refs = [artifact(self.root, self.root / name) for name in self.report['runs']]
+                self.write('approval', designs.approval_draft(self.design, 'carol', 'Reviewed both actual runs',
+                    code_digest=validation.source_digest(self.root, self.profile), run_refs=refs))
+                review = read(self.root / self.name('review'))
+                review['standards']['evidence'] = review['spec']['evidence'] = [refs[1]]
+                review['acceptance'][0]['evidence'] = [refs[1]]
+                review['acceptance'][0]['observations'] = [plans.observation(refs[0])]
+                self.write('review', review)
+                with self.assertRaisesRegex(Invalid, 'selected execution'):
+                    delivery.verify(self.root, self.profile, self.task, self.report, self.skill, 'acceptance')
+                review['acceptance'][0]['observations'] = [plans.observation(refs[1])]
+                self.write('review', review)
+                self.assertTrue(delivery.verify(self.root, self.profile, self.task, self.report,
+                                               self.skill, 'acceptance')['business_accepted'])
+
+    def test_removed_fixture_does_not_invalidate_finished_acceptance(self):
+        marker = self.root / '.team-workflow/fixture-id.txt'
+        marker.parent.mkdir(exist_ok=True)
+        marker.write_text('postgres-container-1')
+        identity = [sys.executable, '-c', "from pathlib import Path; print(Path('.team-workflow/fixture-id.txt').read_text())"]
+        self.check = lambda code, **kw: fixtures.WorkflowCases.check(
+            self, code, environment={'kind': 'fixture', 'identity': identity}, **kw)
+        self.setup_task()
+        accepted = delivery.verify(self.root, self.profile, self.task, self.report, self.skill, 'acceptance')
+        self.assertEqual(accepted['environment_checked'], 'now')
+        self.assertEqual(accepted['environment']['unit']['fixture']['identity'], 'postgres-container-1')
+        self.write('acceptance', accepted)
+        marker.unlink()  # the isolated database was cleaned up after acceptance
+        with self.assertRaisesRegex(Invalid, 'Cannot confirm environment identity'):
+            delivery.verify(self.root, self.profile, self.task, self.report, self.skill, 'acceptance')
+        completion = knowledge.finish(self.root, self.profile, self.task, self.skill, 'CS-T',
+            self.root / self.name('brief'), 'none', 'Existing source owns the requirement', self.root / self.name('acceptance'))
+        self.write('knowledge', completion)
+        self.report['knowledge'] = self.name('knowledge')
+        delivered = delivery.verify(self.root, self.profile, self.task, self.report, self.skill)
+        self.assertTrue(delivered['delivery_complete'])
+        self.assertEqual(delivered['environment_checked'], 'recorded at acceptance')
+        self.assertEqual(delivered['environment'], accepted['environment'])
+        (self.root / 'app.py').write_text('def add(a, b):\n    return b+a\n')
+        # Changed code is still refused offline (here by the code approval bound to the source digest).
+        with self.assertRaisesRegex(Invalid, '[Ss]ource|needs review'):
+            delivery.verify(self.root, self.profile, self.task, self.report, self.skill)
 
     def test_missing_or_stale_combined_approval_cannot_accept(self):
         self.setup_task()

@@ -1,5 +1,19 @@
 # 未发布
 
+- 独立试用后的修正：安装被修改时 `verify`、`knowledge` 与 `project` 统一返回 `error_code: tool-modified`（CS 被修改同样如此，`project` 在顶层给出原因）；`project` 的 `tool` 带 `override`；`verify` 输出直接包含 `summary_markdown`、`re_evaluated`、`close_note` 与 `tool`；缺少登记用例时列出报告中实际的用例名；方案范围缺口改为可读说明；收到 SIGTERM 时停止检查的进程组并清除验证标记；`status` 把最近一次中断或失败的尝试作为下一步，已被后续成功取代的失败记为未记录，优先采用未使用 `--allow-modified-tool` 的结果，最终交付步骤包含 `delivery-template`；配置模板的 `workflow_version` 与工具版本一致并由发布检查核对。
+- 修复交接核对的崩溃：带 `verified` 原始记录的完成交接调用了未导入的 `read`，交接时抛出 `NameError`。`verified` 指向源码文件时给出明确缺口，不再报 JSON 解析错误。新增两仓共用、字节相同的 `scripts/lint_undefined_names.py`（基于编译器作用域表，只用标准库），`check_release.py` 运行它并逐个导入工具模块；未预期的异常返回 `error_code: tool-defect` 并写出请求结果。
+- 一条 CS 任务记录可以绑定多个 Issue 的验收：`knowledge-template` 的 `--acceptance` 可重复，配合 `--with-task`；草稿写入 `task.source.workflow_acceptances` 与每个任务的 `external_refs`，全部验收后才为 `completed`，返回 `pending_acceptance`。`knowledge` 只传本任务的验收，核对 CS 记录包含其当前指纹，不再要求整表相等。原单值 `workflow_acceptance` 不再生成。
+- 证据模型（本地证据记录升为 `schema_version: 6`；配置、任务、方案与平台记录仍为 5，不需要改写 Issue）：执行定义不再包含 `required_cases`、`purpose`、`timeout`，修改用例登记后用原始报告重新判定，无需重跑；每项检查独立选取当前结果，批次中一项过期只需 `run --check` 聚焦重跑，结果列出 `superseded_execution`；环境只在业务验收时实际核对，`knowledge` 与最终 `verify` 使用验收记录的环境，夹具清理后已完成的验收仍有效；工具升级不再使所有执行记录过期（执行绑定改为结果解码版本）。
+- 登录按账号类型区分：配置可选 `accounts` 声明真实账号（只能由用户登录）与本地隔离测试账号；`prepare` 返回 `authorizations_needed` 与要问用户的问题，`--grant synthetic-login --confirmed-by` 记录一次性授权；分发指引与业务验收标准同步改写，未声明的账号按真实账号处理。
+- `status` 列出任务步骤、状态和填好路径的下一条命令（`--format text` 可直接阅读），中断后据此继续；准备上下文记录 `rules_digest`，规则在任务中途变化时提示。每个请求记录命令、阶段、完成时间与耗时；新增只读 `metrics` 统计请求、失败、耗时与检查重跑次数，供每周复盘参考。
+- 单人任务收尾：交接新增 `close` 类型。被指派人只有实施负责人、没有修改或联合仓库、没有跨服务风险时，最终 `verify` 生成“收尾说明”草稿（`close_note`）代替单独的实施交接，发布后 `resume` 返回 `closed: true`；其他情况仍要求实施交接并说明原因。
+- 新增 `issue-draft`：为没有结构化任务块的 Issue 一次生成正文、方案评论和给具体评审人的评审请求草稿，原有说明逐字保留；读取平台的命令遇到这类 Issue 返回 `issue-not-adopted` 并给出命令。
+- 交接缺口“存在未共享的改动”现在列出具体文件，并提示把 `.DS_Store` 等本机文件加入 `.git/info/exclude`，不必为此推送提交。
+- 验收与最终核查结果新增 `summary_markdown`：用平实语言说明验证了什么、哪些检查通过、还有什么没做、交付和关闭状态。
+- 新增 `adopt`：预览或写入配置的 `workflow_version`，按任务列出第六版之前的证据；旧证据只保留为历史。
+- `cleanup --cleanup-scope all` 清理过期且无引用的批次、导入与结束进程的验证标记，列出不归工具管理的手工输出及大小、可回收体积和最大文件；`evidence` 与评审证据拒绝编译后的可执行文件，超过 64 MiB 需显式允许。
+- 安装完整性：技能目录附带 `MANIFEST.json`（`scripts/package.py --manifest` 生成，`check_release.py` 校验）；`version` 与 `project` 报告 `integrity`，已安装副本被修改时 `project` 返回 `tool-modified`，`verify` 与 `knowledge` 拒绝执行，除非显式 `--allow-modified-tool`（记入结果的 `tool.override`）。要求 CS 声明 `contract_version: 1`、`task-source-acceptances`、`install-integrity` 且自身完整。
+
 - 只保留当前记录格式（`schema_version: 5`）：配置、任务、方案、批准、交接、执行、导入与联合清单不再读取或转换第一至四版。删除 `migrate`、`upgrade`、`adopt`、`stage-draft` 命令及阶段流程、旧版约定、旧版结果导入与交接代码；`workflow_version` 只用于在项目要求更新的工具时提示更新，不再提示项目升级。`agents` 子代理台账保留，说明移入业务验收标准的派遣协议。
 - 文件去掉版本后缀：`contracts.md`、`coordination.md`、`portable.md`、`commands.py`、`contracts.py`、`portable.py`（合并原跨机器结果模块）及对应测试；真实 CS 检查分为 `check_cs_knowledge.py` 与 `check_cs_delivery.py`。删除旧版示例配置和历史验证快照，验证记录只保留当前版本。
 - `verify` 对非对象的执行记录给出明确错误，不再抛出未处理异常。

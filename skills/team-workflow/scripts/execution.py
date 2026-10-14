@@ -10,6 +10,9 @@ import xml.etree.ElementTree as ET
 
 from common import Invalid, inside, require
 
+# Bump when decode/go_cases/junit_cases change meaning; it is part of every execution binding.
+DECODER_VERSION = 1
+
 
 def redact(value):
     secrets = [v for k, v in os.environ.items() if re.search(r'(?i)(token|secret|password|credential|dsn|api_key)', k) and len(v) >= 4]
@@ -111,7 +114,13 @@ def decode(check, result, report_path=None):
         require(all(v != 'failed' for v in cases.values()), 'A test case failed')
         required = check['required_cases'] or list(cases)
         for key in required:
-            require(cases.get(key) == 'passed', f'Required case missing or not passed: {key}')
+            if cases.get(key) != 'passed':
+                similar = sorted(k for k in cases if k.endswith(key) or key.endswith(k.split('::')[-1]))[:5]
+                found = similar or sorted(cases)[:5]
+                raise Invalid(f'Required case missing or not passed: {key}'
+                              + (f' (state: {cases[key]})' if key in cases else
+                                 f'; the report has {len(cases)} cases, e.g. {", ".join(found)}'
+                                 + ('. Check the registered name (package or class prefix).' if similar else '')))
             # Selecting a Go parent must not hide a skipped child.
             if check['format'] == 'go-json':
                 require(all(v == 'passed' for k, v in cases.items() if k.startswith(key + '/')), f'Required child did not pass: {key}')

@@ -1,4 +1,4 @@
-"""Explicit cleanup of unreferenced requests belonging to completed tasks."""
+"""Explicit cleanup of unreferenced local material; nothing outside the managed roots is ever removed."""
 from contextlib import contextmanager
 import os
 import shutil
@@ -56,7 +56,21 @@ def strings_in(value):
             yield from strings_in(child)
 
 
-def preview(root):
+MANAGED = ('tasks', 'batches', 'imports', 'validation-active', 'agents')
+KEEP = ('local.json', '.maintenance-lock', 'agents')
+
+
+def size(path):
+    return path.stat().st_size if path.is_file() else sum(p.stat().st_size for p in path.rglob('*') if p.is_file())
+
+
+def referenced_elsewhere(relative, documents):
+    return any(not path.startswith(relative + '/') and any(v == relative or v.startswith(relative + '/') for v in strings_in(doc))
+               for path, doc in documents.items())
+
+
+def preview(root, scope='requests', older_than=14):
+    require(scope in ('requests', 'all') and isinstance(older_than, int) and older_than >= 0, 'Invalid cleanup scope')
     root = root.resolve()
     runtime = root / '.team-workflow'
     contents, documents, issues = {}, {}, []
@@ -76,7 +90,7 @@ def preview(root):
     claims = {p: d for p, d in documents.items() if p.endswith('/request.json') and '/requests/' in p}
     finished_tasks = set()
     for record in documents.values():
-        if not (isinstance(record, dict) and record.get('schema_version') == 5
+        if not (isinstance(record, dict) and record.get('schema_version') in (5, 6)
                 and record.get('kind') == 'delivery-verification' and record.get('ok') is True
                 and record.get('delivery_complete') is True and isinstance(record.get('covered_requests'), list)):
             continue
@@ -104,10 +118,42 @@ def preview(root):
             protected.append(relative)
         else:
             candidates.append(relative)
-    return {'schema_version': 1, 'kind': 'cleanup-plan', 'ok': not issues, 'read_only': True,
-            'root': str(root), 'state': digest(contents), 'candidates': sorted(candidates),
-            'protected': sorted(protected), 'active': active, 'gaps': issues,
-            'summary': f'{len(candidates)} 个已完成任务的无引用请求可清理；其他材料保留。',
+    reasons = {name: 'request of a delivered task, not referenced' for name in candidates}
+    unmanaged = []
+    if scope == 'all':
+        cutoff = time.time() - older_than * 86400
+        for kind in ('batches', 'imports'):
+            for directory in sorted((runtime / kind).iterdir()) if (runtime / kind).is_dir() else []:
+                relative = directory.relative_to(root).as_posix()
+                if not directory.is_dir() or directory.is_symlink():
+                    continue
+                if referenced_elsewhere(relative, documents):
+                    protected.append(relative)
+                elif max((p.stat().st_mtime for p in directory.rglob('*')), default=directory.stat().st_mtime) > cutoff:
+                    protected.append(relative)
+                else:
+                    candidates.append(relative)
+                    reasons[relative] = f'unreferenced {kind[:-1]} older than {older_than} days'
+        for lease in sorted((runtime / 'validation-active').glob('*.json')) if (runtime / 'validation-active').is_dir() else []:
+            relative = lease.relative_to(root).as_posix()
+            value = documents.get(relative)
+            if isinstance(value, dict) and not running(value, lease.parent / '__no_response__'):
+                candidates.append(relative)
+                reasons[relative] = 'validation lease of a finished process'
+        for entry in sorted(runtime.iterdir()) if runtime.is_dir() else []:
+            if entry.name not in MANAGED + KEEP:
+                unmanaged.append({'path': entry.relative_to(root).as_posix(), 'bytes': size(entry)})
+    details = [{'path': name, 'reason': reasons[name], 'bytes': size(root / name)} for name in sorted(candidates)]
+    largest = sorted(({'path': name, 'bytes': (root / name).stat().st_size} for name in contents), key=lambda r: -r['bytes'])[:20]
+    reclaim = sum(row['bytes'] for row in details)
+    return {'schema_version': 2, 'kind': 'cleanup-plan', 'ok': not issues, 'read_only': True,
+            'root': str(root), 'scope': scope, 'older_than': older_than,
+            'state': digest(contents), 'candidates': sorted(candidates), 'details': details,
+            'protected': sorted(protected), 'active': active, 'gaps': issues, 'unmanaged': unmanaged,
+            'totals': {'files': len(contents), 'bytes': sum((root / n).stat().st_size for n in contents),
+                       'reclaimable_bytes': reclaim, 'largest': largest},
+            'summary': f'{len(candidates)} 项无引用材料可清理，约 {reclaim // (1024 * 1024)} MiB；其他材料保留。'
+                       + (f'另有 {len(unmanaged)} 项手工输出不归工具管理，只列出大小，不会删除。' if unmanaged else ''),
             'next_action': 'Save this plan outside the project, review it, then use cleanup --apply --plan PATH.'}
 
 
@@ -115,13 +161,20 @@ def apply(root, plan):
     require(isinstance(plan, dict) and plan.get('kind') == 'cleanup-plan' and plan.get('root') == str(root.resolve()),
             'Cleanup plan belongs to another project')
     with guard(root):
-        current = preview(root)
+        current = preview(root, plan.get('scope', 'requests'), plan.get('older_than', 14))
         require(current['ok'] and not current['active'], 'Cleanup needs readable references and no active requests')
         require(plan.get('state') == current['state'] and plan.get('candidates') == current['candidates'],
                 'Cleanup plan changed; preview and review again')
+        runtime = root / '.team-workflow'
         for name in current['candidates']:
             path = inside(root, name)
-            require('/requests/' in name and path.is_relative_to(root / '.team-workflow/tasks'), 'Unsafe cleanup candidate')
-            shutil.rmtree(path)
+            request = '/requests/' in name and path.is_relative_to(runtime / 'tasks')
+            material = path.parent in (runtime / 'batches', runtime / 'imports')
+            lease = path.parent == runtime / 'validation-active' and path.suffix == '.json'
+            require(request or material or lease, 'Unsafe cleanup candidate')
+            if path.is_dir():
+                shutil.rmtree(path)
+            else:
+                path.unlink()
     return {'ok': True, 'kind': 'cleanup-result', 'removed': current['candidates'],
-            'summary': f'已清理 {len(current["candidates"])} 个无引用请求。'}
+            'summary': f'已清理 {len(current["candidates"])} 项无引用材料（请求、批次、导入或已结束的验证标记）。'}

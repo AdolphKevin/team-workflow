@@ -109,6 +109,19 @@ class PortableCases(unittest.TestCase):
         self.assertTrue(all(not Path(row['path']).is_absolute() for row in result['artifacts']))
         self.assertEqual(record['started_at'], original['started_at'])
 
+    def test_shared_schema6_import_reevaluates_portable_command_paths(self):
+        self.prepare()
+        self.profile['checks']['unit']['required_cases'] = ['adds']
+        self.capture()
+        self.assertEqual(self.archive_manifest['execution']['status'], 'incomplete')
+        self.profile['checks']['unit']['required_cases'] = ['Arithmetic::adds']
+        _, record = self.import_result()
+        self.assertIn('{output}/junit.xml', record['result']['argv'])
+        self.assertEqual(validation.inspect_record(self.root, self.profile, record), {'unit'})
+        self.profile['checks']['unit']['required_cases'] = ['Arithmetic::missing']
+        with self.assertRaisesRegex(Invalid, 'Arithmetic::missing'):
+            validation.inspect_record(self.root, self.profile, record)
+
     def test_imported_bundle_survives_checkout_relocation(self):
         self.prepare()
         self.capture()
@@ -164,7 +177,7 @@ class PortableCases(unittest.TestCase):
     def test_required_skipped_case_and_absent_provider_context_cannot_pass(self):
         self.prepare('<testsuite tests="1"><testcase classname="Arithmetic" name="adds"><skipped/></testcase></testsuite>')
         self.capture()
-        with self.assertRaisesRegex(Invalid, 'did not pass'):
+        with self.assertRaisesRegex(Invalid, 'Required case missing or not passed: Arithmetic::adds'):
             self.import_result()
         self.configure_check()
         with patch.dict(os.environ, {'GITHUB_ACTIONS': 'true', 'GITHUB_REPOSITORY': 'outer/runner',
@@ -183,6 +196,33 @@ class PortableCases(unittest.TestCase):
         with patch.dict(os.environ, {'FIXTURE_VERSION': 'database-2'}):
             with self.assertRaisesRegex(Invalid, 'environment changed'):
                 self.import_result()
+
+    def test_imported_execution_reuses_recorded_environment_offline(self):
+        self.prepare()
+        marker = self.root / '.team-workflow/fixture-id.txt'
+        marker.parent.mkdir(exist_ok=True)
+        marker.write_text('isolated-database-1')
+        self.profile['checks']['unit']['environment'] = {'kind': 'fixture',
+            'identity': [sys.executable, '-c',
+                "from pathlib import Path; print(Path('.team-workflow/fixture-id.txt').read_text())"]}
+        self.capture()
+        path, _ = self.import_result()
+        names = [path.relative_to(self.root).as_posix()]
+        marker.unlink()
+        with patch.object(github_read, 'api', side_effect=self.api):
+            result = validation.verify_runs(self.root, self.profile, self.task, names, live=False)
+            self.assertEqual(result['results']['unit']['cases'], {'Arithmetic::adds': 'passed'})
+            self.assertEqual(result['results']['unit']['binding']['environment']['fixture']['identity'],
+                             'isolated-database-1')
+            with self.assertRaisesRegex(Invalid, 'Cannot confirm environment identity'):
+                validation.verify_runs(self.root, self.profile, self.task, names)
+            self.run['run_attempt'] = 3
+            with self.assertRaisesRegex(Invalid, 'newer run attempt'):
+                validation.verify_runs(self.root, self.profile, self.task, names, live=False)
+            self.run['run_attempt'] = 2
+            (self.root / 'app.py').write_text('def add(a,b): return 0\n')
+            with self.assertRaisesRegex(Invalid, '[Ss]ource|unshared changes'):
+                validation.verify_runs(self.root, self.profile, self.task, names, live=False)
 
     def test_declared_frontend_repository_is_executed_and_captured(self):
         self.prepare()
@@ -321,7 +361,7 @@ class AggregateCases(unittest.TestCase):
             '"scopes":[{"repository":"self","path":"app.py"}],'
             '"external_refs":[{"system":"team-workflow","id":task}]}\n'
             'if "template" in sys.argv:\n'
-            ' reply={"ok":True,"task":{"source":{"workflow_acceptance":{"path":str(p.relative_to(root)),"sha256":hashlib.sha256(p.read_bytes()).hexdigest()}}}}\n'
+            ' reply={"ok":True,"task":{"source":{"workflow_acceptances":[{"path":str(p.relative_to(root)),"sha256":hashlib.sha256(p.read_bytes()).hexdigest(),"task_id":task}]}}}\n'
             'print(json.dumps(reply))\n')
         self.manifest = {'schema_version': 5, 'task_id': 'JOINT-fixture', 'joint': 'example/core',
             'participants': [{'repository': 'example/' + name, 'commit': fixture.task['base'],
@@ -359,7 +399,7 @@ class AggregateCases(unittest.TestCase):
         brief = save('brief', knowledge.brief(root, task, self.skill, [], []))
         run, _ = validation.run_batch(root, profile, [task], portable=portable_run)
         approval = designs.approval_draft(design, 'carol', 'Confirmed scope and testable acceptance')
-        report = {'schema_version': 5, 'task_id': task['id'], 'design': save('design', design),
+        report = {'schema_version': 6, 'task_id': task['id'], 'design': save('design', design),
             'approvals': [save('approval', approval)], 'brief': brief, 'runs': [run.relative_to(root).as_posix()],
             'review': '.team-workflow/' + prefix + 'review.json'}
         review = delivery.review_template(root, profile, task, report)

@@ -28,6 +28,24 @@
 团队流程需要 CS 提供原文、回执核对、任务文件、结构化外部任务关联、独占计划文件和分类
 复核提示能力。工具根据返回字段检查，不锁定 CS 的版本或源码提交。
 
+## 测试账号与登录
+
+在 `.team-workflow.json` 中用可选的 `accounts` 声明验收会用到的账号：
+
+```json
+"accounts": [
+  {"id": "e2e-owner", "kind": "synthetic", "environment": "本地验收环境 localhost:3010",
+   "login": "agent-after-authorization", "isolation": "每次运行独立的数据库与邮件捕获",
+   "credential_env": ["E2E_OWNER_EMAIL"]},
+  {"id": "shopify-partner", "kind": "real", "environment": "Shopify 合作伙伴后台", "login": "user"}
+]
+```
+
+`real` 账号只能写 `login: user`。`synthetic` 账号必须说明隔离方式；`credential_env` 只写环境变量名，不写值。
+`prepare` 在有可由代理登录的账号时返回 `authorizations_needed` 和要问用户的问题；用户同意后用
+`prepare --grant synthetic-login --confirmed-by <用户>` 记录授权。授权只在本机准备上下文中有效，不随交接带出，
+接手的会话需重新询问。未声明的账号按真实账号处理。
+
 ## 检查、环境和本机位置
 
 默认检查、任务验收和风险映射取并集。鉴权、持久化、消息、并发及跨服务风险使用能证明
@@ -44,7 +62,15 @@
 
 ## 更新与回退
 
-工具只接受 `schema_version: 5` 的配置、任务和记录，不转换其他格式。可选的
+配置、任务和方案使用 `schema_version: 5`，本地证据使用 `schema_version: 6`。更新工具后运行：
+
+```bash
+python3 "$WF" adopt --root "$PROJECT"            # 预览
+python3 "$WF" adopt --root "$PROJECT" --apply    # 写入 workflow_version，提交由成员自行完成
+```
+
+预览列出需要更新的配置字段，以及按任务分组的第六版之前的证据。旧证据不改写、不删除；列出的任务用当前
+工具重跑一次检查，重新生成评审与交付报告后再验收。可选的
 `workflow_version` 写明项目所需的最低工具版本；它或配置格式高于已安装工具时，所有读取
 该配置的命令返回 `tool-outdated`，提示运行 `npx skills update -g`，不用旧工具解释新配置。
 配置变化会使依赖整份配置指纹的执行结果过期，需重跑检查。
@@ -54,7 +80,7 @@
 通过 `workflow.py version` 与 `project` 核对当前工具和能力。
 
 清理默认只预览。显式应用前核对计划，保留在途任务、所有被引用材料、共享批准历史及
-交付证据；只删除已结束任务中未被引用的请求目录。不要手工删运行目录来消除核查缺口。
+交付证据；默认只删除已结束任务中未被引用的请求目录，`--cleanup-scope all` 另外处理过期且无引用的批次与导入。不要手工删运行目录来消除核查缺口。
 
 本地 ZIP 构建不等于外部发布或团队推广。候选版可用于受控试用；正式推广仍须两位真实
 成员双向接续并完成后续知识检索，实际缺口单独记录。
