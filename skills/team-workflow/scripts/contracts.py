@@ -53,7 +53,9 @@ def issue(value, section_ids=None):
             material(ref)
         if value['state'] in {'accepted', 'deferred'}:
             material(resolution.get('confirmed_by'))
-            material(resolution.get('confirmation'))
+        if 'confirmation' in resolution:
+            require(isinstance(resolution['confirmation'], str), 'Confirmation must be text')
+            require('__REPLACE__' not in resolution['confirmation'], 'Replace the named placeholder before continuing')
         if value['state'] == 'deferred':
             material(resolution.get('follow_up'))
             material(resolution.get('scope_change'))

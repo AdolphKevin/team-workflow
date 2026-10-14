@@ -278,7 +278,7 @@ def produce(args, root, profile, task, platform, request):
             if args.command == 'design-draft':
                 return emit(design, 'design.json')
             supplied = read(local(root, args.record))
-            require(isinstance(supplied, dict), 'Approval input must contain reviewer and confirmation')
+            require(isinstance(supplied, dict) and 'reviewer' in supplied, 'Approval input must name the reviewer')
             allowed = {'reviewer', 'confirmation', 'decision', 'section_ids', 'deletion_ids', 'mode'}
             require(supplied.keys() <= allowed, 'Unknown approval input fields')
             history = [read(local(root, p)) for p in args.design_history]

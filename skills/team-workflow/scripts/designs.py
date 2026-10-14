@@ -313,12 +313,12 @@ def _run_refs(values):
     return sorted(result, key=lambda row: (row['path'], row['sha256']))
 
 
-def approval_draft(design, reviewer, confirmation, decision='approved', section_ids=None,
+def approval_draft(design, reviewer, confirmation='', decision='approved', section_ids=None,
                    previous=None, code_digest=None, run_refs=None, mode=None, *, history=None, deletion_ids=None):
-    """Build a review record after explicit confirmation; this function never publishes."""
+    """Build a review record naming the approver; the confirmation basis is optional. Never publishes."""
     validate_design(design)
     text(reviewer)
-    text(confirmation)
+    require(isinstance(confirmation, str), 'Confirmation must be text; leave it empty when there is none')
     require(isinstance(decision, str) and decision in DECISIONS, 'Invalid approval decision')
     mode = mode or ('combined' if code_digest is not None or run_refs is not None else 'design')
     require(isinstance(mode, str) and mode in {'design', 'combined'}, 'Review mode must be design or combined')
@@ -360,8 +360,9 @@ def _validate_approval(row):
             and row['kind'] == 'approval', 'Expected a schema_version 5 approval')
     require(type(row['fingerprint_version']) is int and row['fingerprint_version'] == FINGERPRINT_VERSION,
             'Unsupported fingerprint version; review again using the current format')
-    for key in ('design_id', 'task_id', 'reviewer', 'confirmation'):
+    for key in ('design_id', 'task_id', 'reviewer'):
         text(row[key])
+    require(isinstance(row['confirmation'], str), 'Approval confirmation must be text')
     require(type(row['design_revision']) is int and row['design_revision'] > 0, 'Invalid approval design revision')
     require(isinstance(row['decision'], str) and row['decision'] in DECISIONS, 'Invalid approval decision')
     require(isinstance(row['mode'], str) and row['mode'] in {'design', 'combined'}, 'Invalid approval mode')

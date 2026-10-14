@@ -203,11 +203,21 @@ class BusinessEvidence(unittest.TestCase):
         value.update(state='deferred', resolution={'reason': 'Later release', 'evidence': ['decision comment']})
         with self.assertRaises(Invalid):
             contracts.issue(value)
-        value['resolution'].update(confirmed_by='carol', confirmation='Confirmed this scope change')
+        value['resolution'].update(confirmed_by='carol')
         with self.assertRaises(Invalid):
             contracts.issue(value)
         value['resolution'].update(follow_up='TASK-follow-up', scope_change='Current delivery excludes this operation')
         contracts.issue(value)
+        value['resolution']['confirmation'] = 'Confirmed this scope change in the weekly meeting'
+        contracts.issue(value)
+        for bad in (None, '__REPLACE__'):
+            value['resolution']['confirmation'] = bad
+            with self.subTest(confirmation=bad), self.assertRaises(Invalid):
+                contracts.issue(value)
+        value['resolution'].pop('confirmation')
+        value['resolution']['confirmed_by'] = ''
+        with self.assertRaises(Invalid):
+            contracts.issue(value)
 
     def test_issue_only_blocks_its_affected_branch(self):
         self.setup_task()

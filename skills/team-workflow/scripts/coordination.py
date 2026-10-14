@@ -49,14 +49,12 @@ def progress_history(issue):
                 continue
             validate_progress(row)
             require(row['task'] == issue['html_url'], 'Progress belongs to another task')
-            author = comment.get('user', {}).get('login')
-            require(not author or author == row['author'], 'Progress author differs from comment author')
             identifier = row['request_id']
             fingerprint = digest(row)
             require(identifier not in records or records[identifier]['digest'] == fingerprint,
                     'Progress request ID reused with different content')
-            records.setdefault(identifier, {'id': identifier, 'digest': fingerprint,
-                                            'url': comment['html_url'], 'record': row})
+            records.setdefault(identifier, {'id': identifier, 'digest': fingerprint, 'url': comment['html_url'],
+                                            'recorded_by': comment.get('user', {}).get('login'), 'record': row})
         except (Invalid, ValueError, KeyError, TypeError) as exc:
             gaps.append('Invalid progress ' + comment['html_url'] + ': ' + str(exc))
     return records, gaps
@@ -192,24 +190,19 @@ def _read(issue):
                     require(row['design']['task_id'] == issue['html_url'], 'Design belongs to another task')
                     require(row['creator'] == row['design']['roles']['design_owner'],
                             'Design must be confirmed by its design owner')
-                    author = row['creator']
                 elif name == 'approval':
                     obj(row, required | {'approval'}, {'resolution'})
                     require(row['kind'] == 'approval-record' and isinstance(row['approval'], dict),
                             'Expected approval-record envelope')
                     require(row['approval'].get('task_id') == issue['html_url'], 'Approval belongs to another task')
-                    author = row['approval'].get('reviewer')
-                    text(author)
+                    text(row['approval'].get('reviewer'))
                 else:
                     _validate_handoff(row)
-                    author = row['creator']
                 require(row['schema_version'] == 5 and row['task'] == issue['html_url'],
                         'Platform record version or task differs')
                 _hash(row['requirements'])
                 require(row['history_digest'] == digest(seen),
                         'Preceding history changed or concurrent record was appended; reconcile explicitly')
-                require(bool(comment.get('author')) and comment['author'] == author,
-                        'Record author differs from the actual comment author')
                 require(not (comment.get('created_at') and comment.get('updated_at'))
                         or comment['created_at'] == comment['updated_at'],
                         'An edited platform record cannot serve as immutable history; append a reconciliation')
@@ -229,7 +222,8 @@ def _read(issue):
                             'Design revisions must advance by one without changing identity')
                 elif name == 'design':
                     require(row['design']['revision'] == 1, 'Design history must begin with revision 1')
-                rows[name].append({'url': comment['url'], 'digest': digest(row), 'record': row})
+                rows[name].append({'url': comment['url'], 'digest': digest(row), 'record': row,
+                                   'recorded_by': comment.get('author')})
             except (Invalid, ValueError, KeyError, TypeError) as exc:
                 problems[name].append('Invalid ' + name + ' ' + comment['url'] + ': ' + str(exc))
         seen.append(comment)
@@ -288,6 +282,8 @@ def load(url):
             'platform_history': state['platform_history'], 'design': design,
             'history': [entry['record']['design'] for entry in entries[:-1]],
             'approvals': approvals, 'roles': dict(design['roles']) if design else {},
+            'approval_records': [{'url': item['url'], 'reviewer': item['record']['approval']['reviewer'],
+                                  'recorded_by': item['recorded_by']} for item in design_state['rows']['approval']],
             'design_previous': _pointer(latest), 'design_issue': design['task_id'] if design else url,
             'design_requirements': design_state['requirements'],
             'approval_previous': _pointer(design_state['rows']['approval'][-1]) if design_state['rows']['approval'] else None,
@@ -335,7 +331,7 @@ def draft_design(url, design, resolution=None):
 
 
 def draft_approval(url, value):
-    obj(value, {'reviewer', 'confirmation'}, {'decision', 'section_ids', 'code_digest', 'run_refs', 'mode', 'deletion_ids', 'resolution'})
+    obj(value, {'reviewer'}, {'confirmation', 'decision', 'section_ids', 'code_digest', 'run_refs', 'mode', 'deletion_ids', 'resolution'})
     state = load(url)
     require(state['design'] is not None, 'Missing versioned design; append it before review')
     require(state['design_issue'] == url, 'Review the shared design on its own task issue')

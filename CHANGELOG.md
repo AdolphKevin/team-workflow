@@ -3,6 +3,7 @@
 - 只保留当前记录格式（`schema_version: 5`）：配置、任务、方案、批准、交接、执行、导入与联合清单不再读取或转换第一至四版。删除 `migrate`、`upgrade`、`adopt`、`stage-draft` 命令及阶段流程、旧版约定、旧版结果导入与交接代码；`workflow_version` 只用于在项目要求更新的工具时提示更新，不再提示项目升级。`agents` 子代理台账保留，说明移入业务验收标准的派遣协议。
 - 文件去掉版本后缀：`contracts.md`、`coordination.md`、`portable.md`、`commands.py`、`contracts.py`、`portable.py`（合并原跨机器结果模块）及对应测试；真实 CS 检查分为 `check_cs_knowledge.py` 与 `check_cs_delivery.py`。删除旧版示例配置和历史验证快照，验证记录只保留当前版本。
 - `verify` 对非对象的执行记录给出明确错误，不再抛出未处理异常。
+- 方案批准只要求写明批准人，确认依据 `confirmation` 改为可选；批准、方案、交接和进度记录不再要求评论作者本人就是记录中的批准人或负责人，可由他人代为记录。每条平台记录保留实际发布评论的账号 `recorded_by`，`load` 返回 `approval_records`，同时列出批准人和记录人以便追责。问题处置标为接受限制或延期时同样只要求确认人 `confirmed_by`，`confirmation` 可选。
 - 业务验收标准扩展为团队共同标准：首次验收由未参与实现的测试同事、用户或 AI 执行；回归按业务保证选择单元、集成或 E2E，缺陷回归须保留原问题的失败证据；E2E 写清起终点与替代依赖；本机与 CI 入口、交付证据范围、缺陷关联与每周开发测试共同复盘。新增交付验收、缺陷复验与保护、每周质量复盘三份记录模板。
 - 新增[项目验收方式与测试能力建设](skills/team-workflow/references/test-capability.md)：指导成员或代理调查项目事实、列出关键业务保证、选定层次与观察点，为各项目设计匹配的验收方式，记入新增的[项目验收方案](skills/team-workflow/templates/project-verification.md)模板并经开发与测试确认，项目之间不照搬工具与命令；项目尚无集成或 E2E 入口时，人工验收通过后整体交付写为“人工验收通过，自动回归未完成（待建设）”，由首个需要的需求建设最小入口并提供干净运行、重复运行、故意失败和 CI 实跑证据；给出浏览器、接口与数据库、消息接收端、消息消费者与定时任务、模型与智能体输出的常见检查要点，其他入口按共同理念推导；接口与数据库要点吸收了确切值断言、负向场景清单、业务仓维护的数据库运行器约定和“受阻”判定，不再依赖成员本机技能；模型与智能体输出按确定性合同程序断言、场景驱动真实对话并冻结证据、未参与实现的 AI 或人独立语义复核三层验收，复核结论与运行状态分离。
 - 交付报告新增可选 `automation`，按场景声明 `automated`、`manual-only`、`pending-automation`；待建设条目须引用延期问题并给出期限。`verify` 结果新增 `automation_status` 与 `regression_pending`，`delivery_complete` 含义不变，`assurance` 说明它不代表回归已自动化。未声明时结果为 `not-declared`，旧报告不受影响。

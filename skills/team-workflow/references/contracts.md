@@ -108,10 +108,10 @@ python3 "$WF" run --root "$PROJECT" --task "$TASK" --with-task "$OTHER_TASK"
 本地评审输入写在任务输入目录，例如：
 
 ```json
-{"reviewer":"实际评审人","confirmation":"具体确认依据"}
+{"reviewer":"批准人","confirmation":"确认依据（可选）"}
 ```
 
-取得真实确认后生成记录：
+`reviewer` 必填；`confirmation` 可省略，有依据时建议填写。批准可以由他人代为记录。生成记录：
 
 ```bash
 python3 "$WF" approval-draft --root "$PROJECT" --context "$CONTEXT" \
@@ -215,7 +215,7 @@ python3 "$WF" verify --root "$PROJECT" --context "$CONTEXT" \
 - `automated`：必填 `check`、`cases`。检查已在本次运行中执行，用例全部通过；检查的覆盖
   层次不低于声明的 `level`，`journey` 检查可覆盖 `interface` 或 `unit` 声明。
 - `pending-automation`：必填 `reason`、`finding`、`due`。`finding` 必须是评审中 `deferred`
-  的问题，由它携带确认人、确认依据、跟进任务和范围调整；`blocks` 写 `acceptance`，记录
+  的问题，由它携带确认人、跟进任务和范围调整（确认依据可选）；`blocks` 写 `acceptance`，记录
   它若重新打开时阻塞的阶段。多个场景可引用同一问题；同一需求缺多类入口时，可合并为
   一个建设任务，也可分开登记。`due` 为 ISO 日期，过期仍可记录。
 - `manual-only`：必填 `reason`、`owner`、`trigger`，`level` 为 `manual`。它声明后续人工执行
@@ -315,7 +315,8 @@ python3 "$WF" cleanup --root "$PROJECT" --apply --plan "$CLEANUP_PLAN"
 
 `affects` 为空表示全局；`blocks` 明确阻塞实施、验收或两者。评估中的 `uncertainties` 只引用这些问题编号，具体问题正文保存在 `issues`。`state` 为 `open`、`resolved`、
 `accepted`、`deferred`。关闭问题的 `resolution` 含非空 `reason` 与 `evidence` 来源列表；
-接受限制另需 `confirmed_by`、`confirmation`；延期同样需要这两项，并另需 `follow_up`、`scope_change`。
+接受限制另需确认人 `confirmed_by`，确认依据 `confirmation` 可选，与方案批准一致；延期同样需要
+确认人，并另需 `follow_up`、`scope_change`。
 已记录问题的编号、责任和影响不能在后续记录中悄然改变或删除；若原记录有误，明确处置
 原问题再记录新的问题。验收方面的问题无需重新批准无关方案，但其处置仍须明确。
 

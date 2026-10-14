@@ -276,6 +276,16 @@ class DesignCases(unittest.TestCase):
         self.assertEqual(change['affected'], ['A2', 'T2', 'api-2'])
         self.assertEqual(change['decision_changes'], ['D1'])
 
+    def test_named_reviewer_is_enough_and_confirmation_is_optional(self):
+        design = example()
+        accepted = designs.approval_draft(design, 'carol')
+        self.assertEqual(accepted['confirmation'], '')
+        self.assertTrue(designs.approval_status(design, [accepted], changed_paths=['src/orders/model.py'])['fully_approved'])
+        with self.assertRaises(Invalid):
+            designs.approval_draft(design, '')
+        with self.assertRaises(Invalid):
+            designs.approval_draft(design, 'carol', None)
+
     def test_missing_scope_or_unknown_changed_files_never_claim_local_approval(self):
         design = example()
         accepted = designs.approval_draft(design, 'alice', 'Plan approved')

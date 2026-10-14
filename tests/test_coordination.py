@@ -133,21 +133,33 @@ class CoordinationCases(unittest.TestCase):
                 shutil.rmtree(self.root / '.team-workflow')
                 shutil.rmtree(self.root / '.codestable')
 
-    def test_actual_comment_author_must_confirm_the_record(self):
+    def test_record_posted_for_someone_else_keeps_the_named_approver_and_actual_recorder(self):
         self.prepare()
         with patch.object(github_read, 'api', side_effect=self.github):
-            self.establish_design()
-            self.issue['comments_data'][1]['user']['login'] = 'mallory'
+            plans.plan(self.design)
+            self.publish_fixture(coordination.draft_design(self.url, self.design), 'bob')
+            approval = coordination.draft_approval(self.url, {'reviewer': 'carol'})
+            self.assertEqual(approval['record']['approval']['confirmation'], '')
+            self.publish_fixture(approval, 'bob')
             loaded = coordination.load(self.url)
-            self.assertIn('actual comment author', str(loaded['gaps']))
-            self.assertEqual(loaded['approvals'], [])
-            self.issue['comments_data'][1]['user']['login'] = 'carol'
+            self.assertEqual(loaded['gaps'], [])
+            self.assertEqual(len(loaded['approvals']), 1)
+            self.assertEqual(loaded['approval_records'][0]['reviewer'], 'carol')
+            self.assertEqual(loaded['approval_records'][0]['recorded_by'], 'bob')
             draft = coordination.draft(self.root, self.profile, self.url, self.handoff(), self.skill, kind='design')
             self.publish_fixture(draft, 'bob')
             resumed = coordination.resume(self.root, self.profile, self.url, self.skill)
-        self.assertFalse(resumed['ok'])
-        self.assertIn('actual comment author', str(resumed['gaps']))
-        self.assertIsNone(resumed['current'])
+        self.assertNotIn('comment author', str(resumed['gaps']))
+        self.assertEqual(resumed['current']['creator'], 'alice')
+
+    def test_approval_still_needs_a_named_reviewer(self):
+        self.prepare()
+        with patch.object(github_read, 'api', side_effect=self.github):
+            plans.plan(self.design)
+            self.publish_fixture(coordination.draft_design(self.url, self.design), 'alice')
+            for value in ({}, {'reviewer': ''}, {'reviewer': 'carol', 'confirmation': None}):
+                with self.subTest(value=value), self.assertRaises(Invalid):
+                    coordination.draft_approval(self.url, value)
 
     def test_changed_requirements_and_source_never_look_ready(self):
         self.prepare()
