@@ -147,6 +147,14 @@ class ReviewFeedbackStatus(unittest.TestCase):
         self.assertIn('tw team review', step['next_command'])
         self.assertNotIn('tw team deliver', step['next_command'])
 
+    def test_local_status_states_that_publication_does_not_apply(self):
+        self.reviewed()
+        code, delivered = self.command('deliver', '--task', self.task['id'], '--reason', '没有可复用的知识')
+        self.assertEqual(code, 0, delivered)
+        code, status = self.command('status', '--task', self.task['id'])
+        self.assertEqual(status['publication']['kind'], 'local')
+        self.assertIn('发布状态：本地任务没有平台收尾说明或交接', status['publication']['summary'])
+
     def test_status_only_lists_verified_current_records_and_deliver_commands(self):
         self.reviewed()
         code, status = self.command('status', '--task', self.task['id'])

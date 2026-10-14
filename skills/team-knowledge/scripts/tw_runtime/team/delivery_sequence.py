@@ -3,7 +3,7 @@ import copy
 import hashlib
 import shlex
 
-from common import Invalid, artifact_valid, digest, read, require
+from common import Invalid, artifact_valid, digest, read, require, write
 import delivery
 import knowledge
 import materials
@@ -145,6 +145,12 @@ def deliver(args, root, profile, task, request):
 
     group = materials.load(root, task['id'])
     require(group is not None, '请先运行 tw team start --task <任务文件> --design <方案文件>')
+    # An interrupted deliver continues with the reason it was given; an explicit new reason replaces it.
+    pending = materials.path(root, task['id']).parent / 'deliver-reason.json'
+    if args.reason is None and pending.is_file():
+        args.reason = read(pending).get('reason')
+    elif args.reason is not None:
+        write(pending, {'data_version': 1, 'kind': 'pending-delivery-reason', 'task_id': task['id'], 'reason': args.reason})
     accepted = usable_acceptance(args, root, profile, task, group)
     reused = accepted is not None
     accepted = accepted or execute('accept', 'acceptance')
@@ -167,4 +173,6 @@ def deliver(args, root, profile, task, request):
 
     result = execute('verify', 'delivery')
     append('delivery', result)
+    if result.get('ok'):
+        pending.unlink(missing_ok=True)
     return finish(result, None if result.get('ok') else 'delivery')

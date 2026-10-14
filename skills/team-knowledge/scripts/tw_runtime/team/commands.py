@@ -663,9 +663,7 @@ def status(args, root, profile, task, platform=None):
                                  if by_id[key]['state'] == 'done'}
     value['stale_materials'] = facts['stale_materials']
     value['ok'] = True  # A successful read reports unmet gates as facts, not as a failed status query.
-    publication = status_records.publication(platform)
-    if publication is not None:
-        value['publication'] = publication
+    value['publication'] = status_records.publication(platform)
     value['steps'] = progress['steps']
     value['next_step'] = progress['next_step']
     for key in ('authorizations', 'rules_changed'):

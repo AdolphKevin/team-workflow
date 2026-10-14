@@ -1,11 +1,12 @@
 # 批次 1：团队流程简化（T7）的 SOP 场景
 # 格式见 docs/proposals/2026-10-14-sop-retest-trust.md 第 3.1 节。
 # 预期结果只依据已批准的流程简化方案，不依据当前实现的输出。
+# 版本 2（2026-10-15）：按批次 1 第 1 轮的场景问题 Q2、Q3 改正 SOP-06-N03 的步骤与 SOP-07-P01 的预期措辞。
 
 metadata:
   requirement: "团队流程简化（T7）：固定材料组与 start、评审 Markdown 与逐项复核、deliver 顺序封装、参数归位、status 与关闭规则"
   batch: "tw-process-simplification-t7"
-  version: 1
+  version: 2
   owner: "AdolphKevin"
   sources:
     - ref: "docs/proposals/2026-10-15-process-simplification.md S1–S6、D1–D4、第 4 节"
@@ -573,7 +574,8 @@ sops:
         initial_state:
           - "本分支改动了两条知识，交付时只列出一条"
         steps:
-          - "运行 tw team deliver --task <身份>，并手动只列出其中一条知识文件"
+          - "运行 tw team delivery-template --task <身份> 生成交付报告"
+          - "在报告的副本中删去其中一条知识文件，再运行 tw team verify --task <身份> --report <副本>"
         expected:
           - "拒绝，指出没有列入的知识文件"
         forbidden_effects:
@@ -603,7 +605,7 @@ sops:
           - "按新命令从 start 走到 deliver"
         expected:
           - "工具命令不超过 4 步：start、run、review --submit、deliver"
-          - "成员和评审人都没有手写 JSON，也没有手传材料路径；交付完成"
+          - "除首次 start 传入的任务文件与方案外，成员和评审人都没有手写 JSON，也没有再传材料路径；交付完成"
         forbidden_effects:
           - "没有产生旧布局文件"
         evidence_hints: ["全部命令与原始输出", "命令计数"]

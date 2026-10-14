@@ -117,7 +117,8 @@ def inspect(args, root, profile, task, progress, approval_status):
 
 def publication(platform):
     if platform is None:
-        return None
+        return {'published': None, 'kind': 'local', 'complete': None, 'url': None,
+                'summary': '发布状态：本地任务没有平台收尾说明或交接，按团队约定收尾'}
     current = platform.get('current')
     pointer = platform.get('previous') or {}
     published = bool(current and current.get('handoff_kind') in ('implementation', 'close'))

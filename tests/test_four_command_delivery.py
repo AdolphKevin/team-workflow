@@ -413,6 +413,30 @@ class FourCommandDelivery(unittest.TestCase):
         self.assertTrue(result['steps'][0]['reused'])
         self.assertTrue(result['steps'][1]['reused'])
 
+    def test_deliver_interrupted_before_the_report_continues_with_the_given_reason(self):
+        self.reviewed()
+        original = commands.dispatch
+        interrupted = []
+
+        def dispatch(args, root):
+            if args.command == 'delivery-template' and not interrupted:
+                interrupted.append(True)
+                raise KeyboardInterrupt('stop after business acceptance')
+            return original(args, root)
+
+        with patch.object(commands, 'dispatch', side_effect=dispatch), contextlib.redirect_stdout(io.StringIO()), self.assertRaises(KeyboardInterrupt):
+            workflow.main(['deliver', '--root', str(self.root), '--task', self.task['id'], '--reason', 'No knowledge change.'])
+        accepted = self.current()['acceptance']
+        self.assertTrue(accepted)
+        self.assertIsNone(self.current()['delivery_report'])
+        code, result = self.command('deliver', '--task', self.task['id'])
+        self.assertEqual(code, 0, result)
+        self.assertTrue(result['delivery_complete'])
+        self.assertTrue(result['steps'][0]['reused'])
+        self.assertEqual(self.current()['acceptance'], accepted)
+        report = read(artifact_valid(self.root, self.current()['delivery_report']))
+        self.assertEqual(report['knowledge'], {'files': [], 'reason': 'No knowledge change.'})
+
     def test_omitting_changed_knowledge_is_still_rejected_by_final_verification(self):
         self.accepted('medium')
         self.rule()
