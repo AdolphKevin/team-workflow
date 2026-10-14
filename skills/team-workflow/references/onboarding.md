@@ -14,6 +14,10 @@
    - 本机 `~/.claude/CLAUDE.md` 与 `~/.codex/AGENTS.md` 写入“需求交付与验收”标记块。
    工具只维护标记之间的内容。项目文件随任务提交，本机文件不进仓库。
 
+## 接入后的任务
+
+简单任务按 `start → run → review --submit → deliver --reason <理由>`，独立评审人填写 run 自动生成的 review.md。中等以上任务先取得具名方案批准（approval-draft 支持 --reviewer、--confirmation、--mode plan）；要更新知识则先 accept，通过后写知识并 tw check，再 deliver。之后用 `--task <身份>` 读取材料，显式路径仍可用。不通过评审可以保存，业务验收仍拒绝；status 只列有效记录和下一步。完整流程与关闭条件见[团队交付](team-delivery.md)。
+
 ## 测试账号与登录
 
 在 `.tw/config.json` 中用可选的 `accounts` 声明验收会用到的账号：
@@ -28,9 +32,8 @@
 ```
 
 `real` 账号只能写 `login: user`。`synthetic` 账号必须说明隔离方式；`credential_env` 只写环境变量名，不写值。
-`prepare` 在有可由代理登录的账号时返回 `authorizations_needed` 和要问用户的问题；用户同意后用
-`prepare --grant synthetic-login --confirmed-by <用户>` 记录授权。授权只在本机准备上下文中有效，不随交接带出，
-接手的会话需重新询问。未声明的账号按真实账号处理。
+`start` 在有可由代理登录的账号时返回 `authorizations_needed` 和要问用户的问题；用户同意后用
+`start --grant synthetic-login --confirmed-by <用户>` 记录授权。授权在同一任务的本机上下文中沿用，不随平台交接带出；没有该上下文的接手者需取得授权。未声明的账号按真实账号处理。
 
 ## 检查、环境和本机位置
 

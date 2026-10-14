@@ -70,7 +70,8 @@ def parser():
     p = sub.add_parser('version', help='版本与安装完整性')
     p.add_argument('--check-install', action='store_true')
     p.add_argument('--home', help=argparse.SUPPRESS)
-    p = sub.add_parser('team', add_help=False, help='团队任务与交付命令')
+    p = sub.add_parser('team', parents=[shared], add_help=False, help='团队任务与交付命令')
+    p.add_argument('--root', dest='team_root', help='团队命令的项目目录，也可写在团队子命令之后')
     p.add_argument('--help', '-h', dest='team_help', action='store_true')
     p.add_argument('args', nargs=argparse.REMAINDER)
     return root
@@ -88,13 +89,14 @@ def main(argv=None):
     root = Path(args.root)
     try:
         if args.command == 'team':
+            root = Path(args.team_root) if args.team_root is not None else root
             team = Path(__file__).resolve().parent / 'team'
             sys.path.insert(0, str(team))
             import workflow
             argv = ['--help'] if args.team_help else list(args.args)
             if not any(v == '--root' or v.startswith('--root=') for v in argv):
                 argv += ['--root', str(root)]
-            for repository in args.repository:
+            for repository in args.repository + args.sub_repository:
                 argv += ['--repository', repository]
             return workflow.main(argv)
         if args.command == 'init':

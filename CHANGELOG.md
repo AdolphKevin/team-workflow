@@ -6,6 +6,10 @@
 - 最终交付必须引用本任务通过的业务验收记录：`delivery-template --acceptance` 写入交付报告的 `acceptance`，`verify` 核对它属于本任务，且验收后任务、方案章节、源码以及执行、评审、批准材料都没有变化；收尾说明引用这份原件。`knowledge.files` 必须正好列出本任务相对 `base` 改动的知识文件（含删除）；缺少处置时说明要列出文件或写明理由。请求编号的输入指纹包含 `--acceptance` 与当前知识内容，改了其中任何一项都需要新的请求编号。
 - 安装检查分两层：正在运行的两个技能决定 `verify` 是否放行（`tool-modified`）；客户端目录中被改动、含符号链接或版本不同的副本，以及残留的旧技能 cs，只作提示（`project` 的 `warnings`），`tw version --check-install` 对两者都返回非零。
 - 本地任务目录为可读名称加完整身份的哈希，Issue 地址相近的仓库不再落到同一目录。
+- 流程简化（T7）：团队命令新增 `start`（取代 prepare、resume）、`review`（取代 review-template 和手写评审 JSON）、`accept`（取代 `verify --phase acceptance`）、`deliver`（依次完成业务验收、交付报告和最终核查）；参数归入各自的子命令，全局只保留 `--root` 与 `--repository`。不改知识的简单任务只需 `start`、`run`、`review --submit`、`deliver` 四条命令。
+- 每个任务记录当前材料组（`current.json`），`start` 之后各命令只需 `--task <身份>`；材料缺失、被改动、平台方案更新时拒绝，并给出修正命令。
+- 评审改为 Markdown：评审人只写结论和理由，运行结果、证据引用与问题历史由工具生成；源码或运行变化后生成复核稿，逐项改为“已复核”才能提交；不通过的评审也可以提交，问题会保留。`run` 成功后自动生成评审稿；简单任务的方案与代码合并批准随评审提交；`approval-draft` 支持 `--reviewer`、`--confirmation`、`--mode`。
+- `status` 只列已核实的记录，删除恒为 False 的字段，失败步骤给出修复命令；关闭须最终交付完成、收尾说明或交接已发布，并记录关闭授权，工具不执行关闭。
 - 版本只保留软件发行版本与项目 `data_version` 两个轴；安装改为固定发行标签。
 - MATT：锁文件如实记录为 `main@b0618bc`；改为通过 team-knowledge 读取知识；词汇表与 ADR 遵循原文优先，并用日期加 slug 命名；修复悬空的 tracker doc 与词汇表引用；规格、拆分、实现、多任务实现和复盘五个方法恢复上游的“只允许显式调用”。
 

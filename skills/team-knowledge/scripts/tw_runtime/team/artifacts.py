@@ -5,7 +5,7 @@ import hashlib
 import time
 import uuid
 
-from common import VERSION, Invalid, artifact, create, digest, ensure_local, inside, now, read, require, sha
+from common import VERSION, Invalid, artifact, create, create_text, digest, ensure_local, inside, now, read, require, sha
 
 
 def directory(root, task_id, request_id=None):
@@ -32,6 +32,8 @@ class Request:
         ensure_local(root)
         claim = {'task_id': task_id, 'input_digest': digest(inputs), 'pid': os.getpid(), 'started_at': now(),
                  'command': inputs.get('command'), 'phase': inputs.get('phase')}
+        if inputs.get('command') == 'review':
+            claim['submit'] = inputs.get('options', {}).get('submit', False)
         self.started = time.monotonic()
         if isinstance(inputs.get('task'), str) and re.fullmatch(r'[a-f0-9]{64}', inputs['task']):
             claim['task_digest'] = inputs['task']
@@ -81,3 +83,8 @@ class Request:
             result['request_artifacts'].append(result['artifact'])
         create(self.directory / 'response.json', result)
         return result
+
+    def publish_text(self, name, value):
+        path = inside(self.root, self.directory.relative_to(self.root).as_posix() + '/' + name, exists=False)
+        create_text(path, value)
+        return artifact(self.root, path)

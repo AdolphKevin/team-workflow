@@ -20,7 +20,7 @@
       "source": "skills/engineering/to-tickets/SKILL.md",
       "path": "skills/matt-to-tickets/SKILL.md",
       "upstream_sha256": "56ec23c5b2782785d4e65bff9e315b6d3aeb4ef977c174a219e99489fada1995",
-      "sha256": "f420304548129a9e7614eb53030678f1fbe9c37fd238c134c104288361faebf4"
+      "sha256": "45033768dafceccf6fa99f758190e909b41c298e908e74a4f64dcff85f4d1e9f"
     },
     {
       "source": "skills/engineering/to-tickets/agents/openai.yaml",
@@ -32,7 +32,7 @@
       "source": "skills/engineering/implement/SKILL.md",
       "path": "skills/matt-implement/SKILL.md",
       "upstream_sha256": "483bdc4ccf4ac31d86ac7beeaa0d0db80313e71e120bb8c59b3196ae5decd53d",
-      "sha256": "a3ac11f1c41374cfe960aa49b0b4ecffe85438b72ae948522a0abe4f2e834d36"
+      "sha256": "be764559e5b7be7b612fce8fe151b4e434c5c9dc1e15d91c5d27f8d20224084b"
     },
     {
       "source": "skills/engineering/implement/agents/openai.yaml",
@@ -44,7 +44,7 @@
       "source": "skills/engineering/implement-spec/SKILL.md",
       "path": "skills/matt-implement-spec/SKILL.md",
       "upstream_sha256": "7a22dd2e60b8fcece478ced9d2533582adf3520d695acd3ab715341535c9e56d",
-      "sha256": "c3515a9c0934c4a51740fe2aa4dfbed16dbcc423edfcdd7ff21856350bfbb6da"
+      "sha256": "721429472a52b3f5258d400bb57d6c19d37fa14fef85b787545f880785ba66a9"
     },
     {
       "source": "skills/engineering/implement-spec/agents/openai.yaml",

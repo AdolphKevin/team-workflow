@@ -1,5 +1,7 @@
 """Command composition for the workflow CLI."""
 import json
+import shlex
+import copy
 from pathlib import Path
 
 from common import (RECORD_SCHEMA, Invalid, artifact, digest, evidence_file, inside, location_settings, now,
@@ -12,7 +14,8 @@ def local(root, value):
     require(value is not None, 'Missing input path')
     path = Path(value)
     if path.is_absolute():
-        require(path.resolve().is_relative_to(root), 'Input must be inside the project')
+        path = path.resolve()
+        require(path.is_relative_to(root), 'Input must be inside the project')
         path = path.relative_to(root)
     return inside(root, path.as_posix())
 
@@ -20,7 +23,7 @@ def local(root, value):
 def readable(result):
     lines = [result.get('summary') or result.get('status') or ('命令已完成；验收状态见下方' if result.get('ok', True) else '尚未完成')]
     for key in ('problem', 'next_action'):
-        if result.get(key):
+        if result.get(key) and str(result[key]) not in lines:
             lines.append(str(result[key]))
     for gap in result.get('gaps', []):
         lines.append('- ' + str(gap))
@@ -30,9 +33,24 @@ def readable(result):
             lines.append(key + ': ' + item['path'])
     if result.get('summary_markdown'):
         lines += ['', result['summary_markdown']]
+    for role, ref in result.get('verified_records', {}).items():
+        lines.append({'acceptance': '已核实的业务验收记录', 'delivery': '已核实的交付记录'}[role] + '：' + ref['path'])
+    if result.get('publication'):
+        row = result['publication']
+        lines.append(row['summary'] + ('：' + row['url'] if row.get('url') else ''))
+    for row in result.get('review_failures', []):
+        lines.append('- ' + row['id'] + '：' + row['reason'])
+    if result.get('knowledge_next_action'):
+        lines.append(result['knowledge_next_action'])
+    if result.get('review_file'):
+        lines.append('评审文件：' + result['review_file'])
+    if result.get('archived_draft'):
+        lines.append('原草稿已保留：' + result['archived_draft']['path'])
+    if result.get('progress'):
+        lines.append('已填写：{completed}/{total}'.format(**result['progress']))
     if result.get('close_note'):
         lines += ['--- 收尾说明草稿（原样发布到 Issue）---', result['close_note']['markdown']]
-    lines += result.get('step_lines', []) + result.get('lines', [])
+    lines += [line for line in result.get('step_lines', []) if line != result.get('summary')] + result.get('lines', [])
     for name, path in result.get('templates', {}).items():
         lines.append('模板 ' + name + ': ' + path)
     for target in result.get('targets', []):
@@ -63,29 +81,33 @@ def references(root, values):
     return [local(root, p).relative_to(root).as_posix() for p in values]
 
 
-def report_input(args, root, task):
+def report_input(args, root, task, include_knowledge=True):
     for name in ('design', 'brief'):
-        require(getattr(args, name) is not None, 'Missing --' + name + '; supply the existing artifact or use prepare with current approvals and --context')
+        require(getattr(args, name) is not None, 'Missing --' + name + '; supply the existing artifact or use tw team start with current approvals and --context')
     result = {'data_version': RECORD_SCHEMA, 'task_id': task['id'], 'design': local(root, args.design).relative_to(root).as_posix(),
               'approvals': references(root, args.approval), 'design_history': references(root, args.design_history),
               'brief': local(root, args.brief).relative_to(root).as_posix(), 'runs': references(root, args.run),
               'review': local(root, args.review).relative_to(root).as_posix() if args.review else ''}
     if getattr(args, 'acceptance', None):
         result['acceptance'] = local(root, args.acceptance).relative_to(root).as_posix()
-    result['knowledge'] = knowledge.template(root, task)
+    if include_knowledge:
+        result['knowledge'] = knowledge.template(root, task)
     if args.dependency:
         result['dependencies'] = [read(local(root, p)) for p in args.dependency]
+    elif args.context:
+        dependencies = read(local(root, args.context)).get('dependencies', [])
+        if dependencies:
+            result['dependencies'] = dependencies
     return result
 
 
-def predecessor_checks(args, root, profile, task, design):
+def predecessor_checks(args, root, profile, task, design, dependencies=None):
     """Explicit preparation/hand-off checks may revalidate predecessor evidence."""
     import delivery
     import designs
     completed, proofs = [], []
     hashes = designs.fingerprints(design)['sections']
-    for path in args.dependency:
-        value = read(local(root, path))
+    for value in dependencies if dependencies is not None else [read(local(root, path)) for path in args.dependency]:
         require(set(value) == {'section', 'task', 'report'}, 'Dependency needs section, task and report paths')
         dependency = read(local(root, value['task']))
         require(value['section'] in dependency['section_ids'] and dependency['design_id'] == task['design_id'],
@@ -108,7 +130,7 @@ def cached_predecessors(args, root, profile):
         proof = value['acceptance']
         require(proof.get('kind') == 'acceptance' and proof.get('business_accepted') is True,
                 'Prepared predecessor was not accepted')
-        require(proof['source_digest'] == validation.source_digest(root, profile), 'Predecessor source changed; prepare again')
+        require(proof['source_digest'] == validation.source_digest(root, profile), 'Predecessor source changed; run tw team start again')
         for item in proof['materials']:
             artifact_valid(root, item)
         completed.append(value['section'])
@@ -134,20 +156,33 @@ def dispatch(args, root):
         import portable
         mappings = {key: (root / Path(path).expanduser()).resolve() for key, path in location_settings(root)['repositories'].items()}
         return portable.aggregate(root, read(local(root, args.joint)), mappings)
+    profile = load_profile(root)
+    import materials
+    materials.resolve(args, root)
+    start = None
+    if args.command == 'start':
+        import starting
+        import coordination
+        try:
+            start = starting.select(args, root, profile)
+        except coordination.MissingTaskBlock as exc:
+            return missing_task_block(args, exc)
+        args.start_selection = start
+    elif args.command == 'accept' and not (getattr(args, 'material_selection', None) or {}).get('value'):
+        import starting
+        starting.resolve_accept_context(args, root)
     if args.context:
         from common import artifact_valid
         context = read(local(root, args.context))
         require(context.get('data_version') == RECORD_SCHEMA and context.get('kind') == 'prepared-context',
-                f'Expected a schema {RECORD_SCHEMA} prepared context; run prepare again')
+                f'Expected a schema {RECORD_SCHEMA} prepared context; run tw team start again')
         for key in ('task', 'design', 'brief'):
-            path = artifact_valid(root, context[key])
             if getattr(args, key) is None:
-                setattr(args, key, path)
+                setattr(args, key, artifact_valid(root, context[key]))
         if not args.approval:
             args.approval = [artifact_valid(root, r) for r in context['approvals']]
         if not args.design_history:
             args.design_history = [artifact_valid(root, r) for r in context['design_history']]
-    profile = load_profile(root)
     if args.command == 'metrics':
         import metrics
         from artifacts import directory
@@ -163,20 +198,14 @@ def dispatch(args, root):
         return issue_draft.draft(root, profile, read(local(root, args.task)),
                                  read(local(root, args.design)) if args.design else None,
                                  [read(local(root, p)) for p in args.with_task], args.reviewer)
-    platform = None
-    if args.issue:
+    platform = start['platform'] if start else None
+    if args.issue and start is None:
         import coordination
         try:
             platform = coordination.load(args.issue)
         except coordination.MissingTaskBlock as exc:
-            requested = exc.issue_url == args.issue
-            task_input = '<task.json>' if requested else '<parent-task.json>'
-            return {'ok': False, 'error_code': 'issue-not-adopted' if requested else 'parent-issue-not-adopted',
-                    'problem': str(exc),
-                    'next_action': f'Draft the structured issue body first: tw team issue-draft --root "$PROJECT" '
-                                   f'--task {task_input} [--design <design.json>] [--with-task <sibling.json>] '
-                                   f'[--reviewer <name>]  (issue {exc.issue_url})'}
-    task = read(local(root, args.task)) if args.task else platform['task'] if platform else None
+            return missing_task_block(args, exc)
+    task = start['task'] if start else read(local(root, args.task)) if args.task else platform['task'] if platform else None
     if args.command == 'evidence':
         from common import external_path
         refs = []
@@ -214,7 +243,10 @@ def dispatch(args, root):
     require(task is not None and task.get('data_version') == 1, 'This operation requires a data_version 1 task')
     task_valid(task, profile, root)
     if platform:
-        require(platform['task'] == task, 'Local task differs from platform requirements')
+        if args.command == 'status' and platform['task'] != task:
+            args.material_selection.setdefault('stale_roles', []).append('task')
+        else:
+            require(platform['task'] == task, 'Local task differs from platform requirements')
     if args.command == 'status':
         value = status(args, root, profile, task, platform)
         from validation_session import active
@@ -224,10 +256,13 @@ def dispatch(args, root):
             value.update(implementation_ready=False,
                          summary='共享目录正在执行验收检查；源码和生成输入须保持不变。',
                          next_action='Wait for the active validation to finish before editing or changing checkouts.')
-        return value
+        return materials.record_status(args, root, value)
     if args.command == 'snapshot':
         return {'ok': True, 'source_digest': validation.source_digest(root, profile), 'task_digest': digest(task)}
     from artifacts import Request
+    if args.command == 'review' and args.submit:
+        import reviews
+        reviews.exclude_own_approval(args, root, task['id'])
     input_files = {}
     for name in ('task', 'design', 'brief', 'review', 'report', 'progress', 'record', 'acceptance'):
         value = getattr(args, name, None)
@@ -244,23 +279,56 @@ def dispatch(args, root):
                           'reason': args.reason,
                           'allow_modified_tool': args.allow_modified_tool,
                           'grant': args.grant, 'confirmed_by': args.confirmed_by}}
-    if args.command in ('prepare', 'resume', 'brief', 'delivery-template', 'verify'):
+    if args.command == 'review':
+        import reviews
+        require(not args.file or args.submit, '--file 仅用于 review --submit')
+        inputs['options']['submit'] = args.submit
+        if args.submit:
+            source = reviews.source_path(args, root, task['id'])
+            from common import sha
+            try:
+                inputs['review_markdown'] = {'path': str(source), 'sha256': sha(source)}
+            except OSError as exc:
+                raise reviews.ReviewError('评审文件', 1, '无法读取 Markdown：' + str(source)) from exc
+            args.review_source_ref = inputs['review_markdown']
+    if args.command == 'approval-draft' and any(getattr(args, key) is not None for key in ('reviewer', 'confirmation', 'approval_mode')):
+        inputs['options'].update(reviewer=args.reviewer, confirmation=args.confirmation, mode=args.approval_mode)
+    if start:
+        # Auto-selected copies must not change the fingerprint of an identical request retry.
+        inputs.update(files=start['explicit'], approvals=[], history=[], dependencies=[],
+                      preparation=start['signature'])
+    else:
+        inputs['resolved_materials'] = materials.fingerprint(args, root)
+    if args.command in ('start', 'brief', 'delivery-template', 'accept', 'verify', 'deliver'):
         inputs['knowledge'] = knowledge.state(root)
     from cleanup import guard
     with guard(root):
         request = Request(root, task['id'], inputs, args.request_id)
+    args.actual_request_id = request.directory.name
     if request.cached is not None:
+        if args.command == 'review' and not args.submit:
+            import reviews
+            return reviews.cached_draft(root, task['id'], request.cached)
+        if args.command == 'deliver':
+            import delivery_sequence
+            delivery_sequence.validate_retry(root, task, request.cached)
         return request.cached
     try:
         result = produce(args, root, profile, task, platform, request)
-        return request.finish(result)
+        if args.command == 'deliver':
+            return request.finish(result)
+        return materials.finish(args, root, task, result, request)
     except (RuntimeInvalid, OSError, ValueError, TypeError, KeyError) as exc:
+        import repairs
         return request.finish({'ok': False, 'status': 'incomplete', 'problem': str(exc),
+                               **({'review_failures': exc.review_failures} if hasattr(exc, 'review_failures') else {}),
+                               **({'review_file': exc.review_file} if hasattr(exc, 'review_file') else {}),
                                'error_code': getattr(exc, 'error_code', 'invalid-or-incomplete-input'),
-                               'next_action': getattr(exc, 'next_action', None) or
-                               'Correct the named input and use a new request ID; keep the failed request for diagnosis.'})
+                               'next_action': repairs.action(args, str(exc), getattr(exc, 'next_action', None),
+                                                             getattr(exc, 'error_code', None))})
     except Exception as exc:
-        return request.finish(tool_defect(exc))
+        import repairs
+        return request.finish(repairs.annotate(args, tool_defect(exc)))
 
 
 def tool_defect(exc):
@@ -273,15 +341,45 @@ def tool_defect(exc):
                            'Do not patch the installed skill.'}
 
 
+def missing_task_block(args, exc):
+    requested = exc.issue_url == args.issue
+    task_input = '<task.json>' if requested else '<parent-task.json>'
+    return {'ok': False, 'error_code': 'issue-not-adopted' if requested else 'parent-issue-not-adopted',
+            'problem': str(exc),
+            'next_action': f'Draft the structured issue body first: tw team issue-draft --root "$PROJECT" '
+                           f'--task {task_input} [--design <design.json>] [--with-task <sibling.json>] '
+                           f'[--reviewer <name>]  (issue {exc.issue_url})'}
+
+
 def produce(args, root, profile, task, platform, request):
     def emit(value, name):
         return {'ok': value.get('ok', True), 'artifact': request.publish(name, value, args.out),
                 **{k: value[k] for k in ('summary', 'gaps', 'problem', 'next_action', 'implementation_ready',
                                        'business_accepted', 'delivery_complete', 'regression_pending', 'automation_status', 'closable', 'acceptance_scope', 'scope', 'validation_active', 'verification_gaps',
                                        'summary_markdown', 'close_note', 're_evaluated', 'tool', 'environment_checked', 'pending_acceptance') if k in value}}
-    if args.command == 'resume':
+    if args.command == 'deliver':
+        import delivery_sequence
+        return delivery_sequence.deliver(args, root, profile, task, request)
+    if args.command == 'start' and args.start_selection['continued']:
         from validation_session import active
-        value = status(args, root, profile, task, platform)
+        selection = args.start_selection
+        resumed_inputs = args
+        try:
+            if selection['platform_gap']:
+                raise Invalid(selection['platform_gap'])
+            resumed_inputs = continuation_status_inputs(args, root, task)
+            value = status(resumed_inputs, root, profile, task, platform)
+            if platform:
+                import coordination
+                continuation = coordination.resume(root, profile, task['id'], cached_predecessors(args, root, profile))
+                value.update(ok=continuation['ok'], ready_to_implement=continuation['ready_to_implement'],
+                             implementation_ready=continuation['ready_to_implement'], gaps=continuation['gaps'])
+                if not continuation['ok']:
+                    value.update(summary='接续仍有缺口，按所列原因修复后重新 start。',
+                                 next_action='tw team start --issue ' + shlex.quote(task['id']))
+        except (RuntimeInvalid, OSError, ValueError, TypeError, KeyError) as exc:
+            value = {'ok': False, 'implementation_ready': False, 'ready_to_implement': False,
+                     'gaps': [str(exc)], **task_steps(args, root, profile, task)}
         running = active(root)
         value['validation_active'] = running
         if running:
@@ -290,18 +388,31 @@ def produce(args, root, profile, task, platform, request):
                          next_action='Wait for the active validation to finish before editing or changing checkouts.')
         brief = value.get('knowledge') or knowledge.brief(root, task, args.path, args.symbol)
         value['brief'] = request.publish('brief.json', brief)
-        return {**value, 'artifact': request.publish('resume.json', value, args.out)}
+        value.update(continued=True, task_id=task['id'], context=selection['previous_ref'],
+                     task_directory=request.directory.parent.parent.relative_to(root).as_posix(),
+                     task=selection['previous']['task'], design=selection['previous']['design'])
+        value.setdefault('implementation_ready', value.get('ready_to_implement', False))
+        value.setdefault('gaps', [])
+        import checklist
+        progress = checklist.steps(root, task, validation.source_digest(root, profile), value['context']['path'],
+                                   profile=profile, current=(read(request.directory / 'request.json'), value),
+                                   **step_materials(resumed_inputs))
+        value.update(steps=progress['steps'], next_step=progress['next_step'], step_lines=checklist.render(progress))
+        if value.get('ok') and not running:
+            value['next_action'] = progress['next_step']['next_command'] if progress['next_step'] else value['step_lines'][-1]
+            if progress['finished']:
+                value['summary'] = '已交付；关闭需要授权，工具不执行关闭'
+        return {**value, 'artifact': request.publish('start.json', value, args.out)}
     if args.command == 'task-export':
         return {**emit(task, 'task.json'), 'summary': '仅导出任务；实施和交付条件尚未核对。', 'implementation_ready': False, 'business_accepted': False}
-    if args.command == 'prepare':
+    if args.command == 'start':
         import designs
         import coordination
-        design = read(local(root, args.design)) if args.design else platform['design'] if platform else None
-        require(design is not None, 'Prepare needs the short design or a shared plan')
+        selection = args.start_selection
+        design = selection['design']
         coordination.validate_task_design(task, design)
-        approvals = [read(local(root, p)) for p in args.approval] if args.approval else platform['approvals'] if platform else []
-        history = [read(local(root, p)) for p in args.design_history] if args.design_history else platform['history'] if platform else []
-        completed, predecessors = predecessor_checks(args, root, profile, task, design)
+        approvals, history = selection['approvals'], selection['history']
+        completed, predecessors = predecessor_checks(args, root, profile, task, design, selection['dependencies'])
         readiness = designs.approval_status(design, approvals, history=history, completed_tasks=completed,
                     section_ids=task['section_ids'], changed_paths=validation.changed_paths(root, task, profile),
                     code_digest=validation.source_digest(root, profile), run_refs=[])
@@ -314,13 +425,15 @@ def produce(args, root, profile, task, platform, request):
         environment_gaps = execution_environment(profile, task, design)
         running = active(root)
         from common import rules_digest
-        login = login_policy(profile, args)
+        login = selection['login']
         context = {'data_version': RECORD_SCHEMA, 'kind': 'prepared-context', 'at': now(),
                    'task': request.publish('task.json', task), 'design': request.publish('design.json', design),
                    'brief': request.publish('brief.json', brief), 'source_at_start': validation.source_digest(root, profile),
                    'approvals': [request.publish(f'approval-{i}.json', v) for i, v in enumerate(approvals)],
                    'design_history': [request.publish(f'design-history-{i}.json', v) for i, v in enumerate(history)],
                    'predecessors': [request.publish(f'predecessor-{i}.json', v) for i, v in enumerate(predecessors)],
+                   'dependencies': selection['dependencies'],
+                   'preparation_inputs': selection['signature'],
                    'implementation_ready': readiness['implementation_ready'] and not running,
                    'validation_active': running, 'verification_gaps': environment_gaps,
                    'rules_digest': rules_digest(), 'login_policy': login['policy'],
@@ -332,7 +445,17 @@ def produce(args, root, profile, task, platform, request):
                                   + ('Implement within the approved scope.' if readiness['implementation_ready'] and not running
                                      else 'Obtain confirmation for the named plan sections.'),
                    'knowledge_claim': 'captured for reading; not evidence that knowledge was used'}
-        return {**emit(context, 'context.json'), **{k: context[k] for k in ('task', 'design', 'brief')}}
+        result = {**emit(context, 'context.json'), **{k: context[k] for k in ('task', 'design', 'brief')},
+                  'continued': False, 'task_id': task['id'],
+                  'task_directory': request.directory.parent.parent.relative_to(root).as_posix()}
+        result['context'] = result['artifact']
+        if selection['previous_ref']:
+            result['superseded_context'] = selection['previous_ref']
+        import checklist
+        progress = checklist.steps(root, task, validation.source_digest(root, profile), result['context']['path'],
+                                   profile=profile, current=(read(request.directory / 'request.json'), result), **step_materials(args))
+        result.update(steps=progress['steps'], next_step=progress['next_step'], step_lines=checklist.render(progress))
+        return result
     if args.command == 'brief':
         return emit(knowledge.brief(root, task, args.path, args.symbol), 'brief.json')
     if args.command in ('design-draft', 'approval-draft', 'handoff', 'progress'):
@@ -343,7 +466,7 @@ def produce(args, root, profile, task, platform, request):
             coordination.validate_task_design(task, design)
             if args.command == 'design-draft':
                 return emit(design, 'design.json')
-            supplied = read(local(root, args.record))
+            supplied = approval_input(args, root)
             require(isinstance(supplied, dict) and 'reviewer' in supplied, 'Approval input must name the reviewer')
             allowed = {'reviewer', 'confirmation', 'decision', 'section_ids', 'deletion_ids', 'mode'}
             require(supplied.keys() <= allowed, 'Unknown approval input fields')
@@ -358,7 +481,15 @@ def produce(args, root, profile, task, platform, request):
         if args.command == 'design-draft':
             result = coordination.draft_design(args.issue, read(local(root, args.record or args.design)))
         elif args.command == 'approval-draft':
-            result = coordination.draft_approval(args.issue, read(local(root, args.record)))
+            supplied = approval_input(args, root)
+            if not args.record:
+                import designs
+                assessments = designs.task_assessments(platform['design'], task['section_ids'])
+                mode = supplied.setdefault('mode', 'combined' if any(row['complexity'] == 'simple' for row in assessments.values()) else 'design')
+                if mode == 'combined':
+                    supplied.update(code_digest=validation.source_digest(root, profile),
+                                    run_refs=[artifact(root, local(root, p)) for p in args.run])
+            result = coordination.draft_approval(args.issue, supplied)
         elif args.command == 'progress':
             result = coordination.progress_draft(root, profile, args.issue, read(local(root, args.progress)), request.directory.name)
         else:
@@ -380,7 +511,7 @@ def produce(args, root, profile, task, platform, request):
         moved = [r['id'] for r in record['results'] if r['status'] == 'passed' and not r.get('source_unchanged')]
         changed = ([f'inputs of {", ".join(moved)} changed while the check ran'] if moved else
                    [] if record['source_unchanged'] else ['project source changed during the run'])
-        return {'ok': ok, 'scope': 'execution-only',
+        result = {'ok': ok, 'scope': 'execution-only',
                 'artifact': request.publish('run.json', record, args.out) if args.out else artifact(root, path),
                 'checks': [{'id': r['id'], 'status': r['status'], 'detail': r['detail'],
                             **({'source_unchanged': False} if r['id'] in moved else {})} for r in record['results']],
@@ -390,19 +521,59 @@ def produce(args, root, profile, task, platform, request):
                                     'Otherwise fix the failure and run only that check with --check and a new request ID.') if failed else
                                    ('Results that ran while files changed cannot be used. Keep the workspace unchanged until checks finish, '
                                     'then run ' + (' '.join('--check ' + m for m in moved) or 'the checks') + ' again with a new request ID.')})}
-    if args.command in ('review-template', 'delivery-template'):
-        import delivery
+        if ok:
+            import reviews
+            result = reviews.from_run(args, root, profile, task, result, request)
+        else:
+            import repairs
+            repairs.annotate(args, result)
+        return result
+    if args.command == 'review':
+        import reviews
+        return (reviews.submit if args.submit else reviews.generate)(args, root, profile, task, request)
+    if args.command == 'delivery-template':
         report = report_input(args, root, task)
-        result = delivery.review_template(root, profile, task, report) if args.command == 'review-template' else report
-        return emit(result, 'review.json' if args.command == 'review-template' else 'delivery.json')
-    if args.command == 'verify':
+        if args.reason is not None:
+            report['knowledge']['reason'] = args.reason
+        return emit(report, 'delivery.json')
+    if args.command in ('accept', 'verify'):
         import delivery
         import issue_history
-        report = read(local(root, args.report))
+        if args.report:
+            report = read(local(root, args.report))
+            import materials
+            effective = materials.effective_report(args, root, report)
+            if args.command == 'accept' and effective != report:
+                request.publish('report.json', effective)
+            report = effective
+            if args.command == 'verify':
+                materials.report_matches(args, root, report)
+        else:
+            require(args.command == 'accept', 'verify needs --report <delivery.json>')
+            require(args.context is not None, 'accept needs --context or --task with a prepared context; run tw team start')
+            if args.review is None:
+                from reviews import ReviewNotSubmitted
+                raise ReviewNotSubmitted(root, task, missing_run=not bool(args.run))
+            require(bool(args.run), 'accept needs --run <run.json>')
+            report = report_input(args, root, task, include_knowledge=False)
+            request.publish('report.json', report)
         issue_history.capture(request, task, read(local(root, report['review'])),
             [r['id'] for r in read(local(root, report['design']))['sections']])
-        return emit(delivery.verify(root, profile, task, read(local(root, args.report)), phase=args.phase), args.phase + '.json')
+        phase = 'acceptance' if args.command == 'accept' else 'delivery'
+        return emit(delivery.verify(root, profile, task, report, phase=phase), phase + '.json')
     raise Invalid('Unsupported command: ' + args.command)
+
+
+def approval_input(args, root):
+    flags = any(getattr(args, key) is not None for key in ('reviewer', 'confirmation', 'approval_mode'))
+    require(not (args.record and flags), '--record 与批准参数二选一')
+    if args.record:
+        return read(local(root, args.record))
+    require(bool(args.reviewer), '请用 --reviewer 指定批准人，或用 --record 提供已有输入')
+    result = {'reviewer': args.reviewer, 'confirmation': args.confirmation or ''}
+    if args.approval_mode:
+        result['mode'] = 'design' if args.approval_mode == 'plan' else 'combined'
+    return result
 
 
 def login_policy(profile, args):
@@ -422,12 +593,37 @@ def login_policy(profile, args):
     return {'policy': policy, 'granted': granted, 'needed': needed}
 
 
+def step_materials(args):
+    selection = getattr(args, 'material_selection', None) or {}
+    return {'task_identity': selection.get('task_id') if selection.get('identity') else None,
+            'material_group': selection.get('effective') or selection.get('value'), 'review_inputs': args}
+
+
+def continuation_status_inputs(args, root, task):
+    """Preparation signatures stay fixed; continuation displays the current recorded evidence."""
+    selection = getattr(args, 'material_selection', None) or {}
+    if not selection.get('value'):
+        return args  # Keep complete legacy explicit-context operations usable.
+    current = copy.copy(args)
+    current.command, current.task = 'status', task['id']
+    for key in ('context', 'design', 'brief', 'review', 'acceptance', 'report'):
+        setattr(current, key, None)
+    for key in ('approval', 'design_history', 'run'):
+        setattr(current, key, [])
+    for key, value in selection['explicit'].items():
+        setattr(current, key, copy.deepcopy(value))
+    import materials
+    materials.resolve(current, root)
+    current.material_selection['identity'] = selection['identity']
+    return current
+
+
 def task_steps(args, root, profile, task):
     import checklist
     from common import rules_digest
     context = read(local(root, args.context)) if args.context else None
     value = checklist.steps(root, task, validation.source_digest(root, profile), args.context,
-                            args.task.as_posix() if args.task else None, profile=profile)
+                            str(args.task) if args.task else None, profile=profile, **step_materials(args))
     if context:
         value['authorizations'] = context.get('authorizations', [])
         value['rules_changed'] = context.get('rules_digest') not in (None, rules_digest())
@@ -438,17 +634,62 @@ def status(args, root, profile, task, platform=None):
     progress = task_steps(args, root, profile, task)
     value = _status(args, root, profile, task, platform)
     import checklist
+    import status_records
+    facts = status_records.inspect(args, root, profile, task, progress, value)
+    for row in progress['steps']:
+        reason = facts['stale_steps'].get(row['id'])
+        if reason and (row.get('evidence') or row['state'] in ('done', 'stale')):
+            row.update(state='stale', stale_reason=reason)
+        if row['id'] == 'knowledge' and facts['report_complete'] is False and row['state'] == 'done':
+            row.update(state='pending', evidence=None, incomplete_reason=facts.get('report_problem', '知识处置尚未完整'))
+    by_id = {row['id']: row for row in progress['steps']}
+    for index, row in enumerate(progress['steps']):
+        if row['state'] == 'stale':
+            for later in progress['steps'][index + 1:]:
+                if later.get('evidence') and later['state'] in ('done', 'stale'):
+                    later.update(state='stale', stale_reason=later.get('stale_reason') or '前序材料已变化')
+    if facts['review_current']:
+        selected = '--task ' + shlex.quote(task['id'])
+        repair = None
+        if facts['review_failures']:
+            from delivery import ReviewBlocked
+            repair = ReviewBlocked(task, facts['review_failures']).next_action  # deliver would only fail again
+        for row in progress['steps'][3:]:
+            row['next_command'] = repair or 'tw team deliver ' + selected + ' --reason <不需要更新知识的理由>'
+    urgent = [row for row in progress['steps'] if row['state'] in ('stale', 'running-or-interrupted', 'failed')]
+    progress['next_step'] = urgent[0] if urgent else next((row for row in progress['steps'] if row['state'] == 'pending'), None)
+    progress['finished'] = progress['next_step'] is None
+    value['verified_records'] = {key: ref for key, ref in facts['verified_records'].items()
+                                 if by_id[key]['state'] == 'done'}
+    value['stale_materials'] = facts['stale_materials']
+    value['ok'] = True  # A successful read reports unmet gates as facts, not as a failed status query.
+    publication = status_records.publication(platform)
+    if publication is not None:
+        value['publication'] = publication
     value['steps'] = progress['steps']
     value['next_step'] = progress['next_step']
     for key in ('authorizations', 'rules_changed'):
         if key in progress:
             value[key] = progress[key]
-    value['step_lines'] = checklist.render(progress)
+    value['summary'] = ('已交付；关闭需要授权，工具不执行关闭' if 'delivery' in value['verified_records']
+                        and not progress['next_step'] else '按已核实的记录和下一步继续。')
+    value['next_action'] = progress['next_step']['next_command'] if progress['next_step'] else value['summary']
+    if facts['review_failures'] and facts['review_current']:
+        from delivery import ReviewBlocked
+        blocked = ReviewBlocked(task, facts['review_failures'])
+        value.update(summary='评审已提交，仍有不通过项或阻塞问题。', review_failures=facts['review_failures'],
+                     next_action=blocked.next_action)
+    if facts['stale_materials']:
+        value['summary'] = '方案或批准等材料已变化，请重新 start 后继续。'
+        extra = '--design ' + shlex.quote(str(args.design)) if args.design and 'design' in (getattr(args, 'material_selection', None) or {}).get('explicit', {}) else ''
+        import repairs
+        row = by_id['prepare']
+        row['next_command'] = repairs.command(args, 'start', extra)
+        value['next_action'] = row['next_command']
     if any(row['state'] == 'done' for row in progress['steps'][3:]):
-        value['summary'] = '已有验收或交付记录；按下列步骤继续。' if progress['next_step'] else '工具步骤已全部完成。'
-        value['next_action'] = progress['next_step']['next_command'] if progress['next_step'] else value.get('next_action')
         value.pop('missing', None)
         value.pop('stale', None)
+    value['step_lines'] = checklist.render(progress)
     if progress.get('rules_changed'):
         value['step_lines'].append('注意：开始任务后团队流程规则已更新；按当前规则核对已完成的步骤。')
     return value
@@ -457,15 +698,10 @@ def status(args, root, profile, task, platform=None):
 def _status(args, root, profile, task, platform=None):
     if args.report:
         import delivery
-        report = read(local(root, args.report))
+        import materials
+        report = materials.effective_report(args, root, read(local(root, args.report)))
         _, _, value, _ = delivery.design_material(root, profile, task, report, cached_predecessors(args, root, profile))
-        return {**value, 'summary': '已读取方案和材料状态；业务验收与环境尚未重新核查。',
-                'delivery': 'not-evaluated', 'business_accepted': False, 'delivery_complete': False, 'closable': False,
-                'next_action': 'Run verify with this report to check original results and current environment; status executes no project commands.'}
-    if platform:
-        import coordination
-        value = coordination.resume(root, profile, task['id'], cached_predecessors(args, root, profile))
-        return {**value, 'summary': '交接材料可接续，最终交付尚未核查。' if value['ok'] else '交接仍有缺口，按下列原因补齐后接续。'}
+        return value
     require(args.design is not None, 'Local task status needs --design or --context; provide --report to verify acceptance/delivery')
     import designs
     from coordination import validate_task_design
@@ -478,9 +714,8 @@ def _status(args, root, profile, task, platform=None):
                 run_refs=[artifact(root, local(root, p)) for p in args.run])
     ready = value['implementation_ready']
     summary = '可以继续实施；方案、代码与交付仍需实际验收。' if ready else '实施条件尚未满足：需补齐方案批准、决策、分派或前置任务证明。'
-    next_action = 'Reuse the existing prepared context; if absent, run prepare with the same plan and approvals to capture the brief, without requesting consent again. Then run checks.' if ready else 'Resolve the named pending sections or predecessor evidence, then prepare again.'
-    return {**value, 'summary': summary, 'delivery': 'not-evaluated', 'business_accepted': False,
-            'delivery_complete': False, 'closable': False, 'next_action': next_action}
+    next_action = 'Run tw team start with the same plan and existing approvals, then follow its next command.' if ready else 'Resolve the named pending sections or predecessor evidence, then run tw team start again.'
+    return {**value, 'summary': summary, 'next_action': next_action}
 
 
 def project_report(root, home=None):

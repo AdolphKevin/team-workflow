@@ -46,6 +46,15 @@ class GuidanceBlocks(unittest.TestCase):
         self.assertNotIn('__REFERENCE__', blocks['global'])
         self.assertIn(str(guidance.REFERENCE), blocks['global'])
 
+    def test_generated_login_guidance_uses_start(self):
+        code, result = self.cli('guidance')
+        self.assertEqual(code, 0, result)
+        block = next(target.get('block') or target.get('text') for target in result['targets']
+                     if target['kind'] == 'global' and target['action'] != 'skipped')
+        self.assertIn('start --grant', block)
+        self.assertNotIn('prepare', block)
+        self.assertNotIn('resume', block)
+
     def test_apply_keeps_user_content_and_is_idempotent(self):
         (self.root / 'AGENTS.md').write_text('# Project\n\nKeep me.\n', encoding='utf-8')
         (self.home / '.codex').mkdir()

@@ -396,14 +396,15 @@ def _validate_approval(row):
         require('code_digest' not in row and 'run_refs' not in row, 'Design review cannot contain code evidence')
 
 
-def _combined_matches(row, code_digest, run_refs):
+def _combined_matches(row, code_digest, run_refs, selected_run_refs=None):
     return (row is not None and row['decision'] == 'approved' and row['mode'] == 'combined'
             and row['code_digest'] == code_digest and run_refs is not None
-            and _run_refs(row['run_refs']) == run_refs)
+            and (_run_refs(row['run_refs']) == run_refs
+                 or selected_run_refs is not None and _run_refs(row['run_refs']) == selected_run_refs))
 
 
 def approval_status(design, approvals, previous=None, changed_paths=None, code_digest=None,
-                    run_refs=None, completed_tasks=(), *, history=None, section_ids=None):
+                    run_refs=None, completed_tasks=(), *, history=None, section_ids=None, selected_run_refs=None):
     """Evaluate oldest-to-newest reviews; missing history or mapping never implies success."""
     validate_design(design)
     require(isinstance(approvals, list), 'Approvals must be an oldest-to-newest list')
@@ -446,6 +447,7 @@ def approval_status(design, approvals, previous=None, changed_paths=None, code_d
     sections = {}
     combined = []
     current_runs = _run_refs(run_refs) if run_refs is not None else None
+    selected_runs = _run_refs(selected_run_refs) if selected_run_refs is not None else None
     for key, hashes in current.items():
         reviews = [row for row in valid if key in row['sections']]
         row = reviews[-1] if reviews else None
@@ -457,7 +459,7 @@ def approval_status(design, approvals, previous=None, changed_paths=None, code_d
                 state = 'needs-review'
             else:
                 state = row['decision']
-                if _combined_matches(row, code_digest, current_runs):
+                if _combined_matches(row, code_digest, current_runs, selected_runs):
                     combined.append(key)
         sections[key] = {'state': state, **hashes}
         if row:
@@ -469,7 +471,7 @@ def approval_status(design, approvals, previous=None, changed_paths=None, code_d
         latest = reviews[-1] if reviews else None
         affected = deletion_impact[(value['id'], value['removed_in_revision'])]
         deletions.append({**value, 'state': latest['decision'] if latest else 'unreviewed',
-                          'combined_current': _combined_matches(latest, code_digest, current_runs),
+                          'combined_current': _combined_matches(latest, code_digest, current_runs, selected_runs),
                           'affected': sorted(affected), 'required': section_ids is None or bool(affected & required)})
     pending = [{**v, 'question': v['summary'], 'status': 'pending'} for v in design['issues']
                if v['state'] == 'open' and 'implementation' in v['blocks']]

@@ -10,66 +10,145 @@ from tw_runtime import Invalid as RuntimeInvalid
 from common import Invalid, read, require, skill_resource, tool_identity, INSTALL_HOME, LOCATIONS
 
 
+class TeamParser(argparse.ArgumentParser):
+    def parse_args(self, args=None, namespace=None):
+        value = super().parse_args(args, namespace)
+        # Subparsers parse into a separate namespace; append without losing mappings before the command.
+        value.repository = value.repository + getattr(value, 'sub_repository', [])
+        if hasattr(value, 'sub_repository'):
+            del value.sub_repository
+        return value
+
+
 def parser():
-    p = argparse.ArgumentParser(description=__doc__)
-    p.add_argument('command', choices=['project', 'snapshot', 'run', 'brief', 'review-template',
-                                      'verify', 'aggregate', 'evidence', 'version',
-                                      'resume', 'handoff', 'progress', 'task-export', 'delivery-template', 'import-result',
-                                      'status', 'agents', 'prepare', 'design-draft',
-                                      'approval-draft', 'design-diff', 'schema', 'cleanup',
-                                      'guidance', 'issue-draft', 'metrics'])
+    p = TeamParser(prog='tw team', description=__doc__)
     p.add_argument('--root', type=Path, default=Path.cwd())
-    p.add_argument('--task', type=Path)
-    p.add_argument('--with-task', action='append', default=[], type=Path, help='Additional tasks sharing one validation batch')
-    p.add_argument('--design', type=Path)
-    p.add_argument('--approval', action='append', default=[], type=Path)
-    p.add_argument('--design-history', action='append', default=[], type=Path)
-    p.add_argument('--dependency', action='append', default=[], type=Path, help='Verified predecessor inputs {section,task,report}')
-    p.add_argument('--context', type=Path, help='Prepared context artifact; resolves task/design/brief inputs')
-    p.add_argument('--phase', choices=['acceptance', 'delivery'], default='delivery')
-    p.add_argument('--acceptance', type=Path, help='delivery-template: business acceptance record from verify --phase acceptance')
-    p.add_argument('--kind', choices=['design', 'implementation'], default='implementation')
-    p.add_argument('--format', choices=['json', 'text'], default='json')
-    p.add_argument('--apply', action='store_true', help='Apply an explicitly reviewed cleanup plan or guidance blocks')
-    p.add_argument('--dry-run', action='store_true', help='Preview only (cleanup default)')
-    p.add_argument('--evidence-repository', help='Declared external repository for --path evidence')
-    p.add_argument('--out', help='New file under .tw/local; existing files are never overwritten')
-    p.add_argument('--request-id', help='Stable ID for retrying one material-producing request')
-    p.add_argument('--input', action='append', default=[], help='Local external file mapping name=/path')
-    p.add_argument('--run', action='append', default=[], help='Execution/import record for a delivery template')
-    p.add_argument('--review', type=Path)
-    p.add_argument('--check', action='append', help='Run only selected checks; verification still requires all mandatory checks')
-    p.add_argument('--allow-modified-tool', action='store_true',
-                   help='Run verification with a modified installation; recorded as tool.override in results')
-    p.add_argument('--brief', type=Path)
-    p.add_argument('--reason')
-    p.add_argument('--path', action='append', default=[])
-    p.add_argument('--symbol', action='append', default=[])
-    p.add_argument('--report', type=Path)
-    p.add_argument('--joint', type=Path)
-    p.add_argument('--issue', help='Canonical GitHub issue URL')
-    p.add_argument('--progress', type=Path, help='Handoff input draft; never a second task store')
-    p.add_argument('--result', type=Path, help='GitHub Actions result locator')
-    p.add_argument('--portable', action='store_true', help='Capture result.json for a portable CI artifact')
-    p.add_argument('--repository', action='append', default=[], help='Local checkout mapping owner/repo=/path; not shared task data')
-    p.add_argument('--record', type=Path, help='JSON input for design or approval drafts')
-    p.add_argument('--ledger', help='Sub-agent ledger name under .tw/local/agents')
-    p.add_argument('--plan', type=Path, help='Sub-agent plan [{id, purpose}] that creates a new ledger')
-    p.add_argument('--mark', help='Sub-agent ID whose ledger status changes')
-    p.add_argument('--status', dest='agent_status', help='New sub-agent status')
-    p.add_argument('--scope', choices=['project', 'global', 'all'], default='all', help='guidance targets')
-    p.add_argument('--reviewer', help='issue-draft: the named person asked to review the design')
-    p.add_argument('--grant', choices=['synthetic-login'],
-                   help='prepare: record the user\'s permission for the agent to sign in to declared synthetic accounts')
-    p.add_argument('--confirmed-by', help='prepare --grant: the user who gave the permission')
-    p.add_argument('--since', help='metrics: only requests started at or after this ISO time')
-    p.add_argument('--cleanup-scope', choices=['requests', 'all'], default='requests',
-                   help='cleanup: finished task requests only, or also unreferenced batches, imports and stale leases')
-    p.add_argument('--older-than', type=int, default=14, help='cleanup --cleanup-scope all: minimum age in days')
-    p.add_argument('--allow-large-evidence', action='store_true',
-                   help='evidence: accept a file above the size limit (compiled executables are never accepted)')
-    p.add_argument('--home', type=Path, help='Home directory holding per-user agent files (default: current user)')
-    p.add_argument('--file', help='Project-relative rules file for guidance (default: AGENTS.md); CLAUDE.md imports it')
+    p.add_argument('--repository', action='append', default=[], help='Local checkout mapping owner/repo=/path')
+    # Shared dispatch and request fingerprints retain their explicit defaults, without exposing unrelated options.
+    p.set_defaults(task=None, issue=None, context=None, design=None, brief=None, approval=[], design_history=[],
+                   dependency=[], with_task=[], run=[], review=None, report=None, progress=None, record=None,
+                   acceptance=None, phase='delivery', kind='implementation', check=None, path=[], symbol=[],
+                   reason=None, grant=None, confirmed_by=None, home=None, input=[], allow_modified_tool=False,
+                   submit=False, file=None, reviewer=None, confirmation=None, approval_mode=None)
+    sub = p.add_subparsers(dest='command', required=True)
+
+    locations = argparse.ArgumentParser(add_help=False)
+    locations.add_argument('--root', type=Path, default=argparse.SUPPRESS)
+    locations.add_argument('--repository', dest='sub_repository', action='append', default=[],
+                           metavar='REPOSITORY', help='Local checkout mapping owner/repo=/path')
+    output = argparse.ArgumentParser(add_help=False)
+    output.add_argument('--format', choices=['json', 'text'], default='json')
+    task = argparse.ArgumentParser(add_help=False)
+    task.add_argument('--task',
+                      help='任务文件或已开工的任务身份（本地编号、完整 Issue 地址）')
+    task.add_argument('--issue', help='Canonical GitHub issue URL')
+    task.add_argument('--context', type=Path, help='Prepared context artifact; resolves task/design/brief inputs')
+    inputs = argparse.ArgumentParser(add_help=False)
+    inputs.add_argument('--input', action='append', default=[], help='Local external file mapping name=/path')
+    override = argparse.ArgumentParser(add_help=False)
+    override.add_argument('--allow-modified-tool', action='store_true',
+                          help='Run with a modified installation; verification records tool.override')
+    home = argparse.ArgumentParser(add_help=False)
+    home.add_argument('--home', type=Path, help='Home directory for installation checks or user agent files')
+    request = argparse.ArgumentParser(add_help=False, parents=[override])
+    request.add_argument('--out', help='New file under .tw/local; existing files are never overwritten')
+    request.add_argument('--request-id', help='Stable ID for retrying one material-producing request')
+    query = argparse.ArgumentParser(add_help=False)
+    query.add_argument('--path', action='append', default=[])
+    query.add_argument('--symbol', action='append', default=[])
+    design = argparse.ArgumentParser(add_help=False)
+    design.add_argument('--design', type=Path)
+    history = argparse.ArgumentParser(add_help=False)
+    history.add_argument('--design-history', action='append', default=[], type=Path)
+    approvals = argparse.ArgumentParser(add_help=False, parents=[design, history])
+    approvals.add_argument('--approval', action='append', default=[], type=Path)
+    runs = argparse.ArgumentParser(add_help=False)
+    runs.add_argument('--run', action='append', default=[], help='Execution/import record')
+    dependencies = argparse.ArgumentParser(add_help=False)
+    dependencies.add_argument('--dependency', action='append', default=[], type=Path,
+                              help='Verified predecessor inputs {section,task,report}')
+    report = argparse.ArgumentParser(add_help=False, parents=[approvals, runs, dependencies])
+    report.add_argument('--brief', type=Path)
+    report.add_argument('--review', type=Path)
+
+    def command(name, summary, *parents):
+        return sub.add_parser(name, help=summary, description=summary, parents=[locations, output, *parents])
+
+    command('project', '核对项目配置、知识结构与安装', home, override)
+    command('snapshot', '读取源码与任务的内容指纹', task, inputs)
+    c = command('run', '执行项目登记的检查并保存结果', task, inputs, request)
+    c.add_argument('--with-task', action='append', default=[], type=Path,
+                   help='Additional tasks sharing one validation batch')
+    c.add_argument('--check', action='append', help='Run selected checks; verification still requires mandatory checks')
+    c.add_argument('--portable', action='store_true', help='Capture result.json for a portable CI artifact')
+    command('brief', '保存本任务的项目知识简报', task, inputs, request, query)
+    c = command('review', '生成 Markdown 评审或提交填写后的评审', task, inputs, request, approvals, runs, dependencies)
+    c.add_argument('--brief', type=Path)
+    c.add_argument('--submit', action='store_true', help='核查 Markdown 并保存正式评审材料')
+    c.add_argument('--file', type=Path, help='提交别处的 Markdown；默认使用任务目录中的 review.md')
+    c = command('accept', '生成报告并核查业务验收材料', task, inputs, request, report, home)
+    c.add_argument('--report', type=Path, help='Use an existing acceptance report instead of generating one')
+    c = command('verify', '核查最终交付材料', task, inputs, request, home)
+    c.add_argument('--report', type=Path)
+    c = command('deliver', '依次核查业务验收、知识处置与最终交付', task, inputs, request, home)
+    c.add_argument('--reason', help='没有知识改动时，说明不需要更新知识的理由')
+    c = command('aggregate', '汇总多仓库的联合验证结果', inputs)
+    c.add_argument('--joint', type=Path)
+    c = command('evidence', '生成实际证据文件的引用', inputs)
+    c.add_argument('--path', action='append', default=[])
+    c.add_argument('--evidence-repository', help='Declared external repository for --path evidence')
+    c.add_argument('--allow-large-evidence', action='store_true',
+                   help='Accept a file above the size limit; compiled executables are never accepted')
+    command('version', '读取工具版本与安装信息', home)
+    c = command('handoff', '生成团队任务的实施或方案交接草稿', task, inputs, request, dependencies, home)
+    c.add_argument('--progress', type=Path, help='Handoff input draft; never a second task store')
+    c.add_argument('--kind', choices=['design', 'implementation'], default='implementation')
+    c = command('progress', '生成平台任务的进度评论草稿', task, inputs, request)
+    c.add_argument('--progress', type=Path, help='Progress input draft; never a second task store')
+    command('task-export', '导出任务材料供后续步骤使用', task, inputs, request)
+    c = command('delivery-template', '生成最终交付报告草稿', task, inputs, request, report)
+    c.add_argument('--acceptance', type=Path, help='Business acceptance record produced by verification')
+    c = command('import-result', '导入有来源证明的持续集成执行结果', inputs, request)
+    c.add_argument('--result', type=Path, help='GitHub Actions result locator')
+    c = command('status', '查看任务材料与下一步，成功核对后登记显式替换', task, inputs, design, history, runs)
+    c.add_argument('--report', type=Path)
+    c = command('agents', '查看或更新代理工作台账')
+    c.add_argument('--ledger', help='Sub-agent ledger name under .tw/local/agents')
+    c.add_argument('--plan', type=Path, help='Sub-agent plan [{id, purpose}] that creates a new ledger')
+    c.add_argument('--mark', help='Sub-agent ID whose ledger status changes')
+    c.add_argument('--status', dest='agent_status', help='New sub-agent status')
+    c.add_argument('--reason')
+    c = command('start', '建立开工上下文或核对接续条件与下一步', task, inputs, request, query, approvals, dependencies, home, runs)
+    c.add_argument('--report', type=Path)
+    c.add_argument('--grant', choices=['synthetic-login'], help='Record permission to sign in to declared synthetic accounts')
+    c.add_argument('--confirmed-by', help='The user who gave the permission for --grant')
+    c = command('design-draft', '生成本地或平台方案草稿', task, inputs, request, design)
+    c.add_argument('--record', type=Path, help='JSON input for the design draft')
+    c = command('approval-draft', '生成具名评审人的方案批准草稿', task, inputs, request, design, history, runs)
+    c.add_argument('--record', type=Path, help='JSON input for the approval draft')
+    c.add_argument('--reviewer', help='批准人的姓名；替代 --record')
+    c.add_argument('--confirmation', help='批准说明，可省略')
+    c.add_argument('--mode', dest='approval_mode', choices=['plan', 'combined'], help='方案批准或方案与代码合并批准')
+    command('design-diff', '核对方案变化及受影响的章节', task, inputs, request, design, history)
+    command('schema', '列出团队材料模板与字段说明')
+    c = command('cleanup', '预览或应用本机材料清理计划')
+    c.add_argument('--apply', action='store_true', help='Apply an explicitly reviewed cleanup plan')
+    c.add_argument('--dry-run', action='store_true', help='Preview only; also the default')
+    c.add_argument('--plan', type=Path)
+    c.add_argument('--cleanup-scope', choices=['requests', 'all'], default='requests')
+    c.add_argument('--older-than', type=int, default=14, help='Minimum age in days for cleanup-scope all')
+    c = command('guidance', '预览或更新项目和本机的流程指引', home)
+    c.add_argument('--scope', choices=['project', 'global', 'all'], default='all')
+    c.add_argument('--apply', action='store_true', help='Apply the reviewed guidance blocks')
+    c.add_argument('--file', help='Project-relative rules file; defaults to AGENTS.md')
+    c = command('issue-draft', '生成任务正文、方案评论和评审请求草稿', design)
+    c.add_argument('--task', type=Path)
+    c.add_argument('--with-task', action='append', default=[], type=Path)
+    c.add_argument('--reviewer', help='The named person asked to review the design')
+    c = command('metrics', '只读汇总任务的本机运行统计')
+    c.add_argument('--task', type=Path)
+    c.add_argument('--issue', help='Canonical GitHub issue URL')
+    c.add_argument('--since', help='Only requests started at or after this ISO time')
     return p
 
 
@@ -125,12 +204,16 @@ def _main(argv=None):
         if not result.get('ok', True):
             result.setdefault('problem', '; '.join(str(v) for v in result.get('gaps', [])) or 'The operation is incomplete.')
             result.setdefault('next_action', 'Resolve the reported gap without replacing prior evidence.')
+            import repairs
+            repairs.annotate(args, result)
         print(commands.readable(result) if args.format == 'text' else json.dumps(result, ensure_ascii=False, indent=2))
         return 0 if result.get('ok', True) else 1
     except (RuntimeInvalid, OSError, ValueError, TypeError, KeyError) as exc:
+        import repairs
         result = {'ok': False, 'scope': args.command, 'status': 'incomplete', 'problem': str(exc),
                   'error_code': getattr(exc, 'error_code', 'invalid-or-incomplete-input'),
-                  'next_action': getattr(exc, 'next_action', None) or 'Inspect the named input and preserve prior evidence.'}
+                  'next_action': repairs.action(args, str(exc), getattr(exc, 'next_action', None),
+                                                getattr(exc, 'error_code', None))}
         print(json.dumps(result, ensure_ascii=False))
         return 1
     except Exception as exc:

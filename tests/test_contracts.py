@@ -182,12 +182,14 @@ class BusinessEvidence(unittest.TestCase):
         review = read(self.root / self.name('review'))
         review['findings'] = [problem()]
         self.write('review', review)
-        args = ['verify', '--root', str(self.root), '--task', self.name('task'),
-                '--report', self.name('report'), '--phase', 'acceptance']
+        args = ['accept', '--root', str(self.root), '--task', self.name('task'),
+                '--report', self.name('report')]
         first = io.StringIO()
         with contextlib.redirect_stdout(first):
             self.assertEqual(workflow.main(args), 1)
-        self.assertIn('Unresolved issue', first.getvalue())
+        self.assertIn('permission-gap', first.getvalue())
+        self.assertIn(problem()['summary'], first.getvalue())
+        self.assertEqual(json.loads(first.getvalue())['review_failures'][0]['kind'], 'issue')
         review['findings'] = []
         self.write('review', review)
         second = io.StringIO()
@@ -239,20 +241,23 @@ class BusinessEvidence(unittest.TestCase):
 
     def test_validation_session_is_visible_and_does_not_claim_editor_enforcement(self):
         self.setup_task()
+        with contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(workflow.main(['start', '--root', str(self.root), '--task', self.name('task'),
+                                            '--design', self.name('design')]), 0)
         self.assertIsNone(validation_session.active(self.root))
         with validation_session.session(self.root, self.profile, [self.task]):
             self.assertEqual(validation_session.active(self.root)['running'][0]['tasks'], [self.task['id']])
             for option in (['--design', self.name('design')], ['--report', self.name('report')]):
                 output = io.StringIO()
                 with contextlib.redirect_stdout(output):
-                    code = workflow.main(['resume', '--root', str(self.root), '--task', self.name('task'), *option])
+                    code = workflow.main(['start', '--root', str(self.root), '--task', self.name('task'), *option])
                 result = json.loads(output.getvalue())
                 self.assertEqual(code, 0, result)
                 self.assertFalse(result['implementation_ready'])
                 self.assertTrue(result['validation_active'])
         self.assertIsNone(validation_session.active(self.root))
 
-    def test_local_resume_checks_task_against_current_plan(self):
+    def test_local_start_checks_task_against_current_plan(self):
         self.setup_task()
         original = copy.deepcopy(self.task)
         self.profile['risk_checks']['public-contract'] = ['unit']
@@ -263,7 +268,7 @@ class BusinessEvidence(unittest.TestCase):
                     dict(original, acceptance=[{**original['acceptance'][0], 'expectation':'A different requirement'}])]
         for task in variants:
             self.write('task', task)
-            for command in ('status', 'resume'):
+            for command in ('status', 'start'):
                 with self.subTest(command=command, task=task):
                     output = io.StringIO()
                     with contextlib.redirect_stdout(output):
@@ -277,7 +282,7 @@ class BusinessEvidence(unittest.TestCase):
         self.setup_task()
         output = io.StringIO()
         with contextlib.redirect_stdout(output):
-            code = workflow.main(['review-template', '--root', str(self.root),
+            code = workflow.main(['review', '--root', str(self.root),
                                   '--task', self.name('task'), '--design', self.name('design')])
         self.assertEqual(code, 1)
         self.assertIn('Missing --brief', json.loads(output.getvalue())['problem'])

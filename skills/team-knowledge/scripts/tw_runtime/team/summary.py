@@ -50,9 +50,12 @@ def render(result, task, profile=None):
         authorization = result.get('close_authorization', {})
         lines.append(f'- 可以关闭：已有 {authorization.get("confirmed_by")} 的关闭授权（{authorization.get("reference")}）')
     elif delivered:
-        lines.append('- 可以关闭：还需要明确的关闭授权')
+        if result.get('close_authorization'):
+            lines.append('- 可以关闭：收尾说明或完整交接尚未发布')
+        else:
+            lines.append('- 可以关闭：还需要明确的关闭授权')
     else:
         lines.append('- 可以关闭：否')
     if result.get('close_note'):
-        lines += ['', '**下一步**：把下方“收尾说明”原样发布到 Issue（工具不会自动发布），发布后再关闭 Issue。']
+        lines += ['', '**下一步**：按已有授权把下方“收尾说明”原样发布到 Issue，再核对关闭条件；工具不会自动发布或关闭。']
     return '\n'.join(lines) + '\n'

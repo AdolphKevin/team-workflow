@@ -109,6 +109,22 @@ def create(path, value):
         os.unlink(temporary)
 
 
+def create_text(path, value):
+    """Publish exact UTF-8 text without overwriting an existing editable or immutable file."""
+    path = Path(path)
+    local_write_guard(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    descriptor, temporary = tempfile.mkstemp(prefix='.publishing-', dir=path.parent)
+    try:
+        with os.fdopen(descriptor, 'wb') as stream:
+            stream.write(value.encode('utf-8'))
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.link(temporary, path)
+    finally:
+        os.unlink(temporary)
+
+
 def location_settings(root):
     path = root / '.tw/local/repositories.json'
     settings = read(path) if path.exists() else {}

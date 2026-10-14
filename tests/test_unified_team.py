@@ -42,10 +42,10 @@ class UnifiedTeam(unittest.TestCase):
                                capture_output=True, text=True)
         return value.returncode, json.loads(value.stdout)
 
-    def test_prepare_reads_tw_brief_and_records_files_and_markdown(self):
+    def test_start_reads_tw_brief_and_records_files_and_markdown(self):
         self.setup_task()
         path = self.rule()
-        code, result = self.command('prepare', '--task', self.name('task'), '--design', self.name('design'))
+        code, result = self.command('start', '--task', self.name('task'), '--design', self.name('design'))
         self.assertEqual(code, 0, result)
         brief = read(self.root / result['brief']['path'])
         self.assertEqual(brief['kind'], 'knowledge-brief')
@@ -68,16 +68,16 @@ class UnifiedTeam(unittest.TestCase):
         self.assertEqual(code, 0, result)
         self.assertEqual(read(self.root / result['artifact']['path'])['knowledge']['files'], ['.tw/rules/addition.md'])
 
-    def test_cli_final_delivery_cites_the_acceptance_written_by_verify(self):
+    def test_cli_final_delivery_cites_the_acceptance_written_by_accept(self):
         self.setup_task()
         home = ('--home', str(self.root / '.tw/local/empty-home'))
-        code, accepted = self.command('verify', '--task', self.name('task'), '--report', self.name('report'),
-                                      '--phase', 'acceptance', '--out', self.name('acceptance'), *home)
+        code, accepted = self.command('accept', '--task', self.name('task'), '--report', self.name('report'),
+                                      '--out', self.name('acceptance'), *home)
         self.assertEqual(code, 0, accepted)
         args = ('delivery-template', '--task', self.name('task'), '--design', self.name('design'),
                 '--brief', self.name('brief'), '--review', self.name('review'), '--approval', self.name('approval'),
                 '--run', self.runs[0])
-        code, drafted = self.command(*args, *home)
+        code, drafted = self.command(*args)
         self.assertEqual(code, 0, drafted)
         report = read(self.root / drafted['artifact']['path'])
         self.assertNotIn('acceptance', report)
@@ -86,7 +86,7 @@ class UnifiedTeam(unittest.TestCase):
         code, refused = self.command('verify', '--task', self.name('task'), '--report', self.name('final'), *home)
         self.assertEqual(code, 1, refused)
         self.assertIn('最终交付需要业务验收记录', refused['problem'])
-        code, drafted = self.command(*args, '--acceptance', self.name('acceptance'), *home)
+        code, drafted = self.command(*args, '--acceptance', self.name('acceptance'))
         self.assertEqual(code, 0, drafted)
         report = read(self.root / drafted['artifact']['path'])
         self.assertEqual(report['acceptance'], self.name('acceptance'))
@@ -98,12 +98,15 @@ class UnifiedTeam(unittest.TestCase):
         self.assertTrue(record['delivery_complete'])
         self.assertIn(artifact(self.root, self.root / self.name('acceptance')), record['materials'])
 
-    def test_resume_saves_brief_and_retries_without_overwriting_it(self):
+    def test_start_continuation_saves_brief_and_retries_without_overwriting_it(self):
         self.setup_task()
         self.rule()
-        args = ('resume', '--task', self.name('task'), '--design', self.name('design'), '--request-id', 'resume')
+        code, prepared = self.command('start', '--task', self.name('task'), '--design', self.name('design'))
+        self.assertEqual(code, 0, prepared)
+        args = ('start', '--task', self.name('task'), '--request-id', 'continue')
         code, result = self.command(*args)
         self.assertEqual(code, 0, result)
+        self.assertTrue(result['continued'])
         path = self.root / result['brief']['path']
         before = path.read_bytes()
         self.assertIn('加法规则', read(path)['markdown'])
@@ -153,11 +156,11 @@ class UnifiedTeam(unittest.TestCase):
     def test_request_identity_covers_acceptance_and_knowledge_content(self):
         self.setup_task()
         home = ('--home', str(self.root / '.tw/local/empty-home'))
-        code, accepted = self.command('verify', '--task', self.name('task'), '--report', self.name('report'),
-                                      '--phase', 'acceptance', '--out', self.name('acceptance'), *home)
+        code, accepted = self.command('accept', '--task', self.name('task'), '--report', self.name('report'),
+                                      '--out', self.name('acceptance'), *home)
         self.assertEqual(code, 0, accepted)
         args = ('delivery-template', '--task', self.name('task'), '--design', self.name('design'),
-                '--brief', self.name('brief'), '--review', self.name('review'), '--request-id', 'template', *home)
+                '--brief', self.name('brief'), '--review', self.name('review'), '--request-id', 'template')
         code, first = self.command(*args)
         self.assertEqual(code, 0, first)
         for extra in (('--acceptance', self.name('acceptance')), ()):
@@ -348,7 +351,7 @@ class TeamRouting(unittest.TestCase):
     def test_team_help_and_schema_use_the_sibling_skill(self):
         help_result = subprocess.run([sys.executable, str(TW), 'team', '--help'], capture_output=True, text=True)
         self.assertEqual(help_result.returncode, 0, help_result.stderr)
-        self.assertIn('prepare', help_result.stdout)
+        self.assertIn('start', help_result.stdout)
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
             self.assertEqual(cli.main(['team', 'schema']), 0)

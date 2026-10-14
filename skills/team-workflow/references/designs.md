@@ -36,7 +36,7 @@
 | `implementation_ready` | 选中工作已有有效方案、评估和指派；中等及复杂任务另需适用批准；相关实施问题和前置任务已解决 |
 | `fully_approved` | 选中章节和相关删除已有有效批准 |
 | `local_review_valid` | 批准与实际修改归属可核对；简单任务还有当前合并评审 |
-| `acceptance_ready` | 评审与相关问题处置齐备；实际业务结果仍由 `verify` 核对 |
+| `acceptance_ready` | 评审与相关问题处置齐备；实际业务结果仍由 `accept` 核对 |
 
 `designs.py` 继续提供 `validate_design`、`fingerprints`、`scope_coverage`、`impact`、
 `approval_draft` 和 `approval_status`。局部核对使用 `section_ids`，自动纳入上游依据。

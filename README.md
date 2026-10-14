@@ -30,7 +30,21 @@ tw init --apply --guidance        # 新项目：建立 .tw/ 与 AGENTS.md 中的
 tw brief --task "<任务>" --path <相关路径>
 tw check                          # 结构检查，零写入
 tw team project                   # 团队流程：核对配置、知识与安装
+tw team --help                    # 列出团队命令及用途
+tw team status --help             # 查看 status 接受的参数
 ```
+
+团队命令只有 `--root` 和可重复的 `--repository` 是全局参数；其他参数写在对应命令后。简单任务用四条命令：
+
+```bash
+tw team start --task <任务文件> --design <方案>
+tw team run --task <身份>
+# 未参与实施的人填写自动生成的 review.md
+tw team review --task <身份> --submit
+tw team deliver --task <身份> --reason <不需要更新知识的理由>
+```
+
+中等以上任务先用 `approval-draft --reviewer <姓名> --mode plan` 取得方案批准。要更新知识时，评审后先 `accept --task <身份>`，通过后写知识并 `tw check`，再 deliver。完整的“不通过”评审也能保存，验收仍拒绝；status 只列有效记录和下一条命令。显式材料路径仍可使用；工具不执行发布或关闭。
 
 - 已有 `.codestable/` 的项目按[迁移指南](skills/team-knowledge/references/migration.md)由代理整理。
 - 团队流程的接入见[接入指南](skills/team-workflow/references/onboarding.md)，命令见[工具约定](skills/team-workflow/references/contracts.md)。

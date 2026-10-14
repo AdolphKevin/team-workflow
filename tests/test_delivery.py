@@ -270,20 +270,21 @@ class DeliveryCases(unittest.TestCase):
         with self.assertRaisesRegex(Invalid, 'validation policy'):
             delivery.verify(self.root, self.profile, self.task, self.report, 'acceptance')
 
-    def test_prepare_context_and_verify_cli_roundtrip(self):
+    def test_start_context_and_accept_cli_roundtrip(self):
         self.setup_task()
         def cli(*args):
             output = io.StringIO()
             with contextlib.redirect_stdout(output):
                 code = workflow.main([*args, '--root', str(self.root)])
             return code, json.loads(output.getvalue())
-        code, prepared = cli('prepare', '--task', self.name('task'), '--design', self.name('design'))
+        code, prepared = cli('start', '--task', self.name('task'), '--design', self.name('design'))
         self.assertEqual(code, 0, prepared)
         self.assertTrue(prepared['implementation_ready'])
         code, status = cli('status', '--context', prepared['artifact']['path'])
         self.assertEqual(code, 0, status)
-        self.assertFalse(status['closable'])
-        code, result = cli('verify', '--task', self.name('task'), '--report', self.name('report'), '--phase', 'acceptance')
+        self.assertNotIn('closable', status)
+        self.assertEqual(status['verified_records'], {})
+        code, result = cli('accept', '--task', self.name('task'), '--report', self.name('report'))
         self.assertEqual(code, 0, result)
         self.assertTrue(result['business_accepted'])
 
@@ -373,7 +374,8 @@ class DeliveryCases(unittest.TestCase):
             code = workflow.main(['status', '--root', str(self.root), '--task', self.name('task'), '--report', self.name('report')])
         self.assertEqual(code, 0, output.getvalue())
         self.assertFalse(marker.exists())
-        self.assertFalse(json.loads(output.getvalue())['business_accepted'])
+        self.assertNotIn('business_accepted', json.loads(output.getvalue()))
+        self.assertEqual(json.loads(output.getvalue())['verified_records'], {})
 
     def declare_pending_automation(self):
         review = read(self.root / self.name('review'))

@@ -1,12 +1,13 @@
 """Where a task stands and the exact next command, read from the requests the tool already recorded."""
 from artifacts import directory
 from common import Invalid, artifact_valid, digest, read
+import shlex
 
 STEPS = [
-    ('prepare', '准备任务与知识简报', lambda c: c.get('command') == 'prepare'),
+    ('prepare', '准备任务与知识简报', lambda c: c.get('command') in ('start', 'prepare')),
     ('run', '运行检查', lambda c: c.get('command') == 'run'),
-    ('review', '生成并完成代码与验收评审', lambda c: c.get('command') == 'review-template'),
-    ('acceptance', '业务验收', lambda c: c.get('command') == 'verify' and c.get('phase') == 'acceptance'),
+    ('review', '提交代码与验收评审', lambda c: c.get('command') == 'review' and c.get('submit')),
+    ('acceptance', '业务验收', lambda c: c.get('command') == 'accept' or c.get('command') == 'verify' and c.get('phase') == 'acceptance'),
     ('knowledge', '交付报告写明知识处置', lambda c: c.get('command') == 'delivery-template'),
     ('delivery', '最终交付核查', lambda c: c.get('command') == 'verify' and c.get('phase') == 'delivery'),
 ]
@@ -49,6 +50,10 @@ def source_stale(root, value, source_digest, profile=None):
         rows = value.get('results', []) if value['kind'] == 'execution' else [value.get('result', {})]
         sources = {False: source_digest}
         for row in rows:
+            from validation import execution_definition
+            check = (profile or {}).get('checks', {}).get(row.get('id'))
+            if check is not None and row.get('binding', {}).get('definition') != execution_definition(check):
+                return True
             sensitive = bool((profile or {}).get('checks', {}).get(row.get('id'), {}).get('revision_sensitive'))
             if sensitive not in sources:
                 from validation import source
@@ -59,13 +64,22 @@ def source_stale(root, value, source_digest, profile=None):
     return value.get('source_digest') not in (None, source_digest)
 
 
-def steps(root, task, source_digest, context=None, task_arg=None, profile=None):
+def steps(root, task, source_digest, context=None, task_arg=None, profile=None, current=None,
+          task_identity=None, material_group=None, review_inputs=None):
     rows = records(root, task['id'])
+    if current:
+        rows = [(c, current[1] if c == current[0] else r) for c, r in rows]
+    prepared = [c.get('started_at', '') for c, r in rows
+                if c.get('command') in ('start', 'prepare') and r and not r.get('continued')
+                and (_artifact_value(root, r) or {}).get('kind') == 'prepared-context']
+    beginning = max(prepared, default='')
     result, previous_done = [], True
     paths = {}
     latest_done = {}
     for key, label, match in STEPS:
         mine = [(c, r) for c, r in rows if match(c)]
+        if key != 'prepare':
+            mine = [(c, r) for c, r in mine if c.get('started_at', '') >= beginning]
         done = [(c, r) for c, r in mine if r and r.get('ok')]
         # Prefer results produced by an unmodified tool installation.
         trusted = [(c, r) for c, r in done if not (_artifact_value(root, r) or {}).get('tool', {}).get('override')]
@@ -73,7 +87,7 @@ def steps(root, task, source_digest, context=None, task_arg=None, profile=None):
         if done:
             claim, response = (trusted or done)[-1]
             latest_done[key] = claim.get('started_at', '')
-            evidence = (response.get('artifact') or {}).get('path')
+            evidence = (response.get('context' if key == 'prepare' else 'artifact') or response.get('artifact') or {}).get('path')
             paths[key] = evidence
             value = _artifact_value(root, response)
             stale = source_stale(root, value, source_digest, profile)
@@ -83,7 +97,10 @@ def steps(root, task, source_digest, context=None, task_arg=None, profile=None):
             # The newest attempt did not finish well; earlier success no longer describes the current state.
             state = 'running-or-interrupted' if not last[1] else 'failed'
             evidence = (last[1] or {}).get('request_directory') or last[0].get('started_at')
-        result.append({'id': key, 'label': label, 'state': state, 'evidence': evidence})
+        row = {'id': key, 'label': label, 'state': state, 'evidence': evidence}
+        if state == 'failed' and last[1].get('next_action'):
+            row['repair'] = last[1]['next_action']  # Rerunning the step that just failed would only fail again.
+        result.append(row)
     # A later step that succeeded after an earlier failure shows that failure was superseded.
     for i, row in enumerate(result):
         later = [latest_done.get(other['id'], '') for other in result[i + 1:]]
@@ -93,18 +110,47 @@ def steps(root, task, source_digest, context=None, task_arg=None, profile=None):
         if row['state'] == 'done-with-override':
             row['state'] = 'done'
             row['note'] = 'produced with --allow-modified-tool'
+    import reviews
+    import review_history
+    review_state = None
+    if profile is not None:
+        editor = reviews._state(root, task['id'])
+        draft_binding = read(artifact_valid(root, editor['current'])) if editor['current'] else None
+        review_state = review_history.status(root, profile, task, editor, draft_binding, material_group, review_inputs)
+        if review_state and review_state['review'] and not review_state['current']:
+            row = next(row for row in result if row['id'] == 'review')
+            row.update(state='stale', evidence=review_state['review']['path'], stale_reason='评审绑定已变化，需要逐项复核')
+            paths['review'] = row['evidence']
     ctx = f'--context {context}' if context else f'--task {task_arg or "<task.json>"}'
     commands = {
-        'prepare': f'tw team prepare --root "$PROJECT" {ctx}',
+        'prepare': f'tw team start --root "$PROJECT" {ctx}',
         'run': f'tw team run --root "$PROJECT" {ctx}',
-        'review': f'tw team review-template --root "$PROJECT" {ctx} --run {paths.get("run") or "<run.json>"}',
-        'acceptance': f'tw team verify --root "$PROJECT" {ctx} --report <delivery.json> --phase acceptance',
+        'review': f'tw team review --root "$PROJECT" {ctx} --run {paths.get("run") or "<run.json>"}',
+        'acceptance': f'tw team accept --root "$PROJECT" {ctx} --run {paths.get("run") or "<run.json>"} --review {paths.get("review") or "<review.json>"} [--approval <approval.json>]',
         'knowledge': f'tw team delivery-template --root "$PROJECT" {ctx} --approval <approval.json> --run {paths.get("run") or "<run.json>"} --review <review.json> --acceptance {paths.get("acceptance") or "<acceptance.json>"}',
         'delivery': f'tw team verify --root "$PROJECT" {ctx} --report <delivery.json>',
     }
+    if task_identity:
+        selected = '--task ' + shlex.quote(task_identity)
+        base = 'tw team {command} --root "$PROJECT" ' + selected
+        commands = {key: base.format(command=command) for key, command in
+                    [('prepare', 'start'), ('run', 'run'), ('review', 'review'),
+                     ('acceptance', 'accept'), ('knowledge', 'delivery-template'), ('delivery', 'verify')]}
+        if not (material_group or {}).get('review'):
+            commands['acceptance'] += ' --review <review.json>'
+        if not (material_group or {}).get('approvals'):
+            commands['acceptance'] += ' [--approval <approval.json>]'
+    if review_state and review_state['current']:
+        selected = '--task ' + shlex.quote(task['id'])
+        for key in ('acceptance', 'knowledge', 'delivery'):
+            commands[key] = 'tw team deliver ' + selected + ' --reason <不需要更新知识的理由>'
+    if reviews.locations(root, task['id'])[0].is_file() and (not review_state or review_state['draft_current']):
+        commands['review'] += ' --submit'
     last_done = max((i for i, row in enumerate(result) if row['state'] == 'done'), default=-1)
     for i, row in enumerate(result):
-        row['next_command'] = commands[row['id']]
+        row['next_command'] = row.pop('repair', None) if row['state'] == 'failed' else None
+        row['next_command'] = row['next_command'] or commands[row['id']]
+        row.pop('repair', None)
         if row['state'] == 'superseded':
             row['state'] = 'not-recorded'
         if i < last_done and row['state'] == 'pending':
@@ -121,11 +167,10 @@ def render(value):
     words = {'done': '', 'stale': '（源码已变，需要重做）', 'failed': '（上次失败）',
              'running-or-interrupted': '（正在运行或被中断，换新的请求编号重试）', 'pending': '',
              'not-recorded': '（工具没有记录，可能已在工具外完成）'}
-    lines = [f'{i}. {marks[row["state"]]} {row["label"]}{words[row["state"]]}' + ('（使用了被修改的工具安装）' if row.get('note') else '')
+    lines = [f'{i}. {marks[row["state"]]} {row["label"]}' + (f'（{row["stale_reason"]}）' if row.get('stale_reason') else words[row['state']]) + ('（使用了被修改的工具安装）' if row.get('note') else '')
              for i, row in enumerate(value['steps'], 1)]
     if value['next_step']:
         lines += ['', '下一步：' + value['next_step']['label'], value['next_step']['next_command']]
     else:
-        lines += ['', '所有工具步骤已完成。GitHub Issue 任务按结果发布收尾说明或交接，并在有关闭授权后关闭；'
-                      '本地任务按团队约定交付。']
+        lines += ['', '已交付；关闭需要授权，工具不执行关闭']
     return lines

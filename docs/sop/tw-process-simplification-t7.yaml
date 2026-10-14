@@ -1,0 +1,646 @@
+# 批次 1：团队流程简化（T7）的 SOP 场景
+# 格式见 docs/proposals/2026-10-14-sop-retest-trust.md 第 3.1 节。
+# 预期结果只依据已批准的流程简化方案，不依据当前实现的输出。
+
+metadata:
+  requirement: "团队流程简化（T7）：固定材料组与 start、评审 Markdown 与逐项复核、deliver 顺序封装、参数归位、status 与关闭规则"
+  batch: "tw-process-simplification-t7"
+  version: 1
+  owner: "AdolphKevin"
+  sources:
+    - ref: "docs/proposals/2026-10-15-process-simplification.md S1–S6、D1–D4、第 4 节"
+      version: "2026-10-15 批准版"
+      confirmed_by: "AdolphKevin"
+    - ref: "docs/proposals/2026-10-14-unified-redesign.md T7、C、I 节"
+      version: "v4.2"
+      confirmed_by: "AdolphKevin"
+  tags: ["tw", "流程简化", "T7"]
+
+sops:
+
+  - id: SOP-01
+    title: 命令面与参数
+    actor: "成员"
+    entry: "tw team --help、tw team <命令> --help"
+    must:
+      - "全局参数只有 --root 和 --repository，其余参数属于各自的子命令"
+      - "只新增 start、review、accept、deliver 四个命令，其余命令名不变"
+    scenarios:
+
+      - id: SOP-01-P01
+        polarity: positive
+        title: 帮助只列出本命令的参数
+        actor: 成员
+        priority: P1
+        refs: ["S4", "D1"]
+        verify: cli
+        layer: local
+        initial_state:
+          - "按 docs/install.md 安装的两个技能，以及一个已初始化 .tw/ 的临时仓库"
+        steps:
+          - "运行 tw team --help"
+          - "运行 tw team run --help 和 tw team status --help"
+        expected:
+          - "命令列表包含 start、review、accept、deliver，不包含 prepare、resume、review-template"
+          - "每个子命令的帮助只出现它自己的参数；--root、--repository 在任何子命令下都可用"
+        forbidden_effects:
+          - "帮助命令不写入任何文件"
+        evidence_hints: ["帮助原文"]
+
+      - id: SOP-01-N01
+        polarity: negative
+        negative_type: invalid-input
+        title: 给命令传入不属于它的参数
+        actor: 成员
+        priority: P1
+        refs: ["S4"]
+        verify: cli
+        layer: local
+        initial_state:
+          - "同 SOP-01-P01"
+        steps:
+          - "运行 tw team status 并带上只属于其他命令的参数（例如 --approval x）"
+        expected:
+          - "退出码非 0，报错点出该参数名"
+        forbidden_effects:
+          - "不产生任何请求目录或材料"
+        evidence_hints: ["命令原始输出", "运行前后 .tw/local/ 的文件列表"]
+
+  - id: SOP-02
+    title: 固定材料组与 start
+    actor: "成员、接手者"
+    entry: "tw team start，以及之后只带 --task <身份> 的命令"
+    must:
+      - "start 合并准备与续接；之后的命令只需任务身份"
+      - "工具按记录选用材料，不按时间猜测；材料被改动或有歧义时拒绝"
+    scenarios:
+
+      - id: SOP-02-P01
+        polarity: positive
+        title: start 之后只用身份推进任务
+        actor: 成员
+        priority: P0
+        refs: ["S1"]
+        verify: cli
+        layer: local
+        initial_state:
+          - "一个已有团队配置的临时仓库，准备好任务文件、方案和批准"
+        steps:
+          - "运行 tw team start，传入任务文件、方案和批准"
+          - "之后运行检查、查看状态时，只传 --task <任务身份>"
+        expected:
+          - "start 建立任务目录并记录当前材料组"
+          - "后续命令不需要再传上下文、方案、批准、运行等路径，就能找到并使用这些材料"
+        forbidden_effects:
+          - "本地材料不出现在 .tw/local/ 以外的位置"
+        evidence_hints: ["每条命令及原始输出", "任务目录中的材料记录"]
+
+      - id: SOP-02-P02
+        polarity: positive
+        title: 新会话再次 start 即续接
+        actor: 接手者
+        priority: P0
+        refs: ["S1"]
+        verify: cli
+        layer: local
+        initial_state:
+          - "完成 SOP-02-P01，任务进行到运行检查之后"
+        steps:
+          - "在新的进程中对同一任务身份再次运行 tw team start"
+        expected:
+          - "报告任务停在哪一步以及下一条命令；任务目录与身份不变"
+        forbidden_effects:
+          - "没有出现第二个任务目录；已有材料没有被覆盖"
+        evidence_hints: ["start 原始输出", ".tw/local/tasks/ 目录列表"]
+
+      - id: SOP-02-P03
+        polarity: positive
+        title: 任务的验收项由方案生成
+        actor: 成员
+        priority: P1
+        refs: ["S6"]
+        verify: cli
+        layer: local
+        initial_state:
+          - "任务文件中的验收项只写编号，不抄写方案中的验收文字和检查"
+        steps:
+          - "运行 tw team start"
+        expected:
+          - "工具按方案的固定版本补全验收项的文字与检查，准备成功"
+        forbidden_effects: []
+        evidence_hints: ["start 原始输出", "任务目录中记录的任务内容"]
+
+      - id: SOP-02-N01
+        polarity: negative
+        negative_type: tampered-input
+        title: 已记录的材料被改动
+        actor: 成员
+        priority: P0
+        refs: ["S1"]
+        verify: cli
+        layer: local
+        initial_state:
+          - "完成 SOP-02-P01"
+          - "手工修改已记录的方案或批准文件的内容"
+        steps:
+          - "只带 --task <身份> 运行下一条命令"
+        expected:
+          - "退出码非 0，指出哪一份材料被改动，并给出指定材料或重新 start 的命令"
+        forbidden_effects:
+          - "没有使用被改动的材料继续推进"
+        evidence_hints: ["命令原始输出"]
+
+      - id: SOP-02-N02
+        polarity: negative
+        negative_type: duplicate
+        title: 同一请求编号配上另一组材料
+        actor: 成员
+        priority: P1
+        refs: ["S1"]
+        verify: cli
+        layer: local
+        initial_state:
+          - "某条命令已用某个请求编号成功执行"
+          - "之后显式换了一份同角色的材料"
+        steps:
+          - "用同一个请求编号再次运行该命令"
+        expected:
+          - "拒绝，并提示使用新的请求编号"
+        forbidden_effects:
+          - "没有返回上一组材料的旧结果"
+        evidence_hints: ["两次命令的原始输出"]
+
+      - id: SOP-02-N03
+        polarity: negative
+        negative_type: concurrency
+        title: 两个会话同时对同一任务运行 start
+        actor: 成员
+        priority: P2
+        refs: ["S1"]
+        verify: cli
+        layer: local
+        initial_state:
+          - "完成 SOP-02-P01"
+        steps:
+          - "在两个进程中同时对同一任务身份运行 tw team start"
+        expected:
+          - "材料记录保持完整可读；两次结果一致，或其中一次被明确拒绝"
+        forbidden_effects:
+          - "材料记录没有被写坏，也没有混入两组材料"
+        evidence_hints: ["两次命令的原始输出", "材料记录原文"]
+
+      - id: SOP-02-N04
+        polarity: negative
+        negative_type: stale-input
+        title: 平台上的方案比本地记录新
+        actor: 接手者
+        priority: P1
+        refs: ["S1"]
+        verify: cli
+        layer: platform
+        initial_state:
+          - "一个以 Issue 为任务的身份已经 start 过"
+          - "随后 Issue 上发布了新版本的方案"
+        steps:
+          - "只带 --task <Issue 地址> 运行下一条命令"
+        expected:
+          - "拒绝，说明平台上的方案比本地记录新，并提示重新 start"
+        forbidden_effects:
+          - "没有用本地旧记录覆盖平台的新要求"
+        evidence_hints: ["命令原始输出", "平台记录"]
+
+  - id: SOP-03
+    title: 评审 Markdown 与逐项复核
+    actor: "评审人（未参与实现）"
+    entry: "tw team review、tw team review --submit"
+    must:
+      - "评审人只写结论与理由，证据引用和问题历史由工具生成"
+      - "源码或运行变化后逐项复核，不自动沿用任何结论"
+    scenarios:
+
+      - id: SOP-03-P01
+        polarity: positive
+        title: 用 Markdown 完成评审
+        actor: 评审人
+        priority: P0
+        refs: ["S3", "D2"]
+        verify: cli
+        layer: local
+        initial_state:
+          - "完成 start 和运行检查的任务"
+        steps:
+          - "运行 tw team review --task <身份>"
+          - "在生成的 Markdown 中为每个验收项写结论和理由，填写问题清单"
+          - "运行 tw team review --task <身份> --submit"
+        expected:
+          - "Markdown 中已预填每个验收项对应检查和用例的实际结果"
+          - "提交成功；生成的评审记录带有指向当前运行的证据引用"
+        forbidden_effects:
+          - "评审人没有手写任何文件路径或指纹"
+        evidence_hints: ["生成的 Markdown 与填写后的原文", "提交命令原始输出", "生成的评审记录"]
+
+      - id: SOP-03-P02
+        polarity: positive
+        title: 源码变化后逐项复核
+        actor: 评审人
+        priority: P0
+        refs: ["S3"]
+        verify: cli
+        layer: local
+        initial_state:
+          - "完成 SOP-03-P01 后修改了源码，并重新运行检查"
+        steps:
+          - "再次运行 tw team review --task <身份>"
+          - "逐项把“待复核”改为“已复核”或改写结论，然后提交"
+        expected:
+          - "Markdown 预填上一轮结论，每项标为待复核，并列出变化的文件"
+          - "全部复核后提交成功，评审记录绑定新的源码与运行"
+        forbidden_effects:
+          - "没有任何结论在未经复核的情况下被沿用"
+        evidence_hints: ["两次生成的 Markdown", "提交命令原始输出"]
+
+      - id: SOP-03-N01
+        polarity: negative
+        negative_type: incomplete-input
+        title: 留有待复核项时提交
+        actor: 评审人
+        priority: P0
+        refs: ["S3"]
+        verify: cli
+        layer: local
+        initial_state:
+          - "SOP-03-P02 生成的 Markdown 中至少一项仍为待复核"
+        steps:
+          - "运行 tw team review --task <身份> --submit"
+        expected:
+          - "拒绝，并列出仍待复核的验收项"
+        forbidden_effects:
+          - "没有生成新的评审记录"
+        evidence_hints: ["提交命令原始输出"]
+
+      - id: SOP-03-N02
+        polarity: negative
+        negative_type: permission
+        title: 实施者自己评审
+        actor: 实施者
+        priority: P0
+        refs: ["S3", "原则 1"]
+        verify: cli
+        layer: local
+        initial_state:
+          - "评审人姓名与方案中的实施负责人相同"
+        steps:
+          - "提交评审，然后运行 tw team accept"
+        expected:
+          - "业务验收被拒绝，指出评审人不能是实施者"
+        forbidden_effects: []
+        evidence_hints: ["命令原始输出"]
+
+      - id: SOP-03-N03
+        polarity: negative
+        negative_type: incomplete-input
+        title: 人工观察缺少观察数据
+        actor: 评审人
+        priority: P1
+        refs: ["S3"]
+        verify: cli
+        layer: local
+        initial_state:
+          - "方案中有一项验收要求人工观察"
+        steps:
+          - "生成评审 Markdown，不填写该项的操作、观察人与观察结果，直接提交"
+        expected:
+          - "拒绝，指出人工观察缺少的内容；工具没有代填这些内容"
+        forbidden_effects: []
+        evidence_hints: ["生成的 Markdown", "提交命令原始输出"]
+
+      - id: SOP-03-N04
+        polarity: negative
+        negative_type: other
+        title: 清理不删除仍被引用的评审和运行
+        actor: 成员
+        priority: P1
+        refs: ["S3"]
+        verify: cli
+        layer: local
+        initial_state:
+          - "完成评审提交与业务验收的任务"
+        steps:
+          - "预览并应用 tw team cleanup"
+          - "再次运行业务验收或最终交付核查"
+        expected:
+          - "清理没有删除仍被引用的 Markdown 评审、评审记录和运行；之后的核查结果不变"
+        forbidden_effects: []
+        evidence_hints: ["清理预览与应用的原始输出", "清理前后的文件列表", "核查原始输出"]
+
+  - id: SOP-04
+    title: deliver 顺序封装
+    actor: "成员"
+    entry: "tw team accept、tw team deliver"
+    must:
+      - "deliver 依次完成业务验收、交付报告、最终交付核查，门槛不变"
+      - "任何一步失败就停在那一步，并保留失败记录"
+    scenarios:
+
+      - id: SOP-04-P01
+        polarity: positive
+        title: 不改知识时一次交付
+        actor: 成员
+        priority: P0
+        refs: ["S2", "D4"]
+        verify: cli
+        layer: local
+        initial_state:
+          - "评审已提交并通过、尚未做业务验收的任务，本分支没有改动知识"
+        steps:
+          - "运行 tw team deliver --task <身份> --reason <不需要更新知识的理由>"
+        expected:
+          - "依次生成业务验收记录、交付报告和最终交付记录，交付完成"
+          - "交付记录引用这次的业务验收记录"
+        forbidden_effects:
+          - "成员没有手写交付报告"
+        evidence_hints: ["deliver 原始输出", "三份记录"]
+
+      - id: SOP-04-P02
+        polarity: positive
+        title: 先验收、再写知识、最后交付
+        actor: 成员
+        priority: P0
+        refs: ["S2"]
+        verify: cli
+        layer: local
+        initial_state:
+          - "评审已提交并通过的任务"
+        steps:
+          - "运行 tw team accept --task <身份>"
+          - "新增一条 lesson，运行 tw check"
+          - "运行 tw team deliver --task <身份>"
+        expected:
+          - "deliver 沿用已有的业务验收，从 git 差异列出这条 lesson，交付完成"
+        forbidden_effects: []
+        evidence_hints: ["各命令原始输出", "交付记录中的知识处置"]
+
+      - id: SOP-04-N01
+        polarity: negative
+        negative_type: other
+        title: 业务验收不通过时停下
+        actor: 成员
+        priority: P0
+        refs: ["S2"]
+        verify: cli
+        layer: local
+        initial_state:
+          - "评审中有一项验收结论为不通过"
+        steps:
+          - "运行 tw team deliver --task <身份> --reason <理由>"
+        expected:
+          - "停在业务验收这一步，退出码非 0，说明原因；失败记录保留"
+        forbidden_effects:
+          - "没有生成交付报告或最终交付记录"
+        evidence_hints: ["deliver 原始输出", "任务目录中的请求记录"]
+
+      - id: SOP-04-N02
+        polarity: negative
+        negative_type: stale-input
+        title: 验收之后改了源码
+        actor: 成员
+        priority: P0
+        refs: ["S2", "原则 1"]
+        verify: cli
+        layer: local
+        initial_state:
+          - "完成 tw team accept 之后修改了源码"
+        steps:
+          - "运行 tw team deliver --task <身份>"
+        expected:
+          - "拒绝，说明源码在验收之后有变化，需要重新运行检查、复核和验收"
+        forbidden_effects:
+          - "没有沿用旧的验收完成交付"
+        evidence_hints: ["deliver 原始输出"]
+
+      - id: SOP-04-N03
+        polarity: negative
+        negative_type: interrupted
+        title: 交付中途被打断后续接
+        actor: 成员
+        priority: P1
+        refs: ["S2", "S1"]
+        verify: cli
+        layer: local
+        initial_state:
+          - "deliver 在完成业务验收之后被中断"
+        steps:
+          - "再次运行 tw team deliver --task <身份>"
+        expected:
+          - "从中断处继续，复用已完成的业务验收，最终交付完成"
+        forbidden_effects:
+          - "没有出现两份互相矛盾的验收或交付记录"
+        evidence_hints: ["两次 deliver 的原始输出", "任务目录中的记录"]
+
+  - id: SOP-05
+    title: status 与关闭规则
+    actor: "成员"
+    entry: "tw team status；skills/team-workflow/references/team-delivery.md"
+    must:
+      - "只把已核实的记录算作完成，并给出下一条命令"
+      - "写明 Issue 的关闭规则，工具不执行关闭"
+    scenarios:
+
+      - id: SOP-05-P01
+        polarity: positive
+        title: 生成的模板不算完成
+        actor: 成员
+        priority: P0
+        refs: ["S5"]
+        verify: cli
+        layer: local
+        initial_state:
+          - "已生成评审 Markdown，但还没有提交"
+        steps:
+          - "运行 tw team status --task <身份>"
+        expected:
+          - "评审步骤显示为未完成，下一条命令指向提交评审"
+        forbidden_effects: []
+        evidence_hints: ["status 原始输出"]
+
+      - id: SOP-05-P02
+        polarity: positive
+        title: 交付完成后的状态
+        actor: 成员
+        priority: P1
+        refs: ["S5"]
+        verify: cli
+        layer: local
+        initial_state:
+          - "完成最终交付的任务"
+        steps:
+          - "运行 tw team status --task <身份> --format text"
+        expected:
+          - "列出已核实的记录和收尾说明或交接的发布状态，显示“已交付；关闭需要授权”"
+          - "不再出现与完成状态相矛盾的验收、交付字段"
+        forbidden_effects: []
+        evidence_hints: ["status 原始输出"]
+
+      - id: SOP-05-N01
+        polarity: negative
+        negative_type: stale-input
+        title: 方案或检查规则变化后显示过期
+        actor: 成员
+        priority: P1
+        refs: ["S5"]
+        verify: cli
+        layer: local
+        initial_state:
+          - "完成业务验收的任务"
+          - "随后修改方案的验收节，或修改必需检查的配置"
+        steps:
+          - "运行 tw team status --task <身份>"
+        expected:
+          - "受影响的步骤显示为过期，下一条命令指向需要重做的步骤"
+        forbidden_effects: []
+        evidence_hints: ["status 原始输出"]
+
+      - id: SOP-05-P03
+        polarity: positive
+        title: 关闭规则写进团队交付文档
+        actor: 成员
+        priority: P2
+        refs: ["S5"]
+        verify: doc
+        layer: local
+        initial_state:
+          - "安装后的 team-workflow 技能"
+        steps:
+          - "阅读 references/team-delivery.md"
+        expected:
+          - "写明关闭 Issue 的前提：最终交付完成、收尾说明或交接已发布、记录了关闭授权；工具只报告是否可关闭，不执行关闭"
+        forbidden_effects: []
+        evidence_hints: ["文档原文与位置"]
+
+  - id: SOP-06
+    title: 三道门不变
+    actor: "成员"
+    entry: "新命令下的方案批准、独立评审与验收、知识处置"
+    must:
+      - "简化之后，批准、独立评审与业务验收、知识处置的门槛与阶段 2 相同"
+    scenarios:
+
+      - id: SOP-06-N01
+        polarity: negative
+        negative_type: incomplete-input
+        title: 中等任务没有方案批准
+        actor: 成员
+        priority: P0
+        refs: ["原则 1"]
+        verify: cli
+        layer: local
+        initial_state:
+          - "评估为中等复杂度、尚无具体评审人批准的方案"
+        steps:
+          - "运行 tw team start"
+        expected:
+          - "报告不具备实施条件，说明缺少方案批准"
+        forbidden_effects: []
+        evidence_hints: ["start 原始输出"]
+
+      - id: SOP-06-N02
+        polarity: negative
+        negative_type: stale-input
+        title: 旧批准用于新方案
+        actor: 成员
+        priority: P0
+        refs: ["原则 1"]
+        verify: cli
+        layer: local
+        initial_state:
+          - "方案修订了受批准约束的章节，但只有旧版本的批准"
+        steps:
+          - "运行 tw team start，再推进到 accept"
+        expected:
+          - "拒绝，指出批准不覆盖修订后的章节"
+        forbidden_effects: []
+        evidence_hints: ["命令原始输出"]
+
+      - id: SOP-06-N03
+        polarity: negative
+        negative_type: incomplete-input
+        title: 漏列改动的知识文件
+        actor: 成员
+        priority: P0
+        refs: ["原则 1"]
+        verify: cli
+        layer: local
+        initial_state:
+          - "本分支改动了两条知识，交付时只列出一条"
+        steps:
+          - "运行 tw team deliver --task <身份>，并手动只列出其中一条知识文件"
+        expected:
+          - "拒绝，指出没有列入的知识文件"
+        forbidden_effects:
+          - "没有生成最终交付记录"
+        evidence_hints: ["deliver 原始输出"]
+
+  - id: SOP-07
+    title: 真实任务与平台补验
+    actor: "成员"
+    entry: "本仓真实任务；跨仓联合核查"
+    must:
+      - "本仓真实任务从 start 走到 deliver，命令数与手写内容达到方案第 4 节的目标"
+      - "补验阶段 2 中因离线未能执行的跨仓联合核查"
+    scenarios:
+
+      - id: SOP-07-P01
+        polarity: positive
+        title: 小任务走完新流程
+        actor: 成员
+        priority: P0
+        refs: ["第 4 节"]
+        verify: cli
+        layer: local
+        initial_state:
+          - "本仓的完整副本，选定一个不需要改知识的真实小任务，方案为简单"
+        steps:
+          - "按新命令从 start 走到 deliver"
+        expected:
+          - "工具命令不超过 4 步：start、run、review --submit、deliver"
+          - "成员和评审人都没有手写 JSON，也没有手传材料路径；交付完成"
+        forbidden_effects:
+          - "没有产生旧布局文件"
+        evidence_hints: ["全部命令与原始输出", "命令计数"]
+
+      - id: SOP-07-P02
+        polarity: positive
+        title: 中等任务中途改源码
+        actor: 成员、评审人
+        priority: P1
+        refs: ["第 4 节", "S3"]
+        verify: cli
+        layer: local
+        initial_state:
+          - "本仓的完整副本，选定一个中等任务，方案已获批准"
+        steps:
+          - "完成评审后修改源码，重新运行检查"
+          - "按逐项复核完成评审，再验收、交付"
+        expected:
+          - "只需逐项确认，不重新填写整份评审；交付完成"
+        forbidden_effects: []
+        evidence_hints: ["两次评审 Markdown", "全部命令与原始输出"]
+
+      - id: SOP-07-P03
+        polarity: positive
+        title: 跨仓联合核查读取真实提交（批次 0 的 SOP-05-N02 补验）
+        actor: 成员
+        priority: P2
+        refs: ["T1（v4.1）", "批次 0 SOP-05-N02"]
+        verify: cli
+        layer: platform
+        initial_state:
+          - "可只读访问 GitHub 的环境；主仓 A 与参与仓 B 的提交都已推送"
+        steps:
+          - "在 A 建立联合清单，在 B 准备以 parent 引用联合身份的任务"
+          - "在 A 运行联合核查"
+        expected:
+          - "联合核查读取到两个仓的真实提交并通过；联合清单只有一个联合身份，归属 A"
+        forbidden_effects:
+          - "B 没有另起一个与联合身份并列的需求级身份；没有向平台写入任何内容"
+        evidence_hints: ["联合清单", "联合核查原始输出"]

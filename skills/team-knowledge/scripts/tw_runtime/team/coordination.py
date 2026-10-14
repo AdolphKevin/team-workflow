@@ -151,7 +151,8 @@ def validate_task_design(task, design):
         require(section.get('type') == 'acceptance'
                 and row['expectation'].replace('\r\n', '\n').replace('\r', '\n') == section['body'].replace('\r\n', '\n').replace('\r', '\n')
                 and set(row['checks']) == set(section['data']['checks']),
-                'Task acceptance differs from design section: ' + row['id'])
+                'Task acceptance differs from design section: ' + row['id']
+                + '；本地任务的验收项可以只写编号，由 tw team start 按本次方案生成 expectation 和 checks。')
     return selected
 
 
@@ -319,7 +320,7 @@ def _draft_result(name, url, row, gaps=()):
             'issue': url, 'record': row, 'markdown': body,
             'history_digest': row.get('history_digest'), 'gaps': list(gaps),
             'assurance': 'continuation-only', 'delivery': 'not-evaluated',
-            'publication': 'draft-only; re-read history before an authorized append, then resume'}
+            'publication': 'draft-only; re-read history before an authorized append, then run tw team start'}
 
 
 def draft_design(url, design, resolution=None, issue=None):

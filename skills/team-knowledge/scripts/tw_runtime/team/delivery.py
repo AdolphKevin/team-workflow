@@ -1,7 +1,7 @@
 """Business acceptance and final delivery are separate read-only decisions."""
 from datetime import datetime
 
-from common import (RECORD_SCHEMA, artifact, artifact_valid, digest, evidence_file, external_path, inside, obj, read,
+from common import (RECORD_SCHEMA, Invalid, artifact, artifact_valid, digest, evidence_file, external_path, inside, obj, read,
                     require, sha, strings, task_valid, text, tool_gate)
 import knowledge
 import validation
@@ -31,11 +31,20 @@ def design_material(root, profile, task, report, completed_tasks=()):
     approvals = [read(inside(root, p)) for p in report['approvals']]
     history = [read(inside(root, p)) for p in report.get('design_history', [])]
     refs = [artifact(root, inside(root, p)) for p in report['runs']]
+    code = validation.source_digest(root, profile)
+    selected_refs = None
+    if any(row.get('mode') == 'combined' and row.get('code_digest') == code
+           and row.get('run_refs') != sorted(refs, key=lambda ref: (ref['path'], ref['sha256'])) for row in approvals):
+        try:
+            execution = validation.verify_runs(root, profile, task, report['runs'], live=False)
+            selected_refs = list({path: artifact(root, inside(root, path)) for path in execution['selected_runs'].values()}.values())
+        except (Invalid, OSError, ValueError, TypeError, KeyError):
+            pass  # Missing required execution never supplies an alternate approval binding.
     status = designs.approval_status(design, approvals, history=history,
                                      section_ids=task['section_ids'],
                                      completed_tasks=completed_tasks,
                                      changed_paths=validation.changed_paths(root, task, profile),
-                                     code_digest=validation.source_digest(root, profile), run_refs=refs)
+                                     code_digest=code, run_refs=refs, selected_run_refs=selected_refs)
     fingerprints = designs.fingerprints(design)['sections']
     selected = {key: fingerprints[key] for key in task['section_ids']}
     return design, approvals, status, selected
@@ -86,9 +95,9 @@ def review_policy(root, profile, task):
             'risk_checks': {risk: sorted(profile['risk_checks'][risk]) for risk in sorted(task['risks'])}}
 
 
-def check_review(root, profile, task, review, selected, design, status, execution, run_paths):
+def check_review_format(root, profile, task, review, selected, design):
     require(review.get('data_version') == RECORD_SCHEMA and review.get('kind') == 'review',
-            f'Expected a schema {RECORD_SCHEMA} code review; regenerate it with review-template')
+            f'Expected a schema {RECORD_SCHEMA} code review; regenerate and submit it with review')
     require(review.get('task_digest') == digest(task) and review.get('task_id') == task['id'], 'Review belongs to another task/version')
     require(review.get('source_digest') == validation.source_digest(root, profile), 'Review does not cover current source')
     require(review.get('sections') == selected, 'Review does not cover current approved sections')
@@ -96,30 +105,68 @@ def check_review(root, profile, task, review, selected, design, status, executio
     text(review.get('reviewer'))
     for label in ('standards', 'spec'):
         row = review.get(label)
-        passed(row, label)
+        require(isinstance(row, dict) and row.get('status') in ('passed', 'failed'), label + ' has not passed: conclusion must be passed or failed')
+        text(row.get('summary'))
         require(bool(row.get('evidence')), 'Review needs actual evidence')
         for ref in row['evidence']:
             evidence(root, profile, ref)
-    from contracts import independent
-    independent(design, review['reviewer'], 'Reviewer')
     require(review.get('risks') == task['risks'], 'Review must assess the current risks')
-    require(review.get('knowledge_conflicts_resolved') is True, 'Knowledge conflicts need review')
-    from contracts import reconcile, unresolved, issues
+    require(type(review.get('knowledge_conflicts_resolved')) is bool, 'Knowledge conflict disposition must be specified')
+    from contracts import reconcile, issues
     import issue_history
     issues(review.get('findings', []), [r['id'] for r in design['sections']])
     reconcile(design['issues'], review.get('findings', []))
     reconcile(issue_history.known(root, task['id']), review.get('findings', []))
-    require(not unresolved(review['findings'], status['required_sections'], 'acceptance'),
-            'Unresolved issue blocks business acceptance')
     assessed = set()
     for row in review.get('acceptance', []):
-        passed(row, 'Acceptance')
+        require(row.get('status') in ('passed', 'failed'), 'Acceptance conclusion must be passed or failed')
+        text(row.get('summary'))
         require(row['id'] not in assessed and bool(row.get('evidence')), 'Duplicate acceptance or missing evidence')
         for ref in row['evidence']:
             evidence(root, profile, ref)
-        check_observations(root, profile, design, row, execution, run_paths)
         assessed.add(row['id'])
     require(assessed == {r['id'] for r in task['acceptance']}, 'Acceptance coverage mismatch')
+
+
+def review_failures(review, required):
+    from contracts import unresolved
+    failed = [{'kind': key, 'id': key, 'reason': review[key]['summary']}
+              for key in ('standards', 'spec') if review[key]['status'] != 'passed']
+    failed += [{'kind': 'acceptance', 'id': row['id'], 'reason': row['summary']}
+               for row in review['acceptance'] if row['status'] != 'passed']
+    failed += [{'kind': 'issue', 'id': row['id'], 'reason': row['summary'], 'owner': row['owner'],
+                'affects': row['affects'], 'blocks': row['blocks']}
+               for row in unresolved(review['findings'], required, 'acceptance')]
+    if not review['knowledge_conflicts_resolved']:
+        failed.append({'kind': 'knowledge', 'id': 'knowledge_conflicts_resolved', 'reason': '知识冲突尚未处理'})
+    return failed
+
+
+class ReviewBlocked(Invalid):
+    error_code = 'review-not-passed'
+
+    def __init__(self, task, failures):
+        import shlex
+        self.review_failures = failures
+        self.next_action = ('修复所列问题后重跑检查：tw team run --task ' + shlex.quote(task['id'])
+                            + '；再逐项复核：tw team review --task ' + shlex.quote(task['id']))
+        names = {'standards': '规范 standards', 'spec': '需求 spec', 'acceptance': '验收', 'issue': '问题', 'knowledge': '知识'}
+        super().__init__('评审未通过：' + '；'.join(names[row['kind']] + ' ' + row['id'] + '：' + row['reason'] for row in failures))
+
+
+def require_review_passed(task, review, required):
+    failures = review_failures(review, required)
+    if failures:
+        raise ReviewBlocked(task, failures)
+
+
+def check_review(root, profile, task, review, selected, design, status, execution, run_paths):
+    check_review_format(root, profile, task, review, selected, design)
+    from contracts import independent
+    independent(design, review['reviewer'], 'Reviewer')
+    require_review_passed(task, review, status['required_sections'])
+    for row in review['acceptance']:
+        check_observations(root, profile, design, row, execution, run_paths)
 
 
 def verify(root, profile, task, report, phase='delivery', _seen=None, live=None):
@@ -167,12 +214,25 @@ def verify(root, profile, task, report, phase='delivery', _seen=None, live=None)
         completed_tasks.add(dependency['section'])
         dependency_materials += [artifact(root, dep_task_path), artifact(root, dep_report_path), *proof['materials']]
     design, approvals, status, selected = design_material(root, profile, task, report, completed_tasks)
+    review = read(inside(root, report['review']))
     if platform_state is not None:
         require(platform_state['design'] == design, 'Local design differs from the shared plan')
         require(all(a in platform_state['approvals'] for a in approvals), 'Approval has not been shared on the task')
     from contracts import unsourced
     missing = unsourced(task, design)
     require(not missing, 'Acceptance scenario needs confirmed business sources: ' + ', '.join(missing))
+    try:
+        check_review_format(root, profile, task, review, selected, design)
+    except Invalid as exc:
+        import shlex
+        incomplete = Invalid('Current approval/review materials are incomplete: ' + str(exc))
+        selected_task = '--task ' + shlex.quote(task['id'])
+        incomplete.next_action = '重跑检查并复核当前材料：tw team run ' + selected_task + '；tw team review ' + selected_task
+        raise incomplete from exc
+    else:
+        require_review_passed(task, review, status['required_sections'])
+        from contracts import independent
+        independent(design, review['reviewer'], 'Reviewer')
     require(status.get('local_review_valid') is True, 'Design coverage/history needs review: ' + design_problem(status))
     require(status.get('acceptance_ready') is True, 'Current design/code approval is missing: ' + design_problem(status))
     execution = validation.verify_runs(root, profile, task, report['runs'], live=live)
@@ -215,8 +275,21 @@ def verify(root, profile, task, report, phase='delivery', _seen=None, live=None)
                            'and handoff records, not regression automation (see automation_status); '
                            'not signed or exhaustive business proof'}
     if phase == 'delivery':
+        publication_verified = platform_state is None
+        authorization = report.get('close_authorization')
+        if authorization:
+            try:
+                obj(authorization, {'confirmed_by', 'reference'})
+                text(authorization['confirmed_by']); text(authorization['reference'])
+            except Invalid as exc:
+                import shlex
+                invalid = Invalid('关闭授权 close_authorization 不完整：' + str(exc))
+                invalid.error_code = 'close-authorization-incomplete'
+                invalid.next_action = ('在新报告副本中补齐 confirmed_by 和 reference，再核对：tw team verify --task '
+                                       + shlex.quote(task['id']) + ' --report <修正后的报告路径>')
+                raise invalid from exc
         require(bool(report.get('acceptance')),
-                '最终交付需要业务验收记录：先运行 verify --phase acceptance，再把产物路径写进交付报告的 acceptance')
+                '最终交付需要业务验收记录：先运行 tw team accept，再把产物路径写进交付报告的 acceptance')
         acceptance_path = inside(root, report['acceptance'])
         accepted = read(acceptance_path)
         require(accepted.get('data_version') == RECORD_SCHEMA and accepted.get('kind') == 'acceptance'
@@ -235,13 +308,16 @@ def verify(root, profile, task, report, phase='delivery', _seen=None, live=None)
                                    if inside(root, name, exists=False).is_file())
         if platform_state is not None:
             import summary
+            posted = platform_state.get('current')
+            published = bool(posted and posted.get('handoff_kind') in ('implementation', 'close') and not posted.get('remaining'))
             close = {'acceptance': artifact(root, acceptance_path), 'knowledge': completed,
-                     'summary': summary.render({**result, 'delivery_complete': True, 'closable': bool(report.get('close_authorization')),
+                     'summary': summary.render({**result, 'delivery_complete': True, 'closable': bool(report.get('close_authorization') and published),
                                                 'close_authorization': report.get('close_authorization', {}),
                                                 'knowledge_disposition': summary.disposition(completed)}, task, profile)}
             if report.get('close_authorization'):
                 close['close_authorization'] = report['close_authorization']
             current, note = coordination.closing(root, profile, task['id'], completed_tasks, close)
+            publication_verified = note is None
             from contracts import reconcile, unresolved
             reconcile(review['findings'], current.get('questions', []))
             require(not unresolved(current.get('questions', []), status['required_sections'], 'acceptance'),
@@ -253,11 +329,8 @@ def verify(root, profile, task, report, phase='delivery', _seen=None, live=None)
         requests = directory(root, task['id']).parent
         result['covered_requests'] = [artifact(root, path) for path in sorted(requests.glob('*/request.json'))
                                       if read(path).get('task_id') == task['id']]
-        authorization = report.get('close_authorization')
         if authorization:
-            obj(authorization, {'confirmed_by', 'reference'})
-            text(authorization['confirmed_by']); text(authorization['reference'])
-            result['closable'] = True
+            result['closable'] = publication_verified
             result['close_authorization'] = authorization
     import summary
     result['summary_markdown'] = summary.render({**result, 'knowledge_disposition': (

@@ -48,19 +48,19 @@ class TaskProgress(unittest.TestCase):
                 with self.assertRaisesRegex(Invalid, message):
                     accounts([{**good, **change}])
 
-    def test_prepare_asks_before_agent_login_and_records_the_grant(self):
+    def test_start_asks_before_agent_login_and_records_the_grant(self):
         self.declare_accounts()
-        code, prepared = self.cli('prepare', '--task', self.name('task'), '--design', self.name('design'))
+        code, prepared = self.cli('start', '--task', self.name('task'), '--design', self.name('design'))
         self.assertEqual(code, 0, prepared)
         context = json.loads((self.root / prepared['artifact']['path']).read_text())
         self.assertEqual(context['login_policy']['agent_after_authorization'], ['e2e-owner'])
         self.assertIn('shopify-partner', context['login_policy']['user_signs_in'])
         self.assertEqual(context['authorizations_needed'][0]['accounts'], ['e2e-owner'])
         self.assertIn('真实账号仍由你本人', context['next_action'])
-        code, refused = self.cli('prepare', '--task', self.name('task'), '--design', self.name('design'), '--grant', 'synthetic-login')
+        code, refused = self.cli('start', '--task', self.name('task'), '--design', self.name('design'), '--grant', 'synthetic-login')
         self.assertEqual(code, 1)
         self.assertIn('--confirmed-by', refused['problem'])
-        code, granted = self.cli('prepare', '--task', self.name('task'), '--design', self.name('design'),
+        code, granted = self.cli('start', '--task', self.name('task'), '--design', self.name('design'),
                                  '--grant', 'synthetic-login', '--confirmed-by', 'blur-yin')
         context = json.loads((self.root / granted['artifact']['path']).read_text())
         self.assertEqual(context['authorizations'][0]['confirmed_by'], 'blur-yin')
@@ -79,7 +79,7 @@ class TaskProgress(unittest.TestCase):
         ]
         for request_id, first_options, changed_options in cases:
             with self.subTest(option=request_id):
-                args = ['prepare', '--task', self.name('task'), '--design', self.name('design'),
+                args = ['start', '--task', self.name('task'), '--design', self.name('design'),
                         '--request-id', request_id]
                 code, original = self.cli(*args, *first_options)
                 self.assertEqual(code, 0, original)
@@ -92,7 +92,7 @@ class TaskProgress(unittest.TestCase):
                 self.assertEqual((self.root / original['artifact']['path']).read_bytes(), original_file)
 
     def test_status_lists_steps_and_the_next_exact_command(self):
-        code, prepared = self.cli('prepare', '--task', self.name('task'), '--design', self.name('design'))
+        code, prepared = self.cli('start', '--task', self.name('task'), '--design', self.name('design'))
         context = prepared['artifact']['path']
         code, status = self.cli('status', '--context', context)
         states = {row['id']: row['state'] for row in status['steps']}
@@ -100,14 +100,14 @@ class TaskProgress(unittest.TestCase):
         self.assertEqual(status['next_step']['id'], 'run')
         self.assertIn(f'run --root "$PROJECT" --context {context}', status['next_step']['next_command'])
         self.cli('run', '--context', context)
-        code, accepted = self.cli('verify', '--context', context, '--report', self.name('report'), '--phase', 'acceptance')
+        code, accepted = self.cli('accept', '--context', context, '--report', self.name('report'))
         self.assertEqual(code, 0, accepted)
         code, text = self.cli('status', '--context', context, '--format', 'text')
-        self.assertIn('[-] 生成并完成代码与验收评审（工具没有记录', text)
+        self.assertIn('[-] 提交代码与验收评审（工具没有记录', text)
         self.assertIn('[x] 业务验收', text)
         self.assertIn('下一步：交付报告写明知识处置', text)
-        self.assertIn('tw team delivery-template', text)
-        self.assertIn('--acceptance ' + accepted['artifact']['path'], text)
+        self.assertIn('tw team deliver', text)
+        self.assertIn(accepted['artifact']['path'], text)
         (self.root / 'app.py').write_text('def add(a, b):\n    return a + b  # changed\n')
         code, stale = self.cli('status', '--context', context)
         self.assertEqual({row['id']: row['state'] for row in stale['steps']}['acceptance'], 'stale')
@@ -138,8 +138,8 @@ class TaskProgress(unittest.TestCase):
         self.assertIn('run --root "$PROJECT" --task ' + self.name('task'), status['next_step']['next_command'])
 
     def test_status_marks_final_delivery_stale_after_source_changes(self):
-        code, accepted = self.cli('verify', '--task', self.name('task'), '--report', self.name('report'),
-                                  '--phase', 'acceptance', '--out', self.name('acceptance'))
+        code, accepted = self.cli('accept', '--task', self.name('task'), '--report', self.name('report'),
+                                  '--out', self.name('acceptance'))
         self.assertEqual(code, 0, accepted)
         self.report['acceptance'] = self.name('acceptance')
         self.report['knowledge'] = {'files': [], 'reason': 'No new reusable constraint'}
@@ -168,15 +168,16 @@ class TaskProgress(unittest.TestCase):
         self.assertEqual({row['id']: row['state'] for row in status['steps']}['run'], 'stale')
 
     def test_status_records_delivery_disposition_step(self):
-        code, accepted = self.cli('verify', '--task', self.name('task'), '--report', self.name('report'),
-                                  '--phase', 'acceptance', '--out', self.name('acceptance'))
+        code, accepted = self.cli('accept', '--task', self.name('task'), '--report', self.name('report'),
+                                  '--out', self.name('acceptance'))
         self.assertEqual(code, 0, accepted)
         code, drafted = self.cli('delivery-template', '--task', self.name('task'), '--design', self.name('design'),
                                  '--brief', self.name('brief'), '--review', self.name('review'))
         self.assertEqual(code, 0, drafted)
         code, status = self.cli('status', '--task', self.name('task'), '--design', self.name('design'))
         self.assertEqual(code, 0, status)
-        self.assertEqual({row['id']: row['state'] for row in status['steps']}['knowledge'], 'done')
+        self.assertEqual({row['id']: row['state'] for row in status['steps']}['knowledge'], 'pending')
+        self.assertIn('交付报告引用的材料已变化', next(row for row in status['steps'] if row['id'] == 'knowledge')['incomplete_reason'])
         (self.root / 'app.py').write_text('def add(a,b): return a+b+0\n')
         code, status = self.cli('status', '--task', self.name('task'), '--design', self.name('design'))
         self.assertEqual(code, 0, status)
@@ -188,7 +189,7 @@ class TaskProgress(unittest.TestCase):
         modified = {'ok': False, 'installed_ok': True, 'problems': ['scripts/tw_runtime/team/knowledge.py changed'],
                     'installation_problems': [], 'notes': []}
         with patch.dict(os.environ, {common.ALLOW_MODIFIED: ''}), patch.object(install, 'check_install', return_value=modified):
-            code, result = self.cli('verify', '--task', self.name('task'), '--report', self.name('report'), '--phase', 'acceptance')
+            code, result = self.cli('accept', '--task', self.name('task'), '--report', self.name('report'))
             self.assertEqual((code, result['error_code']), (1, 'tool-modified'))
             self.assertIn('scripts/tw_runtime/team/knowledge.py', result['problem'])
             self.assertIn('Reinstall', result['next_action'])
@@ -196,29 +197,29 @@ class TaskProgress(unittest.TestCase):
             self.assertEqual((code, project['error_code']), (1, 'tool-modified'))
 
     def test_acceptance_output_explains_a_re_evaluated_registration(self):
-        code, result = self.cli('verify', '--task', self.name('task'), '--report', self.name('report'), '--phase', 'acceptance')
+        code, result = self.cli('accept', '--task', self.name('task'), '--report', self.name('report'))
         self.assertEqual(code, 0, result)
         self.assertIn('summary_markdown', result)  # shown directly, not only in the artifact
         self.assertEqual(result['re_evaluated'], [])
 
     def test_rule_changes_during_a_task_are_visible(self):
-        code, prepared = self.cli('prepare', '--task', self.name('task'), '--design', self.name('design'))
+        code, prepared = self.cli('start', '--task', self.name('task'), '--design', self.name('design'))
         with patch.object(common, 'rules_digest', return_value='0' * 64):
             code, status = self.cli('status', '--context', prepared['artifact']['path'], '--format', 'text')
         self.assertIn('团队流程规则已更新', status)
 
     def test_metrics_count_requests_reruns_and_failures(self):
-        code, prepared = self.cli('prepare', '--task', self.name('task'), '--design', self.name('design'))
+        code, prepared = self.cli('start', '--task', self.name('task'), '--design', self.name('design'))
         context = prepared['artifact']['path']
         for _ in range(2):
             self.cli('run', '--context', context)
-        self.cli('verify', '--context', context, '--report', self.name('design'), '--phase', 'acceptance')
+        self.cli('accept', '--context', context, '--report', self.name('design'))
         code, result = self.cli('metrics', '--task', self.name('task'))
         self.assertEqual(code, 0, result)
         row = result['metrics'][0]
         self.assertEqual(row['commands']['run']['requests'], 2)
         self.assertEqual(row['checks']['unit'], {'runs': 2, 'passed': 2, 'reruns': 1})
-        self.assertEqual(row['commands']['verify:acceptance'], {**row['commands']['verify:acceptance'], 'requests': 1, 'failed': 1})
+        self.assertEqual(row['commands']['accept'], {**row['commands']['accept'], 'requests': 1, 'failed': 1})
         code, text = self.cli('metrics', '--task', self.name('task'), '--format', 'text')
         self.assertIn('检查 unit 运行 2 次（重跑 1 次）', text)
 

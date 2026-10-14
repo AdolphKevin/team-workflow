@@ -21,7 +21,7 @@ Use subagents and worktrees only when authorized and useful. Otherwise execute t
 
 ## Steps
 
-1. Read the spec and tickets to understand the task graph and parent business acceptance. For team work, run `prepare` or `resume` before the first source edit or implementer dispatch; read the actual readiness result. Carry unresolved issue IDs into every handoff.
+1. Read the spec and tickets to understand the task graph and parent business acceptance. For team work, run `start` before the first source edit or implementer dispatch; read the actual readiness result. Carry unresolved issue IDs into every handoff.
 
 2. (optional) Use an **exploration subagent** to conduct any exploration required by the tickets - relevant codebase files or external documentation. Ensure the exploration subagent can save files - it should save its markdown notes in a directory outside the repo, accessible by all future subagents. This lets **implementer subagents** focus on implementation rather than exploration.
 

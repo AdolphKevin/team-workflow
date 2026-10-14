@@ -65,7 +65,7 @@ class CloseNote(unittest.TestCase):
         self.report['close_authorization'] = {'confirmed_by': 'blur-yin', 'reference': 'Chat confirmation 2026-10-14'}
         result = delivery.verify(self.root, self.profile, self.task, self.report)
         self.assertTrue(result['delivery_complete'])
-        self.assertTrue(result['closable'])
+        self.assertFalse(result['closable'])  # Authorization is recorded; the note has not been published yet.
         note = result['close_note']
         record = note['record']
         self.assertEqual((record['handoff_kind'], record['creator'], record['owner'], record['remaining']),
@@ -83,6 +83,7 @@ class CloseNote(unittest.TestCase):
         self.assertTrue(continuation['closed'])
         again = delivery.verify(self.root, self.profile, self.task, self.report)
         self.assertTrue(again['delivery_complete'])
+        self.assertTrue(again['closable'])
         self.assertNotIn('close_note', again)
 
     def test_close_note_without_authorization_completes_delivery_but_not_closing(self):

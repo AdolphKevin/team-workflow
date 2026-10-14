@@ -18,7 +18,7 @@ npx skills list -g            # 核对来源与安装位置
 - 安装后运行 `python3 ~/.agents/skills/team-knowledge/scripts/tw.py version --check-install`，确认两个技能属于同一发行、文件未被改动。
 - 从旧版本迁移时，先卸载 `cs` 和 `cs-analysis`：`npx skills remove -g cs cs-analysis`。
 
-技能目录带有 `MANIFEST.json`，记录随发行的每个文件的指纹。已安装文件被修改、缺失或多出文件时，`tw team project` 与 `tw version --check-install` 会报告，团队流程的 `verify` 拒绝执行。不要直接修改 `~/.agents/skills/` 下的文件；发现工具缺陷时在本仓修复并发布新标签。修改本仓技能后运行 `python3 scripts/package.py --manifest` 重新生成清单，`scripts/check_release.py` 会拒绝过期的清单。
+技能目录带有 `MANIFEST.json`，记录随发行的每个文件的指纹。已安装文件被修改、缺失或多出文件时，`tw team project` 与 `tw version --check-install` 会报告，团队流程的 `accept` 和 `verify` 拒绝执行。不要直接修改 `~/.agents/skills/` 下的文件；发现工具缺陷时在本仓修复并发布新标签。修改本仓技能后运行 `python3 scripts/package.py --manifest` 重新生成清单，`scripts/check_release.py` 会拒绝过期的清单。
 
 ## 插件方式（可选）
 
@@ -39,6 +39,8 @@ codex plugin add team-workflow@team-workflow
 - **已有 `.codestable/` 或 `.team-workflow*` 的项目**：由代理按 team-knowledge 的迁移指南整理，用一个 PR 交给用户确认，不使用脚本。
 - **独立调用 MATT**：只需要 `.tw/` 知识。
 - **从 `team-workflow` 开始的任务**：还需要 `.tw/config.json` 中的团队字段，按[接入指南](../skills/team-workflow/references/onboarding.md)准备。实际命令见[工具约定](../skills/team-workflow/references/contracts.md)。
+
+接入后，简单任务按 `start → run → review --submit → deliver --reason <理由>` 完成，中间由独立评审人填写自动生成的 review.md。中等以上任务先用 `approval-draft --reviewer <姓名> --mode plan` 取得方案批准；要更新知识时先 accept，通过后写知识并 tw check，再 deliver。之后各命令用 `--task <身份>` 补齐记录材料，显式路径仍可使用。升级后用 `status --task <身份>` 核对过期材料与下一步，用各命令的 `--help` 查参数；细节见[交付步骤](../skills/team-workflow/references/team-delivery.md)。
 
 ## 版本
 

@@ -63,7 +63,7 @@ def draft(root, profile, task, design=None, siblings=(), reviewer=None):
         steps += ['Post the design comment on the design issue.',
                   'Post the approval request and wait for the named reviewer to confirm the listed sections.',
                   'After explicit confirmation, run approval-draft and post the approval record.']
-    steps.append('Run prepare --issue <URL> for each issue; implementation starts only when it reports implementation_ready.')
+    steps.append('Run tw team start --issue <URL> for each issue; implementation starts only when it reports implementation_ready.')
     return {'ok': True, 'kind': 'issue-adoption-draft', 'read_only': True, 'issues': rows, 'next_steps': steps,
             'publication': 'draft-only; post in this order after reading the current issue again',
             'summary': f'已为 {len(rows)} 个 Issue 生成接入草稿；工具没有修改 GitHub。'}

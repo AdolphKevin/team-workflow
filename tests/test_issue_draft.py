@@ -77,7 +77,7 @@ class IssueAdoption(unittest.TestCase):
         fixtures.write_config(self.root, self.profile)
         output = io.StringIO()
         with contextlib.redirect_stdout(output):
-            status = workflow.main(['resume', '--root', str(self.root), '--issue', self.url])
+            status = workflow.main(['start', '--root', str(self.root), '--issue', self.url])
         result = json.loads(output.getvalue())
         self.assertEqual((status, result['error_code']), (1, 'issue-not-adopted'))
         self.assertIn('issue-draft', result['next_action'])
@@ -88,7 +88,7 @@ class IssueAdoption(unittest.TestCase):
         fixtures.write_config(self.root, self.profile)
         output = io.StringIO()
         with contextlib.redirect_stdout(output):
-            code = workflow.main(['resume', '--root', str(self.root), '--issue', CHILD,
+            code = workflow.main(['start', '--root', str(self.root), '--issue', CHILD,
 ])
         result = json.loads(output.getvalue())
         self.assertEqual(code, 1, result)

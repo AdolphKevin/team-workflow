@@ -37,11 +37,11 @@ class EvidenceGuard(unittest.TestCase):
         log.write_text('ok\n')
         for path, allow, expected in [(binary, [], 'compiled executable'), (binary, ['--allow-large-evidence'], 'compiled executable')]:
             with self.subTest(allow=allow):
-                status, result = EvidenceCLI.cli(self, 'evidence', '--task', '.tw/local/task.json',
+                status, result = EvidenceCLI.cli(self, 'evidence',
                                                 '--path', str(path.relative_to(self.root)), *allow)
                 self.assertEqual(status, 1)
                 self.assertIn(expected, result['problem'])
-        status, result = EvidenceCLI.cli(self, 'evidence', '--task', '.tw/local/task.json', '--path', '.tw/local/stdout.txt')
+        status, result = EvidenceCLI.cli(self, 'evidence', '--path', '.tw/local/stdout.txt')
         self.assertEqual(status, 0)
         self.assertEqual(result['artifacts'][0]['path'], '.tw/local/stdout.txt')
 
