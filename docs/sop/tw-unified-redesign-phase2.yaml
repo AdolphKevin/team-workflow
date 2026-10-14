@@ -3,11 +3,12 @@
 # 预期结果只依据已批准的重构方案，不依据当前实现的输出。
 # 版本 2（2026-10-14）：按批次 0 第一轮提出的场景问题修订 SOP-02-P01（Q1）、SOP-04-N02（Q2）；
 # 按方案 v4.1 修订的 T1 改写 SOP-05。
+# 版本 3（2026-10-15）：按批次 0 第二轮的场景问题 Q1 改正 SOP-04-N02 的第二项（移除输入后先建立新基线）。
 
 metadata:
   requirement: "team-workflow 与 CS 合并重构 · 阶段 2 合并与团队衔接"
   batch: "tw-unified-redesign-phase2"
-  version: 2
+  version: 3
   owner: "AdolphKevin"
   sources:
     - ref: "docs/proposals/2026-10-14-unified-redesign.md I 节阶段 2、T1–T6、L1–L2、M5"
@@ -350,9 +351,11 @@ sops:
         steps:
           - "修改该知识文件并提交"
           - "运行 tw team verify"
+          - "从 inputs 中去掉该文件，重新运行检查建立新基线，并按新运行更新批准与评审"
+          - "修改另一个未声明为输入的知识文件并提交，再运行 tw team verify"
         expected:
-          - "按内容绑定的检查结果过期，核查拒绝并指出需要重跑的检查"
-          - "从 inputs 中去掉该文件后，再修改其他知识文件，原结果不受影响"
+          - "第一次核查拒绝：按内容绑定的检查结果过期，并指出需要重跑的检查"
+          - "第二次核查采用新基线的结果，不报告执行过期，不要求重跑"
         forbidden_effects: []
         evidence_hints: ["verify 原始输出"]
 
