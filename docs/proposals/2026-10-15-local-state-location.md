@@ -1,3 +1,11 @@
+---
+design: "D-local-state"
+task: "https://github.com/AdolphKevin/team-workflow/issues/5"
+revision: 1
+assessment: {"complexity":"medium","risks":["public-contract"],"effort":"约 1 代理日","drivers":["改动 tw 读取共享仓映射的查找顺序，影响所有项目","新增已提交内容的引用检查"],"uncertainties":[],"required_skills":["Python","git worktree"]}
+roles: {"design_owner":"Claude","implementation_owner":"Codex","acceptance_owner":"AdolphKevin"}
+---
+
 # 本机状态的边界方案
 
 > 状态：草案，待批准 · 日期：2026-10-15 · 方案负责人：Claude
@@ -14,6 +22,7 @@
 | --- | --- | --- | --- |
 
 ## 0 摘要
+<!-- tw-section id=scope-global type=global-scope -->
 
 本机状态继续放在 `.tw/local/`，位置不变，只修正四条边界：
 
@@ -24,7 +33,15 @@
 
 已有项目不需要迁移。是否把映射提升到用户级，由使用的代理按项目情况决定。
 
+- 需求级验收：A1、A7
+
+| 仓库 | 入口 | 操作 | 产生方 | 使用方 | 提交负责方 | 验收 |
+| --- | --- | --- | --- | --- | --- | --- |
+| self | tw brief、tw team start/status 的共享仓解析 | 读取共享仓映射 | 成员或代理编辑的映射文件 | tw 运行时 | team-workflow | A1、A2、A5、A7 |
+| self | tw check、发行检查、tw audit | 检查已提交内容的本机引用；报告本机目录用量 | 知识条目与 docs/ | 评审人与成员 | team-workflow | A3、A4、A6 |
+
 ## 1 问题
+<!-- tw-section id=problem type=scope depends=scope-global -->
 
 | 数据 | 实际重要性 | 现在的问题 |
 | --- | --- | --- |
@@ -41,12 +58,14 @@
 清理逻辑的复杂度来自“交付前的材料必须保护”，与目录放在哪里无关，本方案不改动它。
 
 ## 2 设计
+<!-- tw-section id=design type=scope depends=scope-global -->
 
 ### 2.1 位置不变
 
 `.tw/local/` 仍是唯一的项目内本机目录，按检出目录隔离，由嵌套的 `.tw/.gitignore` 忽略。项目中只有 `.tw/` 一个工具目录；`docs/` 等原文由项目自己拥有，`.tw/` 只登记引用。
 
 ### 2.2 共享仓映射分两层
+<!-- tw-section id=mapping type=interface depends=scope-global -->
 
 - 用户级文件：`${XDG_CONFIG_HOME:-~/.config}/tw/repositories.json`，按 `config.json` 的 `project.id` 分组，每组的内容与现在的 `.tw/local/repositories.json` 相同：
 
@@ -61,17 +80,20 @@
 - live-chat 的 worktree 依赖工具写的是检出目录内的文件，不受影响。
 
 ### 2.3 已提交内容不引用本机材料
+<!-- tw-section id=references type=scope depends=scope-global -->
 
 - `tw check` 检查知识条目和已登记原文，发行检查另外扫描本仓 `docs/`：路径以 `.tw/local/` 开头、且第一级不是工具管理的名称（`tasks`、`batches`、`imports`、`validation-active`、`agents`、`cache`、`repositories.json`）时报错。
 - 说明布局的写法（如 `.tw/local/tasks/<身份>/`）不受影响。
 - `docs/validation.md` 中三处引用改为写明结论和关键数据，并注明原件只保留在执行者本机、未提交。
 
 ### 2.4 不归工具管理的目录
+<!-- tw-section id=audit type=scope depends=scope-global -->
 
 - `tw audit` 的本机用量报告增加“不归工具管理”的条目及大小，复用 `team cleanup` 的分类。
 - 成员说明写明：试点和手工输出放在仓库外（如系统临时目录），不放进 `.tw/local/`。
 
 ### 2.5 删除后果写进成员说明
+<!-- tw-section id=guide type=scope depends=scope-global -->
 
 在 `docs/member-guide.md` 中写明：
 
@@ -81,12 +103,14 @@
 - 任务只要对别人重要，就开 Issue。方案、批准、交接和交付结论以草稿形式发布到 Issue 或变更请求上，本机材料丢失后仍能找回；没有 Issue 的离线任务只能在本机恢复。
 
 ## 3 并行开发的影响
+<!-- tw-section id=parallel type=scope depends=scope-global -->
 
 - `.tw/local/` 本来就按检出目录隔离，位置不变，隔离方式也不变。
 - 新增的用户级映射文件工具只读，多个 worktree 同时运行时只读不写，不产生冲突。
 - 入库文件的冲突（同一条知识、`config.json`、`docs/validation.md`）与现在相同，由 PR 评审合并解决。
 
 ## 4 决定
+<!-- tw-section id=decisions type=scope depends=scope-global -->
 
 | 编号 | 问题 | 结论 | 状态 |
 | --- | --- | --- | --- |
@@ -96,18 +120,103 @@
 | D4 | 排期 | agent-py 推广之前完成 | 已确认（2026-10-15） |
 
 ## 5 验收标准
+<!-- tw-section id=verification type=scope depends=scope-global -->
 
-| 编号 | 内容 | 方式 |
-| --- | --- | --- |
-| A1 | 同一项目的两个 worktree：用户级把 `common` 映射到 X，worktree A 的 `.tw/local/repositories.json` 覆盖为 Y，B 没有覆盖。A 解析到 Y，B 解析到 X；A 的任务材料在 B 的 `status` 中不可见 | 自动测试，先写失败测试 |
-| A2 | 查找顺序为命令行 > 检出目录 > 用户级，按别名逐项覆盖；用户级文件格式错误时报错并指出文件；都没有时提示两层文件的位置 | 自动测试 |
-| A3 | 知识条目、已登记原文或本仓 `docs/` 引用 `.tw/local/batch0/x` 时报错；引用 `.tw/local/tasks/<身份>/` 时不报错 | 自动测试 |
-| A4 | `tw audit` 列出不归工具管理的目录及大小 | 自动测试 |
-| A5 | 没有用户级文件的已有项目，行为与现在完全相同 | 现有测试不改动即通过 |
-| A6 | `python3 scripts/test.py`、`python3 scripts/check_release.py`、`tw check` 全部通过 | 实际运行 |
-| A7 | 在一个声明了 `shared` 的已迁移项目中，只配置用户级映射，新建 worktree 后直接运行 `tw brief` 和 `tw team start`，共享仓解析正确 | 由未参与实现的代理或用户独立验收 |
+每项验收都写明角色、步骤、预期与反例；A1 与 A7 覆盖完整业务路径，A7 由未参与实现的人执行。
+
+### A1 两个 worktree 分别解析共享仓
+<!-- tw-section id=A1 type=acceptance -->
+同一项目的两个 worktree：用户级把 common 映射到 X，worktree A 的 .tw/local/repositories.json 覆盖为 Y，B 没有覆盖；A 解析到 Y，B 解析到 X；A 的任务材料在 B 的 status 中不可见。
+
+- 角色：在多个 worktree 并行开发的成员
+- 初始状态：用户级映射文件已把 common 指向 X；worktree A 有本机覆盖 Y，worktree B 没有
+- 步骤：在 A 运行 tw brief 与 tw team start；在 B 运行 tw brief 与 tw team status
+- 预期：A 解析到 Y，B 解析到 X；B 的 status 看不到 A 的任务材料
+- 反例：B 误用 A 的覆盖；A 的任务材料出现在 B
+- 依据：位置 docs/proposals/2026-10-15-local-state-location.md；版本 v2；确认人 AdolphKevin
+- 检查：unit
+- 验证：自动；层级 journey；入口 tw brief、tw team start、tw team status；环境 临时 git 仓库与两个 worktree；替身 无；隔离 isolated；隔离依据 无；用例 无
+
+### A2 映射查找顺序与错误提示
+<!-- tw-section id=A2 type=acceptance -->
+查找顺序为命令行 > 检出目录 > 用户级，按别名逐项覆盖；用户级文件格式错误时报错并指出文件；都没有时提示两层文件的位置。
+
+- 角色：配置共享仓的成员
+- 初始状态：三层映射分别提供不同别名与重叠别名
+- 步骤：运行带 --repository 的命令；删掉检出目录覆盖再运行；把用户级文件写坏再运行
+- 预期：同名别名按优先级取值、其余别名逐项合并；坏文件报错并给出路径；缺失时提示两个位置
+- 反例：整份替换而非逐项覆盖；坏文件被静默忽略
+- 依据：位置 docs/proposals/2026-10-15-local-state-location.md；版本 v2；确认人 AdolphKevin
+- 检查：unit
+- 验证：自动；层级 unit；入口 project.mapping；环境 临时目录；替身 无；隔离 isolated；隔离依据 无；用例 无
+
+### A3 已提交内容不引用本机材料
+<!-- tw-section id=A3 type=acceptance -->
+知识条目、已登记原文或本仓 docs/ 引用 .tw/local/batch0/x 时报错；引用 .tw/local/tasks/<身份>/ 这类布局说明时不报错。
+
+- 角色：写知识或文档的成员
+- 初始状态：条目与 docs 中分别出现具体本机材料引用和布局说明
+- 步骤：运行 tw check；运行发行检查
+- 预期：具体材料引用报错并指出文件；布局说明不报错
+- 反例：布局说明被误报；docs/ 中的死链未被发现
+- 依据：位置 docs/proposals/2026-10-15-local-state-location.md；版本 v2；确认人 AdolphKevin
+- 检查：unit、release
+- 验证：自动；层级 unit；入口 tw check、scripts/check_release.py；环境 临时仓库与本仓；替身 无；隔离 isolated；隔离依据 无；用例 无
+
+### A4 列出不归工具管理的本机目录
+<!-- tw-section id=A4 type=acceptance -->
+tw audit 列出 .tw/local/ 下不归工具管理的目录及大小。
+
+- 角色：清理本机空间的成员
+- 初始状态：.tw/local/ 下有工具目录和手工目录
+- 步骤：运行 tw audit
+- 预期：手工目录及大小单独列出，工具目录不在其中
+- 反例：工具目录被列为不归管理
+- 依据：位置 docs/proposals/2026-10-15-local-state-location.md；版本 v2；确认人 AdolphKevin
+- 检查：unit
+- 验证：自动；层级 unit；入口 tw audit；环境 临时仓库；替身 无；隔离 isolated；隔离依据 无；用例 无
+
+### A5 没有用户级文件时行为不变
+<!-- tw-section id=A5 type=acceptance -->
+没有用户级文件的已有项目，行为与现在完全相同；现有测试不改动即通过。
+
+- 角色：未配置用户级文件的已有项目
+- 初始状态：只有 .tw/local/repositories.json
+- 步骤：运行全量测试
+- 预期：现有测试不改动全部通过
+- 反例：现有断言需要修改才能通过
+- 依据：位置 docs/proposals/2026-10-15-local-state-location.md；版本 v2；确认人 AdolphKevin
+- 检查：unit
+- 验证：自动；层级 unit；入口 scripts/test.py；环境 本仓；替身 无；隔离 isolated；隔离依据 无；用例 无
+
+### A6 全量检查通过
+<!-- tw-section id=A6 type=acceptance -->
+python3 scripts/test.py、python3 scripts/check_release.py、tw check 全部通过。
+
+- 角色：交付者
+- 初始状态：实现完成
+- 步骤：运行全量测试、发行检查与 tw check
+- 预期：三项全部通过
+- 反例：任何一项失败
+- 依据：位置 docs/proposals/2026-10-15-local-state-location.md；版本 v2；确认人 AdolphKevin
+- 检查：unit、release
+- 验证：自动；层级 unit；入口 scripts/test.py、scripts/check_release.py、tw check；环境 本仓；替身 无；隔离 isolated；隔离依据 无；用例 无
+
+### A7 新 worktree 只配用户级映射即可使用共享仓
+<!-- tw-section id=A7 type=acceptance -->
+在一个声明了 shared 的已迁移项目中，只配置用户级映射，新建 worktree 后直接运行 tw brief 和 tw team start，共享仓解析正确。
+
+- 角色：未参与实现的验收者
+- 初始状态：已迁移项目（声明了 shared），用户级映射已配置，新 worktree 中没有 .tw/local/repositories.json
+- 步骤：新建 worktree；运行 tw brief 与 tw team start；核对共享仓的检出目录与 HEAD
+- 预期：共享仓解析到用户级映射的目录，无需在 worktree 中再配置
+- 反例：新 worktree 提示缺少映射；解析到错误目录
+- 依据：位置 docs/proposals/2026-10-15-local-state-location.md；版本 v2；确认人 AdolphKevin
+- 检查：无
+- 验证：人工；层级 manual；入口 tw brief、tw team start；环境 真实已迁移项目的新 worktree；替身 无；隔离 unresolved；隔离依据 无；用例 无
 
 ## 6 影响范围
+<!-- tw-section id=impact type=scope depends=scope-global -->
 
 - 运行时：`project.py`、`team/common.py`（合并映射读取）、`check.py`、`audit.py`、`cli.py` 的参数说明。
 - 发行检查：`scripts/check_release.py` 扫描 `docs/`。
@@ -116,7 +225,35 @@
 - 外部：无。
 - 知识：批准后改写 `.tw/decisions/2026-10-14-one-repository-one-runtime.md`，补充用户级映射层，并把第 7 节的做法记入“放弃过的做法”。
 
+### T1 两层共享仓映射
+<!-- tw-section id=T1 type=task depends=mapping -->
+
+实现用户级映射与查找顺序，合并两处读取，补 A1、A2 测试并保持 A5。
+
+- 验收：A1、A2、A5、A7
+- 范围：skills/team-knowledge/scripts/tw_runtime/project.py、skills/team-knowledge/scripts/tw_runtime/team/common.py、skills/team-knowledge/scripts/tw_runtime/cli.py、tests
+- 前置任务：无
+
+### T2 已提交内容的本机引用检查
+<!-- tw-section id=T2 type=task depends=references -->
+
+tw check 与发行检查报告具体本机材料引用；改写 docs/validation.md 中引用本机材料的地方。
+
+- 验收：A3、A6
+- 范围：skills/team-knowledge/scripts/tw_runtime/check.py、scripts/check_release.py、docs/validation.md、tests
+- 前置任务：无
+
+### T3 audit 用量、成员说明与知识
+<!-- tw-section id=T3 type=task depends=audit,guide -->
+
+tw audit 列出不归工具管理的目录；更新成员说明、设计说明与相关参考，改写一库一运行时的决策，登记本方案与变更说明。
+
+- 验收：A4、A6
+- 范围：skills/team-knowledge/scripts/tw_runtime/audit.py、docs/member-guide.md、docs/design.md、docs/proposals/2026-10-15-local-state-location.md、skills/team-knowledge/references、.tw/decisions、CHANGELOG.md、skills/team-knowledge/MANIFEST.json、skills/team-workflow/MANIFEST.json、tests
+- 前置任务：无
+
 ## 7 放弃过的做法
+<!-- tw-section id=abandoned type=scope depends=scope-global -->
 
 - **本机状态移到 `git rev-parse --git-path tw`，记录中的路径改用 `local:` 前缀**（v1）
   - 好处只有两点：`git clean -fdx` 不会删除，编辑器和搜索看不到。
