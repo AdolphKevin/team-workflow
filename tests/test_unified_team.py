@@ -289,6 +289,34 @@ class UnifiedTeam(unittest.TestCase):
             with self.subTest(changes=changes), self.assertRaisesRegex(Invalid, label):
                 load_profile(self.root)
 
+    def test_project_checks_external_repository_identities_against_local_checkouts(self):
+        # Real case: core's migrated config named external repositories as owner/repo, while
+        # identities are host/path since the platform-neutral change. project reported ok and
+        # start failed later with "Local checkout identity differs".
+        import tempfile
+        dependency = Path(tempfile.mkdtemp()) / 'common'
+        dependency.mkdir()
+        subprocess.run(['git', '-C', str(dependency), 'init', '-q'], check=True)
+        subprocess.run(['git', '-C', str(dependency), 'remote', 'add', 'origin',
+                        'https://github.com/example/common.git'], check=True)
+        config = json.loads((self.root / '.tw/config.json').read_text())
+        home = str(self.root / '.tw/local/empty-home')
+        for identity, mapped, ok in (('example/common', True, False), ('github.com/example/common', True, True),
+                                     ('github.com/example/common', False, True)):
+            with self.subTest(identity=identity, mapped=mapped):
+                config['external_inputs'] = {'common': {'kind': 'repository', 'repository': identity, 'role': 'build'}}
+                write(self.root / '.tw/config.json', config)
+                write(self.root / '.tw/local/repositories.json',
+                      {'repositories': {identity: str(dependency)} if mapped else {}})
+                code, result = self.command('project', '--home', home)
+                self.assertEqual(code == 0, ok, result)
+                if not ok:
+                    problem = ' '.join(result['config']['errors'])
+                    self.assertIn('example/common', problem)
+                    self.assertIn('github.com/example/common', problem)
+                if not mapped:
+                    self.assertIn('common', ' '.join(result['warnings']))
+
     def test_project_reports_config_check_errors_and_shared_installation(self):
         (self.root / '.tw/overview.md').write_text('# 缺少文件头\n')
         code, result = self.command('project', '--home', str(self.root / '.tw/local/empty-home'))

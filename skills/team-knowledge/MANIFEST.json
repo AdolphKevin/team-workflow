@@ -28,7 +28,7 @@
     "scripts/tw_runtime/team/artifacts.py": "8ddab99d9d9ce17b67a1be5bf86d001da35240a33f47ddce2ce5222b0f8cc71d",
     "scripts/tw_runtime/team/checklist.py": "9f838531e077ef51f3a4609cadf73cafb9c41589eef5b0d98454c44926ff219f",
     "scripts/tw_runtime/team/cleanup.py": "b66a26786b1ee80fad0f38b10ceb53e4d217c589393f0054da4a3fb25c80623d",
-    "scripts/tw_runtime/team/commands.py": "4359e6d6b39c722f301020a6c2417590a1df25d72ef96492286974492e072db8",
+    "scripts/tw_runtime/team/commands.py": "bcc76f99295730460574bc71f80103e8faac5f0cf174981d5978470765a9086e",
     "scripts/tw_runtime/team/common.py": "5662b80c54ec3a394674aa4f7be99331ad9391e9ad69cc5c0d911d023a8ba393",
     "scripts/tw_runtime/team/contracts.py": "5233f89c5ccc6a58da08cb031c820a03560870a916a797d8cd32016fad355a09",
     "scripts/tw_runtime/team/coordination.py": "c8f2cee5b0dd4a65222bb2e6bf6608c8ae86764e42f260fb60b85a7b4d0c1c90",
