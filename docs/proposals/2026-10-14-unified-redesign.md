@@ -22,6 +22,7 @@
 | 2026-10-14 | AdolphKevin | v4.2：T7 提前，阶段 3–5 在 tw 彻底完成后进行 | 会话中指示“流程验证没问题后，把流程简化这一步先提前。阶段 3，4，5 要在 tw 彻底完成后再去做” |
 | 2026-10-15 | AdolphKevin | T7 [流程简化方案](2026-10-15-process-simplification.md) 全文及其 D1–D4 | 会话中确认“可以” |
 | 2026-10-15 | AdolphKevin | 阶段 3 试点后、agent-py 迁移前：brief 改为来源摘要、关联双向扩展、按守护测试路径取用，迁移指南准备步骤补环境确认；改动用未参与调整的真实任务回放验证 | 会话中答复“agent-py 迁移前，先做这两项改动” |
+| 2026-10-15 | AdolphKevin | [Issue 与变更请求承载流程](2026-10-15-issue-and-change-request-flow.md) 全文及 D1–D5：工具不内置平台代码，平台读取由项目平台脚本完成 | 会话中答复“D1-D5 按建议批准” |
 
 实施分支：`feature/unified-redesign`。按 I 节分阶段进行，每个阶段的验收证据记录在 `docs/validation.md`。
 
