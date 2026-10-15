@@ -1,7 +1,7 @@
 ---
 design: "D-local-state"
 task: "https://github.com/AdolphKevin/team-workflow/issues/5"
-revision: 1
+revision: 2
 assessment: {"complexity":"medium","risks":["public-contract"],"effort":"约 1 代理日","drivers":["改动 tw 读取共享仓映射的查找顺序，影响所有项目","新增已提交内容的引用检查"],"uncertainties":[],"required_skills":["Python","git worktree"]}
 roles: {"design_owner":"Claude","implementation_owner":"Codex","acceptance_owner":"AdolphKevin"}
 ---
@@ -13,6 +13,7 @@ roles: {"design_owner":"Claude","implementation_owner":"Codex","acceptance_owner
 > 前置：[合并重构方案](2026-10-14-unified-redesign.md) v4.2 的 L1、L2、T3 节，[以 Issue 和变更请求承载流程](2026-10-15-issue-and-change-request-flow.md) v3。
 >
 > - v1 → v2：撤回“状态移到 `git rev-parse --git-path tw`”。本机状态留在 `.tw/local/`，改为修正边界；原做法见第 7 节。
+> - 方案第 2 版（实施中）：第 1 节与 A3 中的示例路径改为不直接写出完整的本机路径，避免被本方案新增的引用检查误报；含义不变。
 >
 > 本方案不改入库知识、三道门和执行绑定的语义。
 
@@ -53,7 +54,7 @@ roles: {"design_owner":"Claude","implementation_owner":"Codex","acceptance_owner
 另外两个现象：
 
 - 被忽略的目录被当成杂物堆。本仓 33MiB 中大部分是 `team cleanup` 列为“不归工具管理”的手工试点目录。
-- 已提交的 `docs/validation.md` 引用了 `.tw/local/batch*/` 和 `.tw/local/migration/`，别人检出后都是死链，违反“一个事实只有一个正文归属”（P5）。
+- 已提交的 `docs/validation.md` 引用了 `.tw/local/` 下的旧批次目录（`batch*`）和迁移目录（`migration`），别人检出后都是死链，违反“一个事实只有一个正文归属”（P5）。
 
 清理逻辑的复杂度来自“交付前的材料必须保护”，与目录放在哪里无关，本方案不改动它。
 
@@ -152,7 +153,7 @@ roles: {"design_owner":"Claude","implementation_owner":"Codex","acceptance_owner
 
 ### A3 已提交内容不引用本机材料
 <!-- tw-section id=A3 type=acceptance -->
-知识条目、已登记原文或本仓 docs/ 引用 .tw/local/batch0/x 时报错；引用 .tw/local/tasks/<身份>/ 这类布局说明时不报错。
+知识条目、已登记原文或本仓 docs/ 引用 `.tw/local/` 下的 `batch0/x` 时报错；引用 .tw/local/tasks/<身份>/ 这类布局说明时不报错。
 
 - 角色：写知识或文档的成员
 - 初始状态：条目与 docs 中分别出现具体本机材料引用和布局说明
