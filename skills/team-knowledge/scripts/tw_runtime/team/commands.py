@@ -760,16 +760,48 @@ def _status(args, root, profile, task, platform=None):
     return {**value, 'summary': summary, 'next_action': next_action}
 
 
+def external_repository_problems(root, profile):
+    """Resolve declared repository inputs now, so a wrong identity is not first found by start or run."""
+    from common import location_settings
+    from portable import repository_id
+    errors, warnings = [], []
+    try:
+        mapped = location_settings(root)['repositories']
+    except Invalid as exc:
+        return [str(exc)], []
+    for name, item in sorted(profile.get('external_inputs', {}).items()):
+        if item.get('kind') != 'repository':
+            continue
+        identity = item['repository']
+        if identity not in mapped:
+            warnings.append(f'external_inputs.{name}（{identity}）没有本机映射；需要它的 start、run 会失败')
+            continue
+        path = (root / Path(mapped[identity]).expanduser()).resolve()
+        try:
+            actual = repository_id(path)
+        except Invalid as exc:
+            errors.append(f'external_inputs.{name}：本机路径 {path} 无法确定仓库身份：{exc}')
+            continue
+        if actual != identity:
+            errors.append(f'external_inputs.{name} 写的是 {identity}，本机检出 {path} 的身份是 {actual}；'
+                          f'请把 .tw/config.json 中的 repository 和本机映射的键改为 {actual}')
+    return errors, warnings
+
+
 def project_report(root, home=None):
     from common import ALLOW_MODIFIED
     from tw_runtime import check, install
     from tw_runtime.project import Project
     import os
-    config_errors = []
+    config_errors, input_warnings = [], []
     try:
-        load_profile(root)
+        profile = load_profile(root)
     except (Invalid, OSError, ValueError) as exc:
         config_errors.append(str(exc))
+        profile = None
+    if profile is not None:
+        problems, input_warnings = external_repository_problems(root, profile)
+        config_errors += problems
     checked = check.run(Project(root, require_config=False))
     installed = install.check_install(home, require_team=True)
     override = os.environ.get(ALLOW_MODIFIED) == '1'
@@ -778,7 +810,7 @@ def project_report(root, home=None):
               'config': {'ok': not config_errors, 'errors': config_errors},
               'knowledge': {'errors': len(checked['errors']), 'check': checked},
               'installation': installed, 'tool': {'override': override},
-              'warnings': installed['installation_problems'],
+              'warnings': input_warnings + installed['installation_problems'],
               'summary': '项目配置、知识结构与安装已核对。' + (
                   f'另有 {len(installed["installation_problems"])} 个安装提示，见 warnings。' if installed['installation_problems'] else '')}
     if not installed['ok'] and not override:
