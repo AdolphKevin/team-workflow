@@ -106,4 +106,23 @@ def publication(root, path, design):
     raw = result.stdout.decode('utf-8')
     reference = {'id': design['id'], 'revision': design['revision'], 'repository': repository_id(checkout),
                  'path': name, 'commit': revision, 'sha256': hashlib.sha256(result.stdout).hexdigest()}
-    return reference, raw
+    return reference, display(raw, design, reference)
+
+
+COMPLEXITY = {'simple': '简单', 'medium': '中等', 'complex': '复杂'}
+
+
+def display(raw, design, reference):
+    """The pull request shows the original body; front matter data becomes readable lines, never JSON."""
+    body = raw.split('\n---\n', 1)[1].lstrip('\n') if raw.startswith('---\n') else raw
+    assessment, roles = design['assessment'], design['roles']
+    joined = lambda values: '、'.join(values) or '无'
+    header = [
+        f"> 方案 {design['id']} · 第 {design['revision']} 版 · 原文 `{reference['path']}`（提交 {reference['commit'][:7]}）",
+        f"> 复杂度：{COMPLEXITY.get(assessment['complexity'], assessment['complexity'])} · 风险：{joined(assessment['risks'])}"
+        f" · 工作量：{assessment['effort']}",
+        f"> 评估依据：{joined(assessment['drivers'])}",
+        f"> 方案负责人：{roles['design_owner']} · 实施负责人：{roles['implementation_owner'] or '待定'}"
+        f" · 验收负责人：{roles['acceptance_owner']}",
+    ]
+    return '\n'.join(header) + '\n\n' + body

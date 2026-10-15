@@ -328,7 +328,8 @@ def load(url, issue=None, root=None):
     descriptions = [item for item in design_issue['comments_data']
                     if item.get('kind') == 'change']
     warnings = (['变更请求描述与最新发布的方案原文不一致，请更新展示内容。']
-                if latest and descriptions and descriptions[-1].get('body', '') != latest['markdown'] else [])
+                if latest and descriptions and descriptions[-1].get('body', '')
+                != design_files.display(latest['markdown'], latest['record']['design'], latest['source']) else [])
     return {'data_version': 1, 'kind': 'platform-task', 'ok': not gaps, 'issue': url,
             'assurance': 'continuation-only', 'delivery': 'not-evaluated',
             'known_issues': list(known.values()), 'warnings': warnings,
