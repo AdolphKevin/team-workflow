@@ -100,20 +100,15 @@ class PlatformReview(unittest.TestCase):
         self.assertEqual(self.current()['review'], imported)
         self.assertNotIn('review', [row['step'] for row in again['steps']])
 
-    def test_platform_identity_requires_change_and_a_different_author(self):
+    def test_platform_review_by_the_change_author_account_is_accepted_and_recorded(self):
+        # Only the reviewer name is checked against the implementation owner; platform accounts are recorded.
         source = self.prepare()
-        self.post(source, author='implementer-account')
-        code, refused = self.command('review', '--task', self.url, '--from-platform')
-        self.assertEqual(code, 1, refused)
-        self.assertIn('平台评审作者不能是变更请求作者', refused['problem'])
-        self.assertIsNone(self.current()['review'])
-        self.platform['items'][-1]['author'] = 'reviewer-account'
         self.platform['items'][1]['kind'] = 'comment'
-        self.response()
-        code, refused = self.command('review', '--task', self.url, '--from-platform')
-        self.assertEqual(code, 1, refused)
-        self.assertIn('无法核对平台身份', refused['problem'])
-        self.assertIsNone(self.current()['review'])
+        item = self.post(source, author='implementer-account')
+        code, submitted = self.command('review', '--task', self.url, '--from-platform')
+        self.assertEqual(code, 0, submitted)
+        review = read(self.root / self.current()['review']['path'])
+        self.assertEqual((review['platform_author'], review['platform_url']), ('implementer-account', item['url']))
 
     def test_platform_entry_cannot_be_mixed_with_a_local_file_or_submit(self):
         source = self.prepare()

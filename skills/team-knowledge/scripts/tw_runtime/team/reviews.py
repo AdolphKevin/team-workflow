@@ -51,14 +51,6 @@ def source_path(args, root, task_id):
     return (root / path).resolve() if not path.is_absolute() else path.resolve()
 
 
-def platform_identity(value, item):
-    changes = [row for row in value['items'] if row['kind'] == 'change']
-    if not changes:
-        raise ReviewError('平台身份', 1, '缺少 change 条目，无法核对平台身份；请让项目平台脚本包含变更请求描述。')
-    if any(item['author'] == row['author'] for row in changes):
-        raise ReviewError('平台身份', 1, '平台评审作者不能是变更请求作者；请由未参与实施的人提交评审。')
-
-
 def platform_source(root, task_id):
     from tw_runtime.team import platform_script
     value = platform_script.task(root, task_id)
@@ -66,7 +58,6 @@ def platform_source(root, task_id):
     if not rows:
         raise ReviewError('平台评审', 1, '没有含评审绑定区的 review 条目；请将填好的完整 Markdown 作为变更请求评审提交。')
     item = rows[-1]
-    platform_identity(value, item)
     _binding(root, task_id, item['body'], current_only=True)
     return item
 
@@ -87,7 +78,6 @@ def published_approval(root, task_id, review):
                  and row['url'] == review.get('platform_url')), None)
     if item is None or item['author'] != review.get('platform_author'):
         raise ReviewError('平台评审', 1, '已提交评审的平台地址或作者无法核对，请重新提交。')
-    platform_identity(value, item)
     entries = _state(root, task_id)['submitted'].values()
     entry = next((row for row in entries if read(artifact_valid(root, row['review'])) == review), None)
     if entry is None or artifact_valid(root, entry['markdown']).read_bytes().decode('utf-8') != item['body']:

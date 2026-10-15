@@ -186,8 +186,7 @@ tw team review --root "$PROJECT" --task "$TASK_ID" --from-platform
 `--from-platform` 经项目平台脚本的 `task` 操作，选出含绑定区的最新 `kind: review` 条目，
 将其原文走与 `--submit` 相同的绑定比对、逐项复核、问题历史和转换流程。与 `--file`、
 `--submit` 二选一，不能混用来源。绑定或来源已变时拒绝，需重新生成复核稿。
-导入时要求平台评审作者不同于该任务所有 `change` 条目的作者；缺少变更请求描述时报告
-“无法核对平台身份”。评审 JSON 增加 `platform_author`、`platform_url`，验收仍核对
+评审 JSON 增加 `platform_author`、`platform_url`，只作记录与后续原文核对，不限制平台账号；验收仍核对
 Markdown 姓名不能是实施负责人；以后复用也核对平台作者和已存原文。正文与评论中的讨论
 不能替代 `review` 条目。平台上的合并批准选择经原文核对后可作为已共享批准。
 
