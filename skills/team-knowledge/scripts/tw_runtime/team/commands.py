@@ -291,6 +291,7 @@ def dispatch(args, root):
         value = getattr(args, name, None)
         if value:
             input_files[name] = artifact(root, local(root, value))
+    query_paths = relative_paths(root, args.path)
     inputs = {'command': args.command, 'phase': args.phase, 'task': digest(task), 'profile': digest(profile),
               'files': input_files, 'source': validation.source_digest(root, profile),
               'approvals': [artifact(root, local(root, p)) for p in args.approval],
@@ -298,7 +299,8 @@ def dispatch(args, root):
               'runs': [artifact(root, local(root, p)) for p in args.run],
               'batch': [read(local(root, p)) for p in args.with_task],
               'dependencies': [read(local(root, p)) for p in args.dependency],
-              'options': {'check': args.check, 'kind': args.kind, 'path': relative_paths(root, args.path), 'symbol': args.symbol,
+              'options': {'check': args.check, 'kind': args.kind, 'path': query_paths,
+                          'path_directories': [path for path in query_paths if path.directory], 'symbol': args.symbol,
                           'reason': args.reason,
                           'allow_modified_tool': args.allow_modified_tool,
                           'grant': args.grant, 'confirmed_by': args.confirmed_by}}
@@ -421,7 +423,8 @@ def produce(args, root, profile, task, platform, request):
             value.update(implementation_ready=False, ready_to_implement=False,
                          summary='共享目录正在执行验收检查；源码和生成输入须保持不变。',
                          next_action='Wait for the active validation to finish before editing or changing checkouts.')
-        brief = value.get('knowledge') or knowledge.brief(root, task, args.path, args.symbol)
+        paths = knowledge.query_paths(root, task, selection['design'], args.path)
+        brief = value.get('knowledge') or knowledge.brief(root, task, paths, args.symbol)
         value['brief'] = request.publish('brief.json', brief)
         value.update(continued=True, task_id=task['id'], context=selection['previous_ref'],
                      task_directory=request.directory.parent.parent.relative_to(root).as_posix(),
@@ -453,9 +456,7 @@ def produce(args, root, profile, task, platform, request):
                     root=root, profile=profile,
                     section_ids=task['section_ids'], changed_paths=validation.changed_paths(root, task, profile),
                     code_digest=validation.source_digest(root, profile), run_refs=[])
-        sections = {row['id']: row for row in design['sections']}
-        paths = args.path or task.get('paths') or sorted({path for key in task['section_ids']
-                    if sections[key]['type'] == 'task' for path in sections[key]['data']['scope']})
+        paths = knowledge.query_paths(root, task, design, args.path)
         brief = knowledge.brief(root, task, paths, args.symbol)
         from contracts import execution_environment
         from validation_session import active
@@ -495,7 +496,7 @@ def produce(args, root, profile, task, platform, request):
         result.update(steps=progress['steps'], next_step=progress['next_step'], step_lines=checklist.render(progress))
         return result
     if args.command == 'brief':
-        return emit(knowledge.brief(root, task, args.path, args.symbol), 'brief.json')
+        return emit(knowledge.brief(root, task, relative_paths(root, args.path), args.symbol), 'brief.json')
     if args.command in ('design-draft', 'approval-draft', 'handoff', 'progress'):
         import coordination
         if not args.issue and args.command in ('design-draft', 'approval-draft'):

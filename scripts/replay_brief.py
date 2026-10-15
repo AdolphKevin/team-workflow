@@ -20,7 +20,8 @@ def replay(project_root, queries, budget=6000, repositories=()):
     project = Project(Path(project_root), repositories)
     rows, totals = [], {'expected': 0, 'full': 0, 'visible': 0}
     for query in queries:
-        result = brief.build(project, query['task'], query.get('paths', []), query.get('symbols', []), budget=budget)
+        paths = brief.relative_paths(project.root, query.get('paths', []))
+        result = brief.build(project, query['task'], paths, query.get('symbols', []), budget=budget)
         full = {e['label'] for e in result['entries'] if e['rendered']}
         visible = {e['label'] for e in result['entries'] if e['listed']}
         expected = set(query.get('expected', []))

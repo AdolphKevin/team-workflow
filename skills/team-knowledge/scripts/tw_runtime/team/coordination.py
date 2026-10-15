@@ -10,6 +10,7 @@ from common import Invalid, VERSION, digest, obj, read, require, strings, task_v
 import designs
 import design_files
 import records
+from tw_runtime import Invalid as RuntimeInvalid, repo_paths
 from tw_runtime.team import platform_script as platform_read
 import knowledge
 import validation
@@ -142,9 +143,13 @@ def validate_task_design(task, design):
     require(set(identifiers) <= sections.keys(), 'Task references missing design sections')
     selected = [key for key in identifiers if sections[key]['type'] == 'task']
     require(bool(selected), 'Task must select at least one design task section')
-    declared_paths = [path for key in selected for path in sections[key]['data']['scope']]
-    require(all(any(scope == '.' or path == scope or path.startswith(scope.rstrip('/') + '/') for scope in declared_paths)
-                for path in task.get('paths', [])), 'Knowledge paths are outside the selected task scope')
+    try:
+        declared_paths = [repo_paths.normalize(path, scope=True) for key in selected for path in sections[key]['data']['scope']]
+        requested_paths = [repo_paths.normalize(path, scope=True) for path in task.get('paths', [])]
+    except RuntimeInvalid as exc:
+        raise Invalid(str(exc)) from exc
+    require(all(any(repo_paths.covers(scope, path) for scope in declared_paths)
+                for path in requested_paths), 'Knowledge paths are outside the selected task scope')
     risks = {risk for assessment in designs.task_assessments(design, selected).values() for risk in assessment['risks']}
     require(set(task['risks']) == risks, 'Task risks differ from its selected design assessment')
     accepted = {key for identifier in selected for key in sections[identifier]['data']['acceptance']}
@@ -562,7 +567,7 @@ def _knowledge(root, task, design):
     for key in task['section_ids']:
         if sections[key]['type'] == 'task':
             paths.update(sections[key]['data']['scope'])
-    return knowledge.brief(root, task, sorted(paths), task.get('symbols', []))
+    return knowledge.brief(root, task, knowledge.relative_paths(root, sorted(paths)), task.get('symbols', []))
 
 
 def _approval(root, profile, state, completed_tasks=()):

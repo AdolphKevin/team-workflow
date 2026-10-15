@@ -115,7 +115,8 @@ def main(argv=None):
         project = Project(root, repositories, cached=getattr(args, 'cached', False),
                           require_config=args.command not in ('check',))
         if args.command == 'brief':
-            result = brief.build(project, args.task, args.path, args.symbol, args.entry, args.tag, args.budget, args.index)
+            paths = brief.relative_paths(root, args.path)
+            result = brief.build(project, args.task, paths, args.symbol, args.entry, args.tag, args.budget, args.index)
             emit(result, result['markdown'], 'json' if args.format == 'json' else 'text')
             return 0
         if args.command == 'read':

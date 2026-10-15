@@ -6,10 +6,10 @@ This module never reads a file, changes an input, or interprets prose as consent
 import hashlib
 import json
 import math
-from pathlib import PurePosixPath
 import re
 
 from common import RECORD_SCHEMA, Invalid, obj, require, strings, text
+from tw_runtime import Invalid as RuntimeInvalid, repo_paths
 
 SCHEMA_VERSION = RECORD_SCHEMA
 FINGERPRINT_VERSION = 1
@@ -57,11 +57,10 @@ def _identifier(value):
 
 def _path(value):
     text(value)
-    path = PurePosixPath(value)
-    require(not path.is_absolute() and '..' not in path.parts and '\\' not in value and '\x00' not in value,
-            'Expected a repository-relative path: ' + value)
-    require(not any(char in value for char in '*?[]'), 'Scope paths are literal paths, not patterns: ' + value)
-    return path.as_posix()
+    try:
+        return repo_paths.normalize(value, scope=True)
+    except RuntimeInvalid as exc:
+        raise Invalid(str(exc)) from exc
 
 
 def _sections(design):
@@ -211,7 +210,7 @@ def scope_coverage(design, changed_paths):
     strings(changed_paths)
     for path in sorted({_path(item) for item in changed_paths}):
         matches = sorted(key for key, row in tasks.items() if any(
-            scope == '.' or path == scope or path.startswith(scope + '/')
+            repo_paths.covers(scope, path)
             for scope in (_path(item) for item in row['data']['scope'])))
         result['mapped'][path] = matches
         if not matches:
