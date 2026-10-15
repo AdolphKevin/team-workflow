@@ -6,6 +6,7 @@ import unittest
 
 SCRIPTS = Path(__file__).resolve().parents[1] / 'skills/team-knowledge/scripts/tw_runtime/team'
 sys.path.insert(0, str(SCRIPTS))
+sys.path.insert(0, str(SCRIPTS.parents[1]))
 from common import Invalid
 import designs
 import plan_fixtures as plans

@@ -41,7 +41,7 @@
       ],
       "purpose": "验证知识运行时与团队流程：检索、检查、执行绑定、交付与交接",
       "cwd": ".",
-      "timeout": 1800,
+      "timeout": 600,
       "format": "junit",
       "required_cases": [],
       "required_env": [],

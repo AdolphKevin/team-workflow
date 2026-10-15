@@ -7,7 +7,7 @@
 - MATT 源码复用来源见 `upstream/matt.lock.json`，本地改动见 `upstream/matt.patch`。更新时保留原文、配套资源和许可，核对依赖闭包。
 - 源文档只保存一份正文；知识条目引用原文，不复制词汇或设计决策。
 - 通用工具仅用 Python 3.10+ 标准库。项目脚本和业务测试留在业务仓库。
-- 运行 `python3 -m unittest discover -s tests -v` 与 `python3 scripts/check_release.py`；指令文本受发布检查的篇幅预算约束，新增强制规则必须对应真实失败案例或验收要求。
+- 测试可用 `python3 scripts/test.py --junitxml <路径>` 并行运行（默认最多 8 个进程，`--workers 1` 顺序运行）；保留 `python3 -m unittest discover -s tests -v`，发行前运行 `python3 scripts/check_release.py`。指令文本受发布检查的篇幅预算约束，新增强制规则必须对应真实失败案例或验收要求。
 - 技能变化须在隔离工作区做独立代理试用，检查真实输入与结果；代理试用不能代替两位真实团队成员试点。
 - 保留用户已有授权和实现方式，不增加自动提交、外部发布或强制多代理流程。
 
