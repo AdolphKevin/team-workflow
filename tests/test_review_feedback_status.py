@@ -1,4 +1,5 @@
 """C2: record human decisions, retain acceptance gates, report verified current facts."""
+import plan_fixtures as plans
 import contextlib
 import copy
 import io
@@ -232,9 +233,9 @@ class ReviewFeedbackStatus(unittest.TestCase):
         self.reviewed()
         revised = copy.deepcopy(self.design)
         revised['sections'][-1]['body'] = 'Changed implementation requirement'
-        write(self.root / '.tw/local/revised.json', revised)
+        plans.write_design(self.root / '.tw/local/revised.md', revised)
         before = self.current_path().read_bytes()
-        code, status = self.command('status', '--task', self.task['id'], '--design', '.tw/local/revised.json')
+        code, status = self.command('status', '--task', self.task['id'], '--design', '.tw/local/revised.md')
         self.assertEqual(code, 0, status)
         self.assertEqual(status['verified_records'], {})
         for name in ('prepare', 'review'):
@@ -300,7 +301,7 @@ class PlatformStatus(unittest.TestCase):
             revised = copy.deepcopy(self.design)
             revised['revision'] = 2
             revised['sections'][-1]['body'] = 'New shared requirement'
-            self.publish_fixture(coordination.draft_design(self.url, revised), 'alice')
+            self.publish_fixture(plans.draft_design(self.root, self.url, revised), 'alice')
             code, status = self.identity_command('status')
         self.assertEqual(code, 0, status)
         self.assertEqual(next(row for row in status['steps'] if row['id'] == 'prepare')['state'], 'stale')

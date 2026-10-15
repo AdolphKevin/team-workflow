@@ -37,7 +37,7 @@ tw team guidance --root "$PROJECT" [--scope project|global|all] [--file AGENTS.m
 已含 `@AGENTS.md` 或 `@./AGENTS.md` 的保持不动；`--file` 只接受仓内相对路径，引用随之指向该文件。每个目标的
 `action` 为 `create`、`append`、`update`、`unchanged`、`skipped`（该客户端目录不存在）或 `blocked`（标记损坏，
 整次拒绝写入）。写入保留原文件的换行风格、权限和符号链接。`--home` 只用于试验，指向替代的用户目录。`schema` 返回随技能安装的[团队配置模板](../templates/config.json)、[任务模板](../templates/task.json)
-和[方案模板](../templates/design.json)。模板需要按实际项目填写；团队字段写入 `.tw/config.json`，
+和[方案模板](../templates/design.md)。模板需要按实际项目填写；团队字段写入 `.tw/config.json`，
 手工任务输入及运行材料放在被 Git 忽略的 `.tw/local/`。
 
 | 配置字段 | 含义 |
@@ -76,7 +76,7 @@ tw team guidance --root "$PROJECT" [--scope project|global|all] [--file AGENTS.m
 
 支持的风险为 `authorization`、`persistence`、`concurrency`、`messaging`、
 `public-contract`、`cross-service`。它们决定检查，不决定是否必须事前评审。父方案和
-拆分任务分别评估；任务节的 `data.assessment` 可覆盖方案评估。具体方案和逐节批准格式
+拆分任务分别评估；任务节的 `data.assessment` 可覆盖方案评估。方案只接受 Markdown 原文；具体格式、字段对照和逐节批准
 见[分节方案约定](designs.md)，不要根据父方案复杂度替代子任务判断。
 
 ## 开工材料、状态与方案
@@ -192,7 +192,7 @@ Markdown 姓名不能是实施负责人；以后复用也核对平台作者和�
 
 任务目录的 `review.md` 是可编辑表，绑定未变的未提交文件只报告路径和填写进度。评审人实际阅读代码、需求与原始结果，填写评审人、知识冲突是否已处理（是/否）、规范与需求及各验收项的结论（通过/不通过）和理由。各轴及验收项可补充证据文件，每行一个项目内路径；工具计算指纹，自动验收的运行、检查、用例引用无需手写。人工观察的观察人、带时区的时间、操作、结果、数据及证据文件全部由人填写。只引用源码不能证明执行已通过。
 
-绑定区包含任务、任务与源码指纹、校验策略、章节和运行；它与工具填写的结果、风险列表及变化说明均不可改动。提交只检查格式完整和绑定有效，拒绝时指出行号或小节；“不通过”、知识冲突未处理或含 open 阻塞问题的完整评审仍保存。独立性、实际检查与通过条件由 accept/deliver 核查，不因此放宽。成功后原文 `review.md`、现有格式的 `review.json` 与 `review-source.json` 保存到本次请求目录，登记为当前评审。下一条命令为 `deliver --task <身份> --reason <理由>`；需要更新知识则先 `accept --task <身份>`，写知识后再交付。清理保留引用的原文、JSON、源码指纹、运行和任务目录的未提交表。
+绑定区使用隐藏的 `tw-record` HTML 注释，包含任务、任务与源码指纹、校验策略、章节和运行；它与工具填写的结果、风险列表及变化说明均不可改动。提交只检查格式完整和绑定有效，拒绝时指出行号或小节；“不通过”、知识冲突未处理或含 open 阻塞问题的完整评审仍保存。独立性、实际检查与通过条件由 accept/deliver 核查，不因此放宽。成功后原文 `review.md`、现有格式的 `review.json` 与 `review-source.json` 保存到本次请求目录，登记为当前评审。下一条命令为 `deliver --task <身份> --reason <理由>`；需要更新知识则先 `accept --task <身份>`，写知识后再交付。清理保留引用的原文、JSON、源码指纹、运行和任务目录的未提交表。
 
 问题按 `### 问题 Q1` 分节，以 `- 字段：值` 填写编号、负责人、影响范围、阻塞阶段、状态及摘要。已知问题身份不得改动或删除；新问题可新增同格式小节。状态为 open、resolved、accepted、deferred；非 open 要填写处置理由与处置证据，接受或延期还需确认人，延期须含跟进任务与范围调整，可附确认依据。完整字段由已知问题自动展开；没有已知问题时可按下表添加。
 
@@ -236,7 +236,7 @@ tw team deliver --root "$PROJECT" --task "$TASK_ID" --reason <不需要更新知
 
 方案中当前任务评估为 simple 且尚缺有效合并批准时，评审信息增加“批准方案与代码”和可选“批准说明”。填“是”后，工具以评审人为批准人，按原合并批准规则绑定当前源码与选中运行、只覆盖本任务必需章节；批准与评审同为请求材料，成功后登记当前批准。填“否”或留空不产生批准，验收仍检查批准是否齐全；实施者的意见可以保存，但不会生成独立合并批准，业务验收仍拒绝自审。已具备事前方案批准的中等、复杂任务不显示这两个字段。源码或选中运行改变后，合并批准失效，预填的批准字段也须明确复核。带批准字段的草稿另绑定完整方案与历史内容，不能用旧稿批准新材料组中的方案评估。
 
-`approval-draft` 可用 `--reviewer <姓名> [--confirmation <说明>] [--mode plan|combined] [--revision <完整提交号>]` 替代 `--record`；两种输入二选一。CLI 的 plan 对应既有记录中的 design 模式；combined 绑定当前源码与运行。`--record` 及原 JSON 格式保留。
+`approval-draft` 可用 `--reviewer <姓名> [--confirmation <说明>] [--mode plan|combined] [--revision <完整提交号>]` 替代 `--record`；两种输入二选一。CLI 的 plan 对应既有记录中的 design 模式；combined 绑定当前源码与运行。批准输入的 `--record` JSON 保留；方案输入只读 Markdown。
 
 `deliver` 顺序调用原来的 `accept`、`delivery-template`、`verify`，各步保留请求和材料并更新 `current.json`。先核对已有验收是否仍绑定当前任务、章节、源码和材料；可用则复用，否则实际重新验收。报告列出相对任务 base 的全部知识变化；没有变化必须提供 `--reason`。要改知识时仍先独立 `accept`，写完知识后 `deliver` 复用该验收。绑定和知识处置均有效的报告也可复用；已有理由不必再输入。
 

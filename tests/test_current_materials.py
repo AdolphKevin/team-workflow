@@ -477,7 +477,7 @@ class PlatformCurrentMaterials(unittest.TestCase):
             revised = copy.deepcopy(self.design)
             revised['revision'] = 2
             revised['sections'][-1]['body'] = 'Updated implementation instructions'
-            self.publish_fixture(coordination.draft_design(self.url, revised), 'alice')
+            self.publish_fixture(plans.draft_design(self.root, self.url, revised), 'alice')
             code, refused = self.identity_command('status')
         self.assertEqual(code, 0, refused)
         self.assertIn('design', refused['stale_materials'])
@@ -500,7 +500,7 @@ class PlatformCurrentMaterials(unittest.TestCase):
             revised = copy.deepcopy(self.design)
             revised['revision'] = 2
             revised['sections'][-1]['body'] = 'New approved implementation instructions'
-            self.publish_fixture(coordination.draft_design(self.url, revised), 'alice')
+            self.publish_fixture(plans.draft_design(self.root, self.url, revised), 'alice')
             self.publish_fixture(coordination.draft_approval(self.url, {'reviewer': 'carol',
                 'confirmation': 'Approved the new version'}), 'carol')
             code, current = self.command()
@@ -515,11 +515,12 @@ class PlatformCurrentMaterials(unittest.TestCase):
     def test_explicit_old_platform_design_or_approval_cannot_replace_the_current_group(self):
         first = self.prepared_platform()
         old_context = read(self.root / first['context']['path'])
+        old_source = plans.write_design(self.root / '.tw/local/old-design.md', read(self.root / old_context['design']['path']))
         with patch.object(platform_read, 'call', side_effect=platform_transport(self.github)):
             revised = copy.deepcopy(self.design)
             revised['revision'] = 2
             revised['sections'][-1]['body'] = 'New approved implementation instructions'
-            self.publish_fixture(coordination.draft_design(self.url, revised), 'alice')
+            self.publish_fixture(plans.draft_design(self.root, self.url, revised), 'alice')
             self.publish_fixture(coordination.draft_approval(self.url, {'reviewer': 'carol',
                 'confirmation': 'Approved the new version'}), 'carol')
             code, current = self.command()
@@ -527,8 +528,8 @@ class PlatformCurrentMaterials(unittest.TestCase):
             target = artifacts.directory(self.root, self.url).parent.parent / 'current.json'
             before = target.read_bytes()
             for command, option, value, role in [
-                ('status', '--design', old_context['design']['path'], 'design'),
-                ('review', '--design', old_context['design']['path'], 'design'),
+                ('status', '--design', old_source.relative_to(self.root).as_posix(), 'design'),
+                ('review', '--design', old_source.relative_to(self.root).as_posix(), 'design'),
                 ('review', '--approval', old_context['approvals'][0]['path'], 'approvals')]:
                 with self.subTest(command=command, option=option):
                     try:

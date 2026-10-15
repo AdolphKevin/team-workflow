@@ -1,4 +1,5 @@
 """Issue comments and change/review records share the same immutable history."""
+import plan_fixtures as plans
 import json
 import os
 from pathlib import Path
@@ -46,39 +47,39 @@ class ChangeRequestRecords(unittest.TestCase):
         self.assertEqual(change['gaps'], [])
         return change
 
-    def test_change_design_and_review_approval_equal_issue_comments_including_history(self):
+    def test_published_comment_and_review_approval_keep_the_same_history(self):
         self.setup_platform()
-        self.publish_fixture(coordination.draft_design(self.url, self.design), 'alice')
-        self.response(['change'])
+        self.publish_fixture(plans.draft_design(self.root, self.url, self.design), 'alice')
+        self.response(['comment'])
         self.publish_fixture(coordination.draft_approval(self.url, {'reviewer': 'carol'}), 'carol')
-        result = self.equivalent(['change', 'review'])
+        result = self.equivalent(['comment', 'review'])
         status = designs.approval_status(result['design'], result['approvals'], changed_paths=[])
         self.assertTrue(status['fully_approved'], status)
         self.assertEqual(status['approved'], ['A1', 'T1', 'scope-global'])
 
-    def test_new_change_or_review_only_invalidates_affected_sections(self):
+    def test_new_published_comment_or_review_only_invalidates_affected_sections(self):
         self.setup_platform()
         self.design['sections'] += [design_cases.section('api-1', 'interface'),
                                     design_cases.section('api-2', 'interface')]
         self.design['sections'][1]['depends_on'] = ['api-1']
-        for kind in ('change', 'review'):
+        for kind in ('comment', 'review'):
             with self.subTest(kind=kind):
                 self.issue['comments_data'] = []
                 self.response()
-                self.publish_fixture(coordination.draft_design(self.url, self.design), 'alice')
-                self.response(['change'])
+                self.publish_fixture(plans.draft_design(self.root, self.url, self.design), 'alice')
+                self.response(['comment'])
                 self.publish_fixture(coordination.draft_approval(self.url, {'reviewer': 'carol'}), 'carol')
-                self.response(['change', 'review'])
+                self.response(['comment', 'review'])
                 revised = design_cases.changed(self.design, 'api-1')
-                self.publish_fixture(coordination.draft_design(self.url, revised), 'alice')
-                result = self.equivalent(['change', 'review', kind])
+                self.publish_fixture(plans.draft_design(self.root, self.url, revised), 'alice')
+                result = self.equivalent(['comment', 'review', kind])
                 status = designs.approval_status(result['design'], result['approvals'], history=result['history'], changed_paths=[])
                 self.assertEqual(status['stale'], ['A1', 'T1', 'api-1'])
                 self.assertEqual(status['approved'], ['api-2', 'scope-global'])
-                self.response(['change', 'review', kind])
+                self.response(['comment', 'review', kind])
                 self.publish_fixture(coordination.draft_approval(self.url, {
                     'reviewer': 'carol', 'section_ids': ['A1', 'T1', 'api-1']}), 'carol')
-                result = self.equivalent(['change', 'review', kind, 'review'])
+                result = self.equivalent(['comment', 'review', kind, 'review'])
                 status = designs.approval_status(result['design'], result['approvals'], history=result['history'], changed_paths=[])
                 self.assertEqual(status['stale'], [])
                 self.assertTrue(status['fully_approved'], status)

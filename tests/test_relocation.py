@@ -76,7 +76,7 @@ class RelocationCases(unittest.TestCase):
         self.profile['checks']['other'] = deepcopy(self.profile['checks']['unit'])
         self.profile['required_checks']['code'].append('other')
         fixtures.write_config(self.root, self.profile)
-        code, result = self.command('start', '--task', '.tw/local/task.json', '--design', '.tw/local/design.json')
+        code, result = self.command('start', '--task', '.tw/local/task.json', '--design', '.tw/local/design.md')
         self.assertEqual(code, 0, result)
         self.run_checks()
         code, reviewed = self.submit()
@@ -130,7 +130,7 @@ class RelocationCases(unittest.TestCase):
     def test_request_claims_and_responses_remain_reusable_after_copy(self):
         self.configure()
         commands = [
-            ('start', '--task', '.tw/local/task.json', '--design', '.tw/local/design.json'),
+            ('start', '--task', '.tw/local/task.json', '--design', '.tw/local/design.md'),
             ('run', '--task', self.task['id']),
             ('review', '--task', self.task['id'], '--submit'),
             ('accept', '--task', self.task['id']),
@@ -167,7 +167,7 @@ class RelocationCases(unittest.TestCase):
     def test_absolute_query_path_request_can_be_retried_after_move(self):
         self.configure()
         for args in [
-            ('start', '--task', '.tw/local/task.json', '--design', '.tw/local/design.json'),
+            ('start', '--task', '.tw/local/task.json', '--design', '.tw/local/design.md'),
             ('brief', '--task', '.tw/local/task.json'),
         ]:
             with self.subTest(command=args[0]):

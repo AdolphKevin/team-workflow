@@ -1,4 +1,5 @@
 """Business acceptance and final delivery are separate read-only decisions."""
+import design_files
 from tw_runtime.team import platform_script as platform_read
 from datetime import datetime
 
@@ -27,10 +28,10 @@ def evidence(root, profile, item):
 def design_material(root, profile, task, report, completed_tasks=()):
     import designs
     from coordination import validate_task_design
-    design = read(inside(root, report['design']))
+    design = design_files.read(inside(root, report['design']))
     validate_task_design(task, design)
     approvals = [read(inside(root, p)) for p in report['approvals']]
-    history = [read(inside(root, p)) for p in report.get('design_history', [])]
+    history = [design_files.read(inside(root, p)) for p in report.get('design_history', [])]
     refs = [artifact(root, inside(root, p)) for p in report['runs']]
     code = validation.source_digest(root, profile)
     selected_refs = None
@@ -210,7 +211,7 @@ def verify(root, profile, task, report, phase='delivery', _seen=None, live=None)
         dep_task, dep_report = read(dep_task_path), read(dep_report_path)
         require(dependency['section'] in dep_task.get('section_ids', []), 'Dependency evidence belongs to another section')
         proof = verify(root, profile, dep_task, dep_report, 'acceptance', seen, live)
-        current_design = read(inside(root, report['design']))
+        current_design = design_files.read(inside(root, report['design']))
         require(dep_task.get('design_id') == task['design_id'] and proof['sections'][dependency['section']]
                 == designs.fingerprints(current_design)['sections'][dependency['section']], 'Dependency uses a different plan section')
         completed_tasks.add(dependency['section'])

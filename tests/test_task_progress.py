@@ -213,7 +213,8 @@ class TaskProgress(unittest.TestCase):
         context = prepared['artifact']['path']
         for _ in range(2):
             self.cli('run', '--context', context)
-        self.cli('accept', '--context', context, '--report', self.name('design'))
+        self.write('invalid-report', {'data_version': 1, 'task_id': self.task['id']})
+        self.cli('accept', '--context', context, '--report', self.name('invalid-report'))
         code, result = self.cli('metrics', '--task', self.name('task'))
         self.assertEqual(code, 0, result)
         row = result['metrics'][0]

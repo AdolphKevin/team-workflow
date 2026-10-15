@@ -19,6 +19,18 @@ IDENTIFIER = re.compile(r'[A-Za-z0-9][A-Za-z0-9._-]{0,127}')
 SHA256 = re.compile(r'[0-9a-f]{64}')
 
 
+def load(text):
+    """Parse the human-authored Markdown source into the unchanged design value."""
+    from design_markdown import load as parse
+    return parse(text)
+
+
+def render(design):
+    """Render a validated internal design as its Markdown source."""
+    from design_markdown import render as markdown
+    return markdown(design)
+
+
 def _normalized(value):
     if isinstance(value, str):
         return value.replace('\r\n', '\n').replace('\r', '\n')

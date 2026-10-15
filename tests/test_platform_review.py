@@ -1,4 +1,5 @@
 """D4: reviewers publish the generated Markdown; CLI reads it through the project script."""
+import plan_fixtures as plans
 import copy
 import json
 import os
@@ -49,8 +50,7 @@ class PlatformReview(unittest.TestCase):
         self.git('commit', '-qm', 'platform fixture configuration')
         self.git('update-ref', 'refs/remotes/origin/main', 'HEAD')
         self.task['base'] = self.git('rev-parse', 'HEAD').strip()
-        body = 'Addition works.\n```team-workflow-task\n' + json.dumps(
-            {'data_version': 1, 'parent': None, 'task': self.task}) + '\n```\n'
+        body = plans.task_body(self.task, prose='Addition works.')
         self.platform = {'id': self.url, 'url': self.url, 'repository': 'code.example/group/project',
             'state': 'open', 'owners': ['bob'], 'items': [{'url': self.url, 'author': 'implementer-account',
             'created_at': '2026-01-01T00:00:00Z', 'updated_at': '2026-01-01T00:00:00Z',
@@ -59,7 +59,9 @@ class PlatformReview(unittest.TestCase):
         environment.start()
         self.addCleanup(environment.stop)
         self.response()
-        self.post(coordination.draft_design(self.url, self.design)['markdown'], 'change', 'implementer-account')
+        publication = plans.draft_design(self.root, self.url, self.design)
+        self.post(publication['pr_description'], 'change', 'implementer-account')
+        self.post(publication['markdown'], 'comment', 'implementer-account')
         self.post(coordination.draft_approval(self.url, {'reviewer': 'carol', 'mode': 'design'})['markdown'])
         code, started = self.command('start', '--task', self.url)
         self.assertEqual(code, 0, started)

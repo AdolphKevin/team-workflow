@@ -47,7 +47,7 @@ class FourCommandDelivery(unittest.TestCase):
         plans.plan(self.design)
         fixtures.write_config(self.root, self.profile)
         write(self.root / '.tw/local/task.json', self.task)
-        write(self.root / '.tw/local/design.json', self.design)
+        plans.write_design(self.root / '.tw/local/design.md', self.design)
 
     def start(self, complexity='simple', passed=True):
         self.configure(complexity, passed)
@@ -56,7 +56,7 @@ class FourCommandDelivery(unittest.TestCase):
             value = designs.approval_draft(self.design, 'carol', 'Confirmed the business plan', mode='design')
             write(self.root / '.tw/local/plan-approval.json', value)
             approval = ['--approval', '.tw/local/plan-approval.json']
-        code, result = self.command('start', '--task', '.tw/local/task.json', '--design', '.tw/local/design.json', *approval)
+        code, result = self.command('start', '--task', '.tw/local/task.json', '--design', '.tw/local/design.md', *approval)
         self.assertEqual(code, 0, result)
         self.started = result
         return result
@@ -122,7 +122,7 @@ class FourCommandDelivery(unittest.TestCase):
         self.profile['checks']['extra'] = copy.deepcopy(self.profile['checks']['unit'])
         self.profile['required_checks']['code'].append('extra')
         fixtures.write_config(self.root, self.profile)
-        code, started = self.command('start', '--task', '.tw/local/task.json', '--design', '.tw/local/design.json')
+        code, started = self.command('start', '--task', '.tw/local/task.json', '--design', '.tw/local/design.md')
         self.assertEqual(code, 0, started)
         unit = self.run_checks('--check', 'unit')
         self.assertFalse(self.draft_path().exists())
@@ -179,8 +179,8 @@ class FourCommandDelivery(unittest.TestCase):
         task['data'].update(acceptance=['A2'], scope=['unused.py'],
                             assessment={**self.design['assessment'], 'complexity': 'medium'})
         self.design['sections'] += [acceptance, task]
-        write(self.root / '.tw/local/design.json', self.design)
-        code, started = self.command('start', '--task', '.tw/local/task.json', '--design', '.tw/local/design.json')
+        plans.write_design(self.root / '.tw/local/design.md', self.design)
+        code, started = self.command('start', '--task', '.tw/local/task.json', '--design', '.tw/local/design.md')
         self.assertEqual(code, 0, started)
         self.run_checks()
         code, submitted = self.submit()
@@ -217,8 +217,8 @@ class FourCommandDelivery(unittest.TestCase):
         saved.write_text(old)
         self.draft_path().write_text(old)
         self.design['assessment']['effort'] = 'A different material group with the same task ID'
-        write(self.root / '.tw/local/design.json', self.design)
-        code, started = self.command('start', '--task', '.tw/local/task.json', '--design', '.tw/local/design.json')
+        plans.write_design(self.root / '.tw/local/design.md', self.design)
+        code, started = self.command('start', '--task', '.tw/local/task.json', '--design', '.tw/local/design.md')
         self.assertEqual(code, 0, started)
         self.assertEqual(self.current()['runs'], [])
         code, refused = self.command('review', '--task', self.task['id'], '--context', self.current()['context']['path'],
@@ -241,8 +241,8 @@ class FourCommandDelivery(unittest.TestCase):
         self.draft_path().write_text(self.completed(self.draft_path().read_text()))
         self.assertNotIn('批准方案与代码', self.draft_path().read_text())
         self.design['assessment']['complexity'] = 'simple'
-        write(self.root / '.tw/local/design.json', self.design)
-        code, started = self.command('start', '--task', '.tw/local/task.json', '--design', '.tw/local/design.json')
+        plans.write_design(self.root / '.tw/local/design.md', self.design)
+        code, started = self.command('start', '--task', '.tw/local/task.json', '--design', '.tw/local/design.md')
         self.assertEqual(code, 0, started)
         code, refused = self.command('review', '--task', self.task['id'], '--run', old_run, '--submit')
         self.assertEqual(code, 1, refused)
@@ -289,21 +289,21 @@ class FourCommandDelivery(unittest.TestCase):
 
     def test_approval_draft_accepts_flags_and_retains_record_input(self):
         self.configure('medium')
-        code, result = self.command('approval-draft', '--task', '.tw/local/task.json', '--design', '.tw/local/design.json',
+        code, result = self.command('approval-draft', '--task', '.tw/local/task.json', '--design', '.tw/local/design.md',
                                      '--reviewer', 'carol', '--confirmation', 'Confirmed the exact business plan', '--mode', 'plan')
         self.assertEqual(code, 0, result)
         value = read(artifact_valid(self.root, result['artifact']))
         self.assertEqual((value['reviewer'], value['confirmation'], value['mode']),
                          ('carol', 'Confirmed the exact business plan', 'design'))
         write(self.root / '.tw/local/approval-input.json', {'reviewer': 'carol', 'mode': 'design'})
-        code, result = self.command('approval-draft', '--task', '.tw/local/task.json', '--design', '.tw/local/design.json',
+        code, result = self.command('approval-draft', '--task', '.tw/local/task.json', '--design', '.tw/local/design.md',
                                      '--record', '.tw/local/approval-input.json')
         self.assertEqual(code, 0, result)
         self.assertEqual(read(artifact_valid(self.root, result['artifact']))['mode'], 'design')
 
     def test_approval_flags_are_bound_to_the_request_identity(self):
         self.configure('medium')
-        arguments = ('approval-draft', '--task', '.tw/local/task.json', '--design', '.tw/local/design.json',
+        arguments = ('approval-draft', '--task', '.tw/local/task.json', '--design', '.tw/local/design.md',
                      '--reviewer', 'carol', '--mode', 'plan', '--request-id', 'approval-flags')
         code, first = self.command(*arguments, '--confirmation', 'First actual confirmation')
         self.assertEqual(code, 0, first)

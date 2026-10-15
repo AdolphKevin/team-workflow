@@ -14,6 +14,7 @@ from common import artifact, artifact_valid, read
 import artifacts
 import cleanup
 import designs
+import records
 
 TW = fixtures.SCRIPTS.parents[1] / 'tw.py'
 
@@ -135,7 +136,9 @@ class MarkdownReview(unittest.TestCase):
 
     def test_binding_edits_are_rejected_before_a_review_material_is_created(self):
         path, _ = self.draft()
-        text = self.completed(path.read_text()).replace('"task_id": "' + self.task['id'] + '"', '"task_id": "TASK-other"')
+        source = self.completed(path.read_text())
+        binding = records.block(source, 'review')
+        text = source.replace(records.comment(binding), records.comment({**binding, 'task_id': 'TASK-other'}))
         before = self.current_path().read_bytes()
         code, refused = self.submit(path, text)
         self.assertEqual(code, 1, refused)

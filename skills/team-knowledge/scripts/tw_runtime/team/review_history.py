@@ -1,4 +1,5 @@
 """Explicit review ancestry, per-file source evidence, and human fields to recheck."""
+import design_files
 import copy
 
 from common import Invalid, artifact_valid, digest, read
@@ -120,13 +121,13 @@ def status(root, profile, task, state, current, group=None, inputs=None):
                'validation_policy': delivery.review_policy(root, profile, task), 'risks': task['risks']}
     try:
         design_path = getattr(inputs, 'design', None) or (group or {}).get('design', {}).get('path')
-        design = read(local(root, design_path))
+        design = design_files.read(local(root, design_path))
         hashes = designs.fingerprints(design)['sections']
         binding['sections'] = {key: hashes[key] for key in task['section_ids']}
         history_paths = getattr(inputs, 'design_history', None)
         if history_paths is None:
             history_paths = [row['path'] for row in (group or {}).get('design_history', [])]
-        binding['approval_plan'] = approval_plan(design, [read(local(root, path)) for path in history_paths])
+        binding['approval_plan'] = approval_plan(design, [design_files.read(local(root, path)) for path in history_paths])
         paths = getattr(inputs, 'run', None)
         if paths is None:
             refs = (group or {}).get('selected_runs')

@@ -131,7 +131,7 @@ def parser():
     c.add_argument('--grant', choices=['synthetic-login'], help='Record permission to sign in to declared synthetic accounts')
     c.add_argument('--confirmed-by', help='The user who gave the permission for --grant')
     c = command('design-draft', '生成本地或平台方案草稿', task, inputs, request, design)
-    c.add_argument('--record', type=Path, help='JSON input for the design draft')
+    c.add_argument('--record', type=Path, help='已提交的 Markdown 方案原文；格式见 references/designs.md')
     c = command('approval-draft', '生成具名评审人的方案批准草稿', task, inputs, request, design, history, runs)
     c.add_argument('--record', type=Path, help='JSON input for the approval draft')
     c.add_argument('--reviewer', help='批准人的姓名；替代 --record')

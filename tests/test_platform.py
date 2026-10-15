@@ -1,4 +1,5 @@
 """Project script contract exercised through a real child process, without network access."""
+import plan_fixtures as plans
 import json
 import copy
 import base64
@@ -168,8 +169,8 @@ class PlatformContract(unittest.TestCase):
         import coordination
         value = self.task_response()
         task = {'data_version': 1, 'id': value['id']}
-        value['items'][0]['body'] = '```team-workflow-task\n' + json.dumps(
-            {'data_version': 1, 'parent': None, 'task': task}) + '\n```\n'
+        import records
+        value['items'][0]['body'] = records.comment({'data_version': 1, 'parent': None, 'task': task})
         self.response('task', value)
         result = coordination.load(value['id'], root=self.root)
         self.assertEqual(result['task'], task)
@@ -336,7 +337,8 @@ class PlatformContract(unittest.TestCase):
         self.addCleanup(fixture.doCleanups)
         fixture.prepare()
         with patch.object(platform_read, 'call', side_effect=transport(fixture.github)):
-            fixture.publish_fixture(coordination.draft_design(fixture.url, fixture.design), 'alice')
+            fixture.publish_fixture(plans.draft_design(fixture.root, fixture.url, fixture.design), 'alice')
+        write(self.root / '.tw/local/repositories.json', read(fixture.root / '.tw/local/repositories.json'))
         value = task_data(fixture.issue)
         value['items'][1].update(created_at='2026-10-15T08:01:00Z', updated_at='2026-10-15T10:01:00+02:00')
         self.response('task', value)
