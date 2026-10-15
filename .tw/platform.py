@@ -127,27 +127,30 @@ def item(row, kind):
             'kind': kind}
 
 
-def review_item(api, row):
-    # REST reviews expose submitted_at but no last-edit timestamp. GraphQL supplies
-    # lastEditedAt; null explicitly means the submitted body has never been edited.
+def edited_item(api, row, kind, typename, created):
+    # REST updated_at on a PR moves with any activity (reviews, pushes), and REST reviews have
+    # no edit time at all. GraphQL lastEditedAt is the body's own edit time; null means never edited.
     node = text(row, 'node_id')
-    submitted = text(row, 'submitted_at')
-    query = ('query { node(id: ' + json.dumps(node) + ') { ... on PullRequestReview '
-             '{ id url body lastEditedAt } } }')
+    query = ('query { node(id: ' + json.dumps(node) + ') { ... on ' + typename
+             + ' { id url body lastEditedAt } } }')
     response = api.request('graphql', query=query)
-    require(isinstance(response, dict), '评审编辑时间响应不是对象')
-    require(not response.get('errors'), '无法读取评审最后编辑时间')
+    require(isinstance(response, dict), '正文编辑时间响应不是对象')
+    require(not response.get('errors'), '无法读取正文最后编辑时间')
     metadata = field(field(response, 'data', dict), 'node', dict)
+    body = row['body'] if row.get('body') is not None else ''
     require(text(metadata, 'id') == node
             and text(metadata, 'url') == text(row, 'html_url')
-            and field(metadata, 'body', str) == field(row, 'body', str), '评审归属或正文在读取期间变化')
-    require('lastEditedAt' in metadata, '评审缺少最后编辑时间')
+            and (metadata.get('body') or '') == body, '对象归属或正文在读取期间变化')
+    require('lastEditedAt' in metadata, '缺少正文最后编辑时间')
     edited = metadata['lastEditedAt']
-    require(edited is None or isinstance(edited, str), '评审最后编辑时间类型错误')
-    # Draft edits before publication are part of the initially submitted body.
-    updated = edited if edited is not None and instant(edited) > instant(submitted) else submitted
-    mapped = dict(row, created_at=submitted, updated_at=updated)
-    return item(mapped, 'review')
+    require(edited is None or isinstance(edited, str), '正文最后编辑时间类型错误')
+    # Draft edits before publication are part of the initially published body.
+    updated = edited if edited is not None and instant(edited) > instant(created) else created
+    return item(dict(row, created_at=created, updated_at=updated), kind)
+
+
+def review_item(api, row):
+    return edited_item(api, row, 'review', 'PullRequestReview', text(row, 'submitted_at'))
 
 
 def comments(api, slug, number, expected=None):
@@ -186,7 +189,7 @@ def task(api, identity):
         canonical(pull, WEB + f'{slug}/pull/{pull_number}')
         require(text(field(field(pull, 'base', dict), 'repo', dict), 'full_name') == slug,
                 '关联 PR 属于其他仓库')
-        rest.append(item(pull, 'change'))
+        rest.append(edited_item(api, pull, 'change', 'PullRequest', text(pull, 'created_at')))
         rest += [item(row, 'comment') for row in comments(api, slug, pull_number, field(pull, 'comments', int))]
         reviews = api.pages(f'repos/{slug}/pulls/{pull_number}/reviews?per_page=100')
         rest += [review_item(api, row) for row in reviews]

@@ -37,6 +37,11 @@ def main():
     routes = json.loads(Path(os.environ['TW_PROJECT_GH_RESPONSES']).read_text())
     assert key in routes, 'Unexpected API request: ' + key
     route = routes[key]
+    if 'node_of' in route:
+        # A PullRequest node built from the current REST fixture, so body edits stay consistent.
+        source = routes[route['node_of']]['body']
+        route = {'body': {'data': {'node': {'id': source['node_id'], 'url': source['html_url'], 'body': source['body'],
+                                            'lastEditedAt': route['lastEditedAt']}}}}
     if route.get('status', 200) != 200:
         print(f'gh: fixture failure (HTTP {route["status"]})\nprivate diagnostic must stay hidden', file=sys.stderr)
         return 1
