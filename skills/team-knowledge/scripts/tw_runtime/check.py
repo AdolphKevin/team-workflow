@@ -41,7 +41,7 @@ def run(project, base=None):
     config = project.config or {}
     declared = config.get('shared', {}) if isinstance(config.get('shared'), dict) else {}
     checks = config.get('checks', {}) if isinstance(config.get('checks'), dict) else {}
-    code = [n for n in names if not n.startswith(KB + '/')]
+    code = [n for n in names if scope_target(n)]
     labels = {e.label for e in loaded}
     for entry in loaded:
         problems, notes = entries.validate(entry)
@@ -108,13 +108,20 @@ def run(project, base=None):
     return {'ok': not errors, 'entries': len(loaded), 'errors': errors, 'warnings': warnings}
 
 
+def scope_target(name):
+    """Scopes name code and project files; knowledge entries and local state under .tw/ are not targets."""
+    if not name.startswith(KB + '/'):
+        return True
+    return not name.endswith('.md') and not name.startswith(KB + '/local/')
+
+
 def scope_files(alias, code, declared, shared):
     if alias == 'self':
         return code
     repo = shared.get(alias)
     if alias not in declared or repo is None or repo.status not in ('ok', 'not-migrated'):
         return None
-    return [n for n in repo.names if not n.startswith(KB + '/')]
+    return [n for n in repo.names if scope_target(n)]
 
 
 def guard_problem(value, root, source, declared, shared, checks, entry, error, warn):

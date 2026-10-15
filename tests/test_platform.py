@@ -117,6 +117,16 @@ class PlatformContract(unittest.TestCase):
             self.response('commit', {**commit, **change})
             with self.subTest(change=change), self.assertRaises(Invalid):
                 platform_read.call(self.root, 'commit', '--repo', 'code.example/group/project', '--revision', revision)
+        missing_commit = {'exists': False, 'revision': revision, 'author': None, 'time': None}
+        self.response('commit', missing_commit)
+        self.assertEqual(platform_read.call(self.root, 'commit', '--repo', 'code.example/group/project',
+                                            '--revision', revision), missing_commit)
+        with self.assertRaisesRegex(Invalid, '提交不存在'):
+            platform_read.commit(self.root, 'code.example/group/project', revision)
+        for change in ({'author': 'Fixture <test@example.invalid>'}, {'time': '2026-10-15T01:00:00Z'}):
+            self.response('commit', {**missing_commit, **change})
+            with self.subTest(missing=change), self.assertRaises(Invalid):
+                platform_read.call(self.root, 'commit', '--repo', 'code.example/group/project', '--revision', revision)
         for kind in ('commit', 'file', 'task', 'change', 'comment'):
             reference = {'reachable': True, 'kind': kind, 'revision': 'b' * 64}
             self.response('reference', reference)

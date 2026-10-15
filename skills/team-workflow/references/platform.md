@@ -46,7 +46,7 @@
 `platform/task-<参数哈希>-<响应哈希>.json`，不参与核查，不得夹带凭据。
 
 `commit.exists` 与 `reference.reachable` 是布尔值；提交号必须与请求逐字相同。
-`commit.author` 使用 git 作者的 `姓名 <邮箱>`，`time` 是作者时间。
+`commit.author` 使用 git 作者的 `姓名 <邮箱>`，`time` 是作者时间；提交不存在时两者为 null。
 引用 `kind` 为 `commit/file/task/change/comment`；可选提交号也必须完整。
 不存在的提交、不可达引用在实际核查时失败。
 

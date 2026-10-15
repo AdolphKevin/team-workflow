@@ -146,7 +146,10 @@ def validate(operation, value, arguments):
         obj(value, {'exists', 'revision', 'author', 'time'})
         require(type(value['exists']) is bool, 'commit.exists 必须是布尔值')
         require(revision(value['revision']) == _argument(arguments, '--revision'), '平台返回了不同的提交号')
-        text(value['author']); timestamp(value['time'])
+        if value['exists']:
+            text(value['author']); timestamp(value['time'])
+        else:
+            require(value['author'] is None and value['time'] is None, '提交不存在时 author 与 time 必须为 null')
     elif operation == 'reference':
         obj(value, {'reachable', 'kind'}, {'revision'})
         require(type(value['reachable']) is bool, 'reference.reachable 必须是布尔值')
@@ -235,7 +238,7 @@ def task(root, identity):
 
 def commit(root, repository_id, commit_id):
     value = call(root, 'commit', '--repo', repository(repository_id), '--revision', revision(commit_id))
-    require(value['exists'], '平台找不到提交：' + commit_id)
+    require(value['exists'], '平台上提交不存在：' + commit_id)
     return value
 
 

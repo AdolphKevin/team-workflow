@@ -72,6 +72,19 @@ class Check(Case):
         self.assertIn('2026-10-14-planned.md：scope self:internal/payments/** 匹配不到任何文件', notes)
         self.assertNotIn('2026-10-14-planned.md', joined)
 
+    def test_scope_can_name_project_files_under_tw_but_not_knowledge_entries(self):
+        self.initialize()
+        write(self.root, '.tw/platform.py', 'print(1)\n')
+        write(self.root, '.tw/rules/tooling.md', entry(
+            '项目脚本约束', '内容。', scope=['self:.tw/platform.py', 'self:.tw/config.json'], source=['s'],
+            verified=self.verified()))
+        write(self.root, '.tw/rules/self-scope.md', entry(
+            '指向知识的范围', '内容。', scope=['self:.tw/rules/tooling.md'], source=['s'], verified=self.verified()))
+        _, errors, warnings = self.errors()
+        joined = '\n'.join(errors + warnings)
+        self.assertNotIn('tooling.md：scope', joined)
+        self.assertIn('self-scope.md：scope self:.tw/rules/tooling.md 匹配不到任何文件', joined)
+
     def test_documents_must_exist_and_have_one_owner(self):
         self.initialize()
         write(self.root, 'docs/adr/0001-a.md', '# A\n')
