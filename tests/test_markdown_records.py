@@ -39,7 +39,15 @@ class MarkdownRecordCases(unittest.TestCase):
                     'path': 'docs/design.md', 'commit': self.git('rev-parse', 'HEAD').strip(),
                     'sha256': hashlib.sha256(self.raw.encode()).hexdigest()}
         self.assertEqual(draft['record']['design'], expected)
-        self.assertEqual(draft['pr_description'], self.raw)
+        # Reviewers read the original body; the JSON front matter becomes readable lines (no visible JSON).
+        body = self.raw.split('\n---\n', 1)[1].lstrip('\n')
+        self.assertTrue(draft['pr_description'].endswith(body))
+        header = draft['pr_description'][:-len(body)]
+        self.assertNotIn('{', header)
+        self.assertNotRegex(draft['pr_description'], r'(?m)^(assessment|roles|design|task|revision):')
+        for value in (self.design['id'], 'docs/design.md', expected['commit'][:7],
+                      self.design['roles']['design_owner'], self.design['roles']['acceptance_owner']):
+            self.assertIn(value, header)
         self.assertNotIn('sections', draft['record']['design'])
         self.publish_fixture(draft, 'alice')
         self.assertEqual(coordination.load(self.url, root=self.root)['design'], self.design)
@@ -93,7 +101,7 @@ class MarkdownRecordCases(unittest.TestCase):
         import commands
         draft = self.draft()
         output = commands.readable(draft)
-        self.assertIn(self.raw, output)
+        self.assertIn(draft['pr_description'], output)
         self.assertIn(draft['markdown'], output)
 
     def test_status_and_start_surface_display_warning_without_blocking(self):
@@ -105,20 +113,25 @@ class MarkdownRecordCases(unittest.TestCase):
         import test_workflow
         from platform_fixtures import task_data
         test_workflow.write_config(self.root, self.profile)
-        self.publish_fixture(self.draft(), 'alice')
+        draft = self.draft()
+        self.publish_fixture(draft, 'alice')
         self.publish_fixture(coordination.draft_approval(self.url, {'reviewer': 'carol'}), 'carol')
-        normalized = task_data(self.issue)
-        normalized['items'].append({'kind': 'change', 'url': self.url + '#description', 'body': 'outdated',
-            'author': 'alice', 'created_at': '2026-01-01T00:00:00Z', 'updated_at': '2026-01-01T00:00:00Z'})
-        with patch.object(platform_script, 'call', return_value=normalized):
-            for command in ('start', 'status'):
-                output = io.StringIO()
-                with contextlib.redirect_stdout(output):
-                    code = workflow.main([command, '--root', str(self.root), '--issue', self.url])
-                result = json.loads(output.getvalue())
-                self.assertEqual(code, 0, result)
-                self.assertTrue(result['implementation_ready'], result)
-                self.assertIn('描述', str(result['warnings']))
+        # The description the tool generated (readable header + original body) is current: no warning.
+        # start runs once (a second start would be a continuation with its own preconditions).
+        for body, warned, commands in (('outdated', True, ('start', 'status')), (draft['pr_description'], False, ('status',))):
+            normalized = task_data(self.issue)
+            normalized['items'].append({'kind': 'change', 'url': self.url + '#description', 'body': body,
+                'author': 'alice', 'created_at': '2026-01-01T00:00:00Z', 'updated_at': '2026-01-01T00:00:00Z'})
+            with patch.object(platform_script, 'call', return_value=normalized):
+                for command in commands:
+                    output = io.StringIO()
+                    with contextlib.redirect_stdout(output):
+                        code = workflow.main([command, '--root', str(self.root), '--issue', self.url])
+                    result = json.loads(output.getvalue())
+                    with self.subTest(command=command, warned=warned):
+                        self.assertEqual(code, 0, result)
+                        self.assertTrue(result['implementation_ready'], result)
+                        self.assertEqual('描述' in str(result.get('warnings', [])), warned, result.get('warnings'))
 
     def test_shared_repository_uses_existing_local_mapping(self):
         self.setup_record()
