@@ -127,7 +127,8 @@ def knowledge_checks(root):
     return {'manifest_files': len(shipped['files']), 'characters': sizes, 'first_read': first}
 
 
-TEAM_BUDGETS = {'SKILL.md': 3000, 'references/matt-integration.md': 3000, 'references/platform.md': 3000}
+TEAM_BUDGETS = {'SKILL.md': 3000, 'references/matt-integration.md': 3000, 'references/platform.md': 3000,
+                'references/onboarding.md': 4000}
 
 
 def team_checks(root):

@@ -2,11 +2,56 @@
 import json
 import unittest
 
-from tw_fixtures import Case, commit, entry, tree_state, write
+from tw_fixtures import Case, commit, entry, git, tree_state, write
 from tw_runtime import install
 
 
 class Init(Case):
+    def test_remote_without_platform_points_to_onboarding(self):
+        for flags in ((), ('--guidance',), ('--apply',), ('--apply', '--guidance')):
+            with self.subTest(flags=flags):
+                code, output, err = self.tw('init', *flags)
+                self.assertEqual(code, 0, err)
+                hints = [line for line in output.splitlines() if '项目平台脚本' in line]
+                self.assertEqual(len(hints), 1, output)
+                self.assertIn('接入指南', hints[0])
+                self.assertIn('onboarding.md#项目平台脚本', hints[0])
+                code, result = self.tw_json('init', *flags)
+                self.assertEqual(code, 0, result)
+                self.assertIn('onboarding.md#项目平台脚本', result['platform_hint'])
+
+    def test_platform_hint_handles_a_remote_not_named_origin(self):
+        git(self.root, 'remote', 'rename', 'origin', 'upstream')
+        self.initialize()
+        before = tree_state(self.root)
+        code, result = self.tw_json('init', '--guidance')
+        self.assertEqual(code, 0, result)
+        self.assertIn('onboarding.md#项目平台脚本', result['platform_hint'])
+        self.assertEqual(tree_state(self.root), before)
+
+    def test_platform_hint_is_absent_without_remote_or_with_platform(self):
+        self.initialize()
+        config_path = self.root / '.tw/config.json'
+        config = json.loads(config_path.read_text())
+        config['platform'] = {'argv': ['project-platform'], 'operations': ['task']}
+        write(self.root, '.tw/config.json', json.dumps(config))
+        for flags in ((), ('--guidance',), ('--apply',), ('--apply', '--guidance')):
+            with self.subTest(platform=True, flags=flags):
+                code, result = self.tw_json('init', *flags)
+                self.assertEqual(code, 0, result)
+                self.assertNotIn('platform_hint', result)
+                self.assertNotIn('项目平台脚本', self.tw('init', *flags)[1])
+                self.assertEqual(json.loads(config_path.read_text()), config)
+        del config['platform']
+        write(self.root, '.tw/config.json', json.dumps(config))
+        git(self.root, 'remote', 'remove', 'origin')
+        for flags in ((), ('--guidance',), ('--apply',), ('--apply', '--guidance')):
+            with self.subTest(remote=False, flags=flags):
+                code, result = self.tw_json('init', *flags)
+                self.assertEqual(code, 0, result)
+                self.assertNotIn('platform_hint', result)
+                self.assertNotIn('项目平台脚本', self.tw('init', *flags)[1])
+
     def test_preview_writes_nothing_and_apply_creates_three_files(self):
         before = tree_state(self.root)
         code, result = self.tw_json('init')

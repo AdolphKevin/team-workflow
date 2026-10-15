@@ -1,14 +1,14 @@
 {
   "algorithm": "sha256",
   "files": {
-    "SKILL.md": "70e444e4441d6d14568db449b4e31d587afda417f4654902df63d9dc66724b67",
+    "SKILL.md": "04e3e78d96be2dff03de248f57f6546646e0ae57ca681c007515fa16deb667df",
     "agents/openai.yaml": "0f6a25edc3871660d970fba5358234a15f04a4bca4fb3a3a6da35c7a8656a9c9",
     "references/business-acceptance.md": "125ec72631fa11c1df06c363595e3fa0f30d27734d9c8b3580ad6393045cb762",
     "references/contracts.md": "6c34804d52f691c97293f17c84fee11b8a87cbfc35839527b765b84b056b9104",
     "references/coordination.md": "ed3301269e5033d361f4e87fd9760a771818724fbf77fac567654bd8daf090c3",
     "references/designs.md": "5a940b32dfc38dca96a4c9925249bb40869d84e3ba1453fe51d31dfce2608abc",
     "references/matt-integration.md": "8289c31e4c57313e4a3e366f85706a6a0214ac0e9b4c43199a5236a440b083f0",
-    "references/onboarding.md": "03b45c4aba0dffd848ccfecd890f9bfa98700065143b243c3ce8f56454dfba85",
+    "references/onboarding.md": "6e03b3116aed8e8a666fd8fe4c902ba64d0d896933c2b0e974b86450171af830",
     "references/platform.md": "8e1eedb93772dc7b98efbcfa9a6c1959ba0794a0076289c268616efad110c850",
     "references/portable.md": "a04b60dcf1fdfa523b05a2ecdec4bcd75f21f7a36f5bf580fc1ec2e18828b87e",
     "references/team-delivery.md": "fddfe8090fe48bb0b60bafd6589eda1b770a31404c3ff318cf8d069086c44fff",

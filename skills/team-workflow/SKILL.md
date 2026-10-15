@@ -6,7 +6,7 @@ disable-model-invocation: true
 
 # 团队任务与开发方法
 
-先读[方法与知识约定](references/matt-integration.md)。接手时沿用有效批准、验收和未决问题。团队任务、缺陷及每周复盘按[业务验收标准](references/business-acceptance.md)执行；首次接入或缺少测试入口时读[接入指南](references/onboarding.md)。
+先读[方法与知识约定](references/matt-integration.md)。接手时沿用有效批准、验收和未决问题。团队任务、缺陷及每周复盘按[业务验收标准](references/business-acceptance.md)执行；首次接入时读[接入指南](references/onboarding.md)，包括“项目平台脚本”一节；缺少测试入口时也读该指南。
 
 下文 `tw` 指 `python3 <team-knowledge 技能目录>/scripts/tw.py`；`--root`、`--repository` 可写在团队子命令前后。参数见 `--help`。
 

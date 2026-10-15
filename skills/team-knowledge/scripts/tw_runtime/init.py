@@ -1,7 +1,7 @@
 """Create the minimal `.tw/` layout and the knowledge pointer in AGENTS.md. Preview unless --apply."""
 import json
 
-from . import DATA_VERSION, FORMAT, KB, Invalid, files, frontmatter, gitutil, require
+from . import DATA_VERSION, FORMAT, KB, Invalid, files, frontmatter, gitutil, install, require
 
 IGNORE = 'local/\n'
 POINTER = """## 项目知识
@@ -81,9 +81,18 @@ def run(root, apply=False, guidance=False):
         summary = f'已写入 {len(changes)} 个文件；填写 overview.md 后运行 tw check，再与代码一起提交'
     else:
         summary = f'预览：将写入 {len(changes)} 个文件；确认后加 --apply'
-    return {'applied': apply, 'actions': actions, 'summary': summary}
+    result = {'applied': apply, 'actions': actions, 'summary': summary}
+    config_path = root / KB / 'config.json'
+    config = json.loads(files.read_text(config_path)) if config_path.is_file() else {}
+    if 'platform' not in config and gitutil.run(root, 'remote', check=False).stdout.strip():
+        guide = install.SKILL.parent / 'team-workflow/references/onboarding.md'
+        result['platform_hint'] = (f'提示：项目有 git 远端但未配置 platform；如需接入，请读接入指南'
+                                   f'“项目平台脚本”：{guide}#项目平台脚本')
+    return result
 
 
 def render(result):
     lines = [result['summary']] + [f'- {a["action"]}：{a["path"]}' for a in result['actions']]
+    if result.get('platform_hint'):
+        lines.append(result['platform_hint'])
     return '\n'.join(lines) + '\n'
