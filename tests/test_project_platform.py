@@ -65,6 +65,7 @@ class ProjectPlatform(unittest.TestCase):
         self.route(API + '/issues/2/comments?per_page=100', sample('issue-2-comments.json'))
         self.route(API + '/pulls?state=all&per_page=100', [[sample('pull-3.json')]])
         self.route(API + '/pulls/3', sample('pull-3.json'))
+        self.routes['graphql:' + sample('pull-3.json')['node_id']] = {'node_of': API + '/pulls/3', 'lastEditedAt': None}
         self.route(API + '/issues/3/comments?per_page=100', sample('pull-3-issue-comments.json'))
         self.route(API + '/pulls/3/reviews?per_page=100', sample('pull-3-reviews.json'))
         self.route(API + '/pulls/3/comments?per_page=100', sample('pull-3-review-comments.json'))
@@ -143,8 +144,10 @@ class ProjectPlatform(unittest.TestCase):
         self.assertEqual({row['url'] for row in result['items'][1:]}, set(expected))
         for row in result['items'][1:]:
             original = expected[row['url']]
+            # The PR description was never edited (lastEditedAt null); its REST updated_at is later activity.
+            edited = original['created_at'] if row['url'] == PULL else original['updated_at']
             self.assertEqual((row['body'], row['author'], row['created_at'], row['updated_at']),
-                             (original['body'], original['user']['login'], original['created_at'], original['updated_at']))
+                             (original['body'], original['user']['login'], original['created_at'], edited))
             self.assertEqual(row['kind'], 'change' if row['url'] == PULL else 'comment')
         self.assertEqual(result['raw'][0]['response'], sample('issue-2.json'))
         self.assertEqual(result['raw'][1]['response'], sample('issue-2-comments.json'))
@@ -213,6 +216,16 @@ class ProjectPlatform(unittest.TestCase):
         metadata['body'] = 'changed during the read'
         with self.assertRaisesRegex(Invalid, '正文在读取期间变化'):
             self.read_task()
+
+    def test_change_request_edit_time_is_its_body_edit_not_later_activity(self):
+        # Real case (PR #6): a review moved the PR's REST updated_at although its description was never edited.
+        pull = self.body(API + '/pulls/3')
+        self.assertNotEqual(pull['updated_at'], pull['created_at'])
+        change = next(row for row in self.read_task()['items'] if row['kind'] == 'change')
+        self.assertEqual(change['updated_at'], pull['created_at'])
+        self.routes['graphql:' + pull['node_id']]['lastEditedAt'] = '2026-10-11T00:00:00Z'
+        change = next(row for row in self.read_task()['items'] if row['kind'] == 'change')
+        self.assertEqual(change['updated_at'], '2026-10-11T00:00:00Z')
 
     def test_redirected_issue_is_refused_without_following_its_comments(self):
         self.body(API + '/issues/2')['html_url'] = ISSUE.replace('/2', '/200')
