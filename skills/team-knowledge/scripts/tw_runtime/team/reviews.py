@@ -223,9 +223,20 @@ def snapshot(args, root, profile, task, draft_id, allow_incomplete=False):
                      'incomplete': '未完成', 'timeout': '超时', 'unavailable': '无法执行'}
             lines += [f'- 检查 {check}：{words.get(result["status"], result["status"])}；退出码 {result.get("exit_code")}',
                       '  - 运行：' + ref['path']]
-            cases = sorted(case for case, outcome in result.get('cases', {}).items() if outcome == 'passed')
-            lines += ['  - 用例 ' + case + '：' + words.get(outcome, outcome) for case, outcome in sorted(result.get('cases', {}).items())]
-            if not result.get('cases'):
+            outcomes = result.get('cases', {})
+            cases = sorted(case for case, outcome in outcomes.items() if outcome == 'passed')
+            # Show the cases this acceptance names and every case that did not pass; summarise the rest.
+            declared = set(requirement.get('cases', []))
+            shown = sorted(case for case, outcome in outcomes.items() if case in declared or outcome != 'passed')
+            lines += ['  - 用例 ' + case + '：' + words.get(outcomes[case], outcomes[case]) for case in shown]
+            lines += ['  - 用例 ' + case + '：未执行' for case in sorted(declared - outcomes.keys())]
+            if outcomes:
+                counts = {}
+                for outcome in outcomes.values():
+                    counts[outcome] = counts.get(outcome, 0) + 1
+                tally = '，'.join(words.get(key, key) + ' ' + str(counts[key]) for key in sorted(counts))
+                lines.append(f'  - 共 {len(outcomes)} 项用例：{tally}' + ('' if declared else '；本验收未登记对应用例'))
+            else:
                 lines.append('  - 未登记独立用例；以上为实际命令的退出结果。')
             if execution.get('gap'):
                 lines.append('  - 此处仅展示原始结果，当前运行材料未通过验收核查；完整意见可提交，验收前仍需修复。')

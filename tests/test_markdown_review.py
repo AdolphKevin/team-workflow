@@ -134,6 +134,48 @@ class MarkdownReview(unittest.TestCase):
         self.assertEqual(code, 0, accepted)
         self.assertTrue(accepted['business_accepted'])
 
+    def many_cases(self, declared, skipped=False):
+        self.setup_task(complexity='medium')
+        rows = ['<testcase classname="Arithmetic" name="adds"/>']
+        rows += [f'<testcase classname="Suite" name="case{i:02}"/>' for i in range(40)]
+        if skipped:
+            rows.append('<testcase classname="Other" name="skipped"><skipped/></testcase>')
+        (self.root / 'cases.xml').write_text(f'<testsuite tests="{len(rows)}">' + ''.join(rows) + '</testsuite>')
+        code = ("import app, shutil; assert app.add(1,2)==3; print('sum=3'); "
+                "shutil.copy('cases.xml', '{output}/results.xml')")
+        self.check(code, format='junit', report='{output}/results.xml',
+                   required_cases=['Arithmetic::adds'] if declared else [])
+        self.design['sections'][1]['data']['verification']['cases'] = ['Arithmetic::adds'] if declared else []
+        fixtures.write_config(self.root, self.profile)
+        self.write('task', self.task)
+        self.write('design', self.design)
+        self.write('approval-plan', designs.approval_draft(self.design, 'carol', 'Confirmed business scope', mode='design'))
+        code, started = self.command('start', '--task', self.name('task'), '--design', self.name('design'),
+                                     '--approval', self.name('approval-plan'))
+        self.assertEqual(code, 0, started)
+        code, ran = self.command('run', '--task', self.task['id'])
+        self.assertEqual(code, 0, ran)
+        code, result = self.command('review', '--task', self.task['id'])
+        self.assertEqual(code, 0, result)
+        text = (self.root / result['review_file']).read_text()
+        begin = text.index('## 验收 A1')
+        return text[begin:text.index('- 结论：', begin)]
+
+    def test_undeclared_cases_are_summarised_not_listed_one_by_one(self):
+        # Real case (Issue #5): every executed case was listed under every acceptance item; the
+        # review grew to 424 KB, unreadable and past a pull request comment's size limit.
+        section = self.many_cases(declared=False)
+        self.assertNotIn('Suite::case07', section)
+        self.assertRegex(section, r'共 41 项.*通过 41')
+        self.assertLess(len(section), 2000)
+
+    def test_declared_cases_and_every_unpassed_case_are_listed(self):
+        section = self.many_cases(declared=True, skipped=True)
+        self.assertIn('用例 Arithmetic::adds：通过', section)
+        self.assertIn('用例 Other::skipped：跳过', section)
+        self.assertNotIn('Suite::case07', section)
+        self.assertRegex(section, r'共 42 项')
+
     def test_binding_edits_are_rejected_before_a_review_material_is_created(self):
         path, _ = self.draft()
         source = self.completed(path.read_text())
