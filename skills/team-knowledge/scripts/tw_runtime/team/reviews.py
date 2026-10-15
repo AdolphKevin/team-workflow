@@ -99,7 +99,7 @@ def preview_execution(root, profile, task, paths):
             check = profile['checks'][key]
             if row.get('binding', {}).get('definition') != validation.execution_definition(check):
                 continue
-            out, _ = validation.original_files(root, check, row, portable=record.get('kind') == 'imported-execution')
+            out, _ = validation.original_files(root, check, row)
             native = out / check['report'][len('{output}/'):] if check.get('report') else None
             status, cases, detail = validation.decode(check, {'state': row['state'], 'exit_code': row['exit_code'],
                 'stdout': (out / 'stdout.txt').read_text()}, native)

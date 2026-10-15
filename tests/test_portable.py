@@ -133,6 +133,23 @@ class PortableCases(unittest.TestCase):
                 result, _ = portable.validate_import(relocated, self.profile, read(relocated / path.relative_to(self.root)))
             self.assertEqual(result['cases'], {'Arithmetic::adds': 'passed'})
 
+    def test_portable_batch_templates_stay_current_after_move(self):
+        self.prepare()
+        path, record = validation.run_batch(self.root, self.profile, [self.task], portable=True)
+        row = record['results'][0]
+        self.assertEqual(row['status'], 'passed', row)
+        self.assertEqual(row['argv'], self.profile['checks']['unit']['argv'])
+        original = self.root
+        with tempfile.TemporaryDirectory() as temporary:
+            self.root = Path(temporary).resolve() / 'moved'
+            shutil.move(original, self.root)
+            names = [path.relative_to(original).as_posix()]
+            result = validation.verify_runs(self.root, self.profile, self.task, names)
+            self.assertEqual(result['results']['unit']['cases'], {'Arithmetic::adds': 'passed'})
+            manifest_path = self.root / row['portable']['path']
+            normalized = portable.validate_result(self.root, self.profile, read(manifest_path), manifest_path.parent)
+            self.assertEqual(normalized, {key: value for key, value in row.items() if key != 'portable'})
+
     def test_same_content_new_commit_preserves_actually_tested_commit(self):
         self.prepare()
         self.capture()

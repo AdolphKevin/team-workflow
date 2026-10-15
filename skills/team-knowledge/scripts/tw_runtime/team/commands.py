@@ -9,6 +9,7 @@ from common import (RECORD_SCHEMA, Invalid, artifact, digest, evidence_file, ins
 import knowledge
 import validation
 from tw_runtime import Invalid as RuntimeInvalid
+from tw_runtime.brief import relative_paths
 
 def local(root, value):
     require(value is not None, 'Missing input path')
@@ -275,7 +276,7 @@ def dispatch(args, root):
               'runs': [artifact(root, local(root, p)) for p in args.run],
               'batch': [read(local(root, p)) for p in args.with_task],
               'dependencies': [read(local(root, p)) for p in args.dependency],
-              'options': {'check': args.check, 'kind': args.kind, 'path': args.path, 'symbol': args.symbol,
+              'options': {'check': args.check, 'kind': args.kind, 'path': relative_paths(root, args.path), 'symbol': args.symbol,
                           'reason': args.reason,
                           'allow_modified_tool': args.allow_modified_tool,
                           'grant': args.grant, 'confirmed_by': args.confirmed_by}}
@@ -287,7 +288,9 @@ def dispatch(args, root):
             source = reviews.source_path(args, root, task['id'])
             from common import sha
             try:
-                inputs['review_markdown'] = {'path': str(source), 'sha256': sha(source)}
+                inputs['review_markdown'] = {
+                    'path': source.relative_to(root).as_posix() if source.is_relative_to(root) else str(source),
+                    'sha256': sha(source)}
             except OSError as exc:
                 raise reviews.ReviewError('评审文件', 1, '无法读取 Markdown：' + str(source)) from exc
             args.review_source_ref = inputs['review_markdown']

@@ -154,7 +154,7 @@ def capture(root, profile, key, directory, portable=False):
         artifacts.append(artifact(root, path))
     after = check_binding(root, profile, check)
     row = {'id': key, 'coverage': check['coverage'], 'binding': before, 'source_unchanged': before == after,
-            'argv': argv, 'cwd': check['cwd'], 'repository': check.get('repository'),
+            'argv': list(check['argv']), 'cwd': check['cwd'], 'repository': check.get('repository'),
             'status': status, 'cases': cases, 'detail': detail, 'state': result['state'],
             'exit_code': result['exit_code'], 'seconds': result['seconds'], 'artifacts': artifacts}
     if portable:
@@ -278,15 +278,14 @@ def row_problem(root, profile, key, row, current, record):
         return str(exc)
 
 
-def original_files(root, check, row, *, portable=False):
+def original_files(root, check, row):
     artifacts = row.get('artifacts', [])
     for item in artifacts:
         artifact_valid(root, item)
     stdout = [a for a in artifacts if a['path'].endswith('/stdout.txt')]
     require(len(stdout) == 1, 'Missing original stdout: ' + row['id'])
     out = inside(root, stdout[0]['path']).parent
-    argv = check['argv'] if portable else [a.replace('{output}', str(out)) for a in check['argv']]
-    require(row.get('argv') == argv
+    require(row.get('argv') == check['argv']
             and row.get('cwd') == check['cwd'] and row.get('repository') == check.get('repository'),
             'Recorded command or repository mismatch')
     expected = ['stdout.txt', 'stderr.txt'] + [v[len('{output}/'):] for v in check.get('artifacts', [])]
@@ -297,10 +296,10 @@ def original_files(root, check, row, *, portable=False):
     return out, captured
 
 
-def reevaluate(root, profile, key, row, *, portable=False):
+def reevaluate(root, profile, key, row):
     """Decode the original report under the current required cases; this, not the stored status, decides."""
     check = profile['checks'][key]
-    out, captured = original_files(root, check, row, portable=portable)
+    out, captured = original_files(root, check, row)
     native = out / check['report'][len('{output}/'):] if check.get('report') else None
     status, cases, detail = decode(check, {'state': row['state'], 'exit_code': row['exit_code'],
                                            'stdout': (out / 'stdout.txt').read_text()}, native)
@@ -349,7 +348,7 @@ def inspect_record(root, profile, record, seen=None):
         require(row.get('state') == 'finished' and row.get('exit_code') == 0,
                 'Original check did not pass')
         require(row.get('binding', {}).get('definition') == execution_definition(check), 'Shared check definition changed')
-        reevaluate(root, profile, key, row, portable=record['kind'] == 'imported-execution')
+        reevaluate(root, profile, key, row)
         checked.add(key)
     return checked
 

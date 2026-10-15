@@ -135,7 +135,7 @@ def capture(directory, profile, row, before_source, after_source, started, finis
     require(row.get('coverage') == profile['checks'].get(key, {}).get('coverage'), 'Portable coverage differs from the check')
     require(profile.get('data_version') == 1 and key in profile['checks'], 'Portable current-format capture needs a current-format check')
     check = profile['checks'][key]
-    require(row['argv'] == [arg.replace('{output}', str(directory)) for arg in check['argv']],
+    require(row['argv'] == check['argv'],
             'Captured command differs from the executed check')
     standard = [value for value in row['artifacts'] if value['path'].endswith('/stdout.txt')]
     require(len(standard) == 1, 'Capture requires actual stdout artifact')
@@ -245,8 +245,7 @@ def validate_result(root, profile, manifest, directory, *, remote=False, live=Tr
         'status': 'passed', 'cases': decoded[1], 'detail': decoded[2],
         'evaluation': {'original_status': row['status'], 'original_detail': row['detail'],
                        'reason': 'Re-evaluated from the original report with the current required cases'}}
-    return {**row, **evaluated, 'artifacts': artifacts,
-            'argv': [arg.replace('{output}', str(directory)) for arg in check['argv']]}
+    return {**row, **evaluated, 'artifacts': artifacts}
 
 
 def _provider_source(locator, receipt, manifest):

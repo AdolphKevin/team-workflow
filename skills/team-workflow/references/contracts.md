@@ -56,6 +56,8 @@ tw team guidance --root "$PROJECT" [--scope project|global|all] [--file AGENTS.m
 `required_cases`、`required_env` 和 `environment`。命令不经 shell，凭证通过环境传递，
 只记录必要变量名；日志仍遵循项目脱敏规则。
 
+本地与可携带执行记录的 `argv` 均保存配置模板，保留 `{output}`；核查与当前模板比较，改动仍使该检查过期。启动进程时才将 `{output}` 展开为绝对路径。输出目录由 `stdout.txt` 等产物的相对路径确定，项目整体移动或复制不要求重跑。
+
 `format` 可为 `command`、`go-json` 或 `junit`。普通命令只能证明退出结果，不能声明
 用例。Go 解析 `go test -json`；JUnit 需要 `report: "{output}/results.xml"`，命令必须
 生成这次运行的新报告。必要用例使用准确的 `包::测试名` 或 `classname::name`。未指定
