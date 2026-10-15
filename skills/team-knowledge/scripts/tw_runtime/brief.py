@@ -91,6 +91,14 @@ def select(project, task, paths, symbols, refs, tags):
                 for path in paths:
                     if globs.matches(pattern, path):
                         add(entry, root, SCOPE, f'路径 {path}', globs.specificity(pattern))
+        for value in entry.values('guards'):
+            target, sep, test = value.partition('#')
+            alias, path, issue = globs.split(target)
+            if (not sep or not test.strip() or issue or alias == 'check' or path.endswith('/')
+                    or globs.WILDCARDS & set(path) or (project.root / path).is_dir()):
+                continue
+            if applies_here(project, repo, alias) and path in paths:
+                add(entry, root, SCOPE, f'守护测试 {path}', globs.specificity(path))
         for tag in entry.values('tags'):
             if textmatch.normalize(tag) in wanted_tags:
                 add(entry, root, SCOPE, f'标签 {tag}')
@@ -124,31 +132,44 @@ def select(project, task, paths, symbols, refs, tags):
             add(*by_label[label], TEXT, f'词组“{phrase}”')
     matched_terms = sorted({i for phrase in hits for i in term_vocabulary.get(phrase, ())})
     abandoned_hits = sorted({x for phrase in hits for x in abandoned_vocabulary.get(phrase, ())})
-    for pick in sorted(picks.values(), key=Pick.key):
-        if pick.tier == RELATED:
-            continue
-        for value in pick.entry.values('related'):
-            label = related_label(pick.entry, value)
-            if label in by_label:
-                entry, root = by_label[label]
-                add(entry, root, RELATED, f'由 {pick.entry.label} 关联')
-    missing = sorted(wanted - set(by_label))
     for label, index in abandoned_hits:
         entry, root = by_label[label]
         if label not in picks:
             add(entry, root, TEXT, '命中放弃过的做法')
+    outgoing, incoming = defaultdict(list), defaultdict(list)
+    for entry, root, repo in candidates:
+        for value in entry.values('related'):
+            label = related_label(project, shared, repo, value)
+            if label in by_label:
+                outgoing[entry.label].append(label)
+                incoming[label].append(entry.label)
+    # Freeze the seeds: RELATED additions never trigger another hop.
+    for pick in sorted(picks.values(), key=Pick.key):
+        for label in outgoing[pick.entry.label]:
+            add(*by_label[label], RELATED, f'由 {pick.entry.label} 关联')
+        for label in incoming[pick.entry.label]:
+            add(*by_label[label], RELATED, f'与 {pick.entry.label} 关联')
+    missing = sorted(wanted - set(by_label))
     return sorted(picks.values(), key=Pick.key), [terms[i] for i in matched_terms], abandoned_hits, missing
 
 
-def related_label(entry, value):
-    repo, sep, ref = value.partition(':')
+def related_label(project, shared, origin, value):
+    alias, sep, ref = value.partition(':')
     if not sep:
-        repo, ref = 'self', value
+        alias, ref = 'self', value
     if ref.startswith(KB + '/'):
         ref = ref[len(KB) + 1:]
-    if repo == 'self':
-        return ref if entry.repo == 'self' else f'{entry.repo}:{ref}'
-    return f'{repo}:{ref}' if entry.repo == 'self' else None
+    if alias == 'self':
+        return f'{origin.alias}:{ref}' if origin else ref
+    declared = ((origin.config if origin else project.config) or {}).get('shared', {})
+    target = declared.get(alias) if isinstance(declared, dict) else None
+    identity = target.get('id') if isinstance(target, dict) else None
+    if not identity:
+        return None
+    if identity == project.id:
+        return ref
+    current_alias = next((name for name, repo in shared.items() if repo.expected == identity), None)
+    return f'{current_alias}:{ref}' if current_alias else None
 
 
 def glossary_terms(project, shared):
@@ -195,6 +216,16 @@ def body_for(entry):
     return re.sub(r'^(#{2,5}) ', r'#\1 ', text, flags=re.M)
 
 
+def source_summary(entry):
+    sources = entry.values('source')
+    if not sources:
+        return '未写'
+    shown = next((s for s in sources if s.startswith(('https://', 'http://'))), sources[0])
+    if len(shown) > 80:
+        shown = shown[:80] + '…'
+    return shown + (f' 等 {len(sources)} 项' if len(sources) > 1 else '')
+
+
 def paragraphs_within(text, limit):
     out, used = [], 0
     for paragraph in text.split('\n\n'):
@@ -205,6 +236,31 @@ def paragraphs_within(text, limit):
     return '\n\n'.join(out), False
 
 
+def lines_within(title, lines, limit):
+    """Return a whole-line prefix of a section and the number of rows included."""
+    section, count = f'## {title}\n', 0
+    for line in lines:
+        if len(section) + len(line) + 1 > limit:
+            break
+        section += line
+        count += 1
+    return (section + '\n', count) if count else ('', 0)
+
+
+def overview_within(overview, limit):
+    if not overview:
+        text = '（项目尚无 overview.md）\n\n'
+        return text if len(text) <= limit else ''
+    text, cut = paragraphs_within(overview.text(), min(OVERVIEW_LIMIT, limit - 2))
+    if not cut:
+        return text + '\n\n'
+    notice = '（总览较长，完整内容：tw read overview.md）\n\n'
+    if len(notice) > limit:
+        return ''
+    text, _ = paragraphs_within(overview.text(), min(OVERVIEW_LIMIT, limit - len(notice) - 2))
+    return (text + '\n\n' if text else '') + notice
+
+
 def build(project, task, paths=(), symbols=(), refs=(), tags=(), budget=6000, index_only=False):
     if not task or not task.strip():
         raise Invalid('需要 --task 描述当前任务')
@@ -212,20 +268,40 @@ def build(project, task, paths=(), symbols=(), refs=(), tags=(), budget=6000, in
         raise Invalid('--budget 不能小于 1000 个字符')
     paths = relative_paths(project.root, paths)
     picks, terms, abandoned_hits, missing = select(project, task, paths, symbols, refs, tags)
-    parts, left = [], budget
+    shared = project.shared()
+    commits = gitutil.recent_commits(project.root, paths)
+    # Counted per kind: entries, abandoned reminders, commits, then shared/missing lines.
+    hidden = [0, 0, 0, 0]
+    units = ('个条目', '条曾放弃的方向', '条相关提交', '行共享仓或未找到的条目')
+    hint = '加大 --budget 或用 --entry 查看' if index_only else '用相同的 --task、--path 加 --index 查看'
 
-    def put(text):
-        nonlocal left
-        parts.append(text)
-        left -= len(text)
+    def footer(counts):
+        parts = [f'{n} {unit}' for n, unit in zip(counts, units) if n]
+        return f'（未列出：{"、".join(parts)}。{hint}）\n' if parts else ''
 
-    put(f'# 任务：{task.strip()}\n\n')
+    # Reserve the longest footer the counts could produce.
+    left = budget - len(footer([len(picks), len(abandoned_hits), len(commits), len(missing) + len(shared)]))
+    reserved = {}
+    for title, lines in [
+        ('未找到的条目', [f'- {label}\n' for label in missing]),
+        ('共享仓', [f'- {alias}：{repo.describe()}\n' for alias, repo in sorted(shared.items())]),
+    ]:
+        # Space is reserved first; the sections still print in their usual place.
+        # Even pathological metadata must leave room for the task heading.
+        section, count = lines_within(title, lines, left - len('# 任务：…\n\n'))
+        reserved[title] = section
+        left -= len(section)
+        hidden[3] += len(lines) - count
+    task_room = max(1, left - NAV_LIMIT - len('# 任务：\n\n'))
+    task_text = task.strip()
+    if len(task_text) > task_room:
+        task_text = task_text[:task_room - 1] + '…'
+    heading = f'# 任务：{task_text}\n\n'
+    left -= len(heading)
     overview = next((e for e in project.entries() if e.kind == 'overview'), None)
-    if overview:
-        text, cut = paragraphs_within(overview.text(), OVERVIEW_LIMIT)
-        put(f'{text}\n' + ('（总览较长，完整内容：tw read overview.md）\n' if cut else '') + '\n')
-    else:
-        put('（项目尚无 overview.md）\n\n')
+    intro = overview_within(overview, max(0, left - NAV_LIMIT))
+    left -= len(intro)
+    glossary = ''
     if terms:
         lines, used = [], 0
         for term in terms:
@@ -235,8 +311,8 @@ def build(project, task, paths=(), symbols=(), refs=(), tags=(), budget=6000, in
                 break
             lines.append(line)
             used += len(line)
-        if lines:
-            put('## 术语\n' + ''.join(lines) + '\n')
+        glossary, _ = lines_within('术语', lines, max(0, left - NAV_LIMIT))
+        left -= len(glossary)
     memo, dirty = {}, {}
     rendered, indexed = [], []
     content_left = left - NAV_LIMIT
@@ -245,15 +321,15 @@ def build(project, task, paths=(), symbols=(), refs=(), tags=(), budget=6000, in
         status = drift(pick, memo, dirty)['text']
         block = (f'## {pick.entry.title}{"（已拒绝）" if pick.entry.fields.get("status") == "rejected" else ""}\n'
                  f'{body_for(pick.entry)}\n'
-                 f'来源：{"、".join(pick.entry.values("source")) or "未写"} · {status}\n→ {pick.entry.label}\n\n')
+                 f'来源：{source_summary(pick.entry)} · {status}\n→ {pick.entry.label}\n\n')
         if not overflow and len(block) <= content_left:
-            put(block)
+            left -= len(block)
             content_left -= len(block)
-            rendered.append((pick, status))
+            rendered.append((pick, status, block))
         else:
             overflow = True
             indexed.append((pick, status))
-    full = {p.entry.label for p, _ in rendered}
+    full = {p.entry.label for p, _, _ in rendered}
     reminders = []
     for label, index in abandoned_hits:
         if label in full:
@@ -261,36 +337,30 @@ def build(project, task, paths=(), symbols=(), refs=(), tags=(), budget=6000, in
         pick = next(p for p in picks if p.entry.label == label)
         item = entries.abandoned(pick.entry.body)[index]
         reminders.append(f'- {item.split(chr(10), 1)[0]} — 放弃原因：{entries.label_value(item, "放弃原因")} → {label}\n')
-    nav = []
-    if reminders:
-        nav.append('## 曾放弃的方向\n' + ''.join(reminders) + '\n')
-    if indexed:
-        nav.append('## 继续阅读\n' + ''.join(f'- {p.entry.title} → {p.entry.label}（{"；".join(p.reasons[:2])}）\n' for p, _ in indexed) + '\n')
-    shared = project.shared()
-    if shared:
-        nav.append('## 共享仓\n' + ''.join(f'- {alias}：{repo.describe()}\n' for alias, repo in sorted(shared.items())) + '\n')
-    commits = gitutil.recent_commits(project.root, paths)
-    if commits:
-        nav.append('## 相关提交\n' + ''.join(f'- {h} {s}\n' for h, s in commits) + '\n')
-    if missing:
-        nav.append('## 未找到的条目\n' + ''.join(f'- {m}\n' for m in missing) + '\n')
-    omitted = 0
-    for section in nav:
-        if len(section) <= left:
-            put(section)
-        else:
-            omitted += section.count('\n- ')
-    if omitted:
-        put(f'（篇幅已满，另有 {omitted} 行未列出；用 `tw brief --index` 或 `--entry` 查看）\n')
-    markdown = ''.join(parts).rstrip('\n') + '\n'
+    reminder_nav, count = lines_within('曾放弃的方向', reminders, left)
+    left -= len(reminder_nav)
+    hidden[1] = len(reminders) - count
+    index_lines = [f'- {p.entry.title} → {p.entry.label}（{p.reasons[0]}）\n' for p, _ in indexed]
+    index_nav, count = lines_within('继续阅读', index_lines, left)
+    left -= len(index_nav)
+    hidden[0] = len(index_lines) - count
+    listed = full | {p.entry.label for p, _ in indexed[:count]}
+    commit_nav = '## 相关提交\n' + ''.join(f'- {h} {s}\n' for h, s in commits) + '\n' if commits else ''
+    if len(commit_nav) > left:
+        hidden[2] = len(commits)
+        commit_nav = ''
+    markdown = (heading + intro + glossary + ''.join(block for _, _, block in rendered) + reminder_nav + index_nav
+                + reserved['共享仓'] + commit_nav + reserved['未找到的条目']
+                + footer(hidden)).rstrip('\n') + '\n'
+    selected = [(p, status) for p, status, _ in rendered] + indexed
     return {
         'task': task.strip(), 'paths': paths, 'chars': len(markdown), 'budget': budget,
         'entries': [{'label': p.entry.label, 'title': p.entry.title, 'kind': p.entry.kind, 'tier': p.tier,
-                     'reasons': p.reasons, 'rendered': p.entry.label in full, 'status': status}
-                    for p, status in rendered + indexed],
+                     'reasons': p.reasons, 'rendered': p.entry.label in full, 'listed': p.entry.label in listed, 'status': status}
+                    for p, status in selected],
         'terms': [t['term'] for t in terms], 'abandoned': [label for label, _ in abandoned_hits],
         'repositories': {alias: {'status': repo.status, 'description': repo.describe()} for alias, repo in shared.items()},
-        'missing': missing, 'omitted_lines': omitted, 'markdown': markdown,
+        'missing': missing, 'omitted_lines': sum(hidden), 'markdown': markdown,
     }
 
 

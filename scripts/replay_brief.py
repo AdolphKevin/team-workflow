@@ -18,21 +18,21 @@ from tw_runtime.project import Project  # noqa: E402
 
 def replay(project_root, queries, budget=6000, repositories=()):
     project = Project(Path(project_root), repositories)
-    rows, totals = [], {'expected': 0, 'rendered': 0, 'listed': 0}
+    rows, totals = [], {'expected': 0, 'full': 0, 'visible': 0}
     for query in queries:
         result = brief.build(project, query['task'], query.get('paths', []), query.get('symbols', []), budget=budget)
-        rendered = {e['label'] for e in result['entries'] if e['rendered']}
-        listed = {e['label'] for e in result['entries']}
+        full = {e['label'] for e in result['entries'] if e['rendered']}
+        visible = {e['label'] for e in result['entries'] if e['listed']}
         expected = set(query.get('expected', []))
         totals['expected'] += len(expected)
-        totals['rendered'] += len(expected & rendered)
-        totals['listed'] += len(expected & listed)
+        totals['full'] += len(expected & full)
+        totals['visible'] += len(expected & visible)
         rows.append({'id': query.get('id'), 'chars': result['chars'], 'expected': sorted(expected),
-                     'missing': sorted(expected - listed), 'only_indexed': sorted((expected & listed) - rendered),
-                     'extra': sorted(listed - expected)})
+                     'missing': sorted(expected - visible), 'index_only': sorted((expected & visible) - full),
+                     'extra': sorted(visible - expected)})
     expected = totals['expected'] or 1
-    return {'queries': len(rows), 'recall_rendered': round(totals['rendered'] / expected, 3),
-            'recall_listed': round(totals['listed'] / expected, 3), 'rows': rows}
+    return {'queries': len(rows), 'recall_full': round(totals['full'] / expected, 3),
+            'recall_visible': round(totals['visible'] / expected, 3), 'rows': rows}
 
 
 def main():

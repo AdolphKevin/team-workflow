@@ -21,6 +21,7 @@
 | 2026-10-14 | AdolphKevin | v4.1：T1 保留任务编号与可读目录；C 节的命令重新分组移到 T7 | 阶段 2 独立评审 F6、批次 0 第一轮缺陷 F3 之后，会话中确认“可以” |
 | 2026-10-14 | AdolphKevin | v4.2：T7 提前，阶段 3–5 在 tw 彻底完成后进行 | 会话中指示“流程验证没问题后，把流程简化这一步先提前。阶段 3，4，5 要在 tw 彻底完成后再去做” |
 | 2026-10-15 | AdolphKevin | T7 [流程简化方案](2026-10-15-process-simplification.md) 全文及其 D1–D4 | 会话中确认“可以” |
+| 2026-10-15 | AdolphKevin | 阶段 3 试点后、agent-py 迁移前：brief 改为来源摘要、关联双向扩展、按守护测试路径取用，迁移指南准备步骤补环境确认；改动用未参与调整的真实任务回放验证 | 会话中答复“agent-py 迁移前，先做这两项改动” |
 
 实施分支：`feature/unified-redesign`。按 I 节分阶段进行，每个阶段的验收证据记录在 `docs/validation.md`。
 
@@ -396,8 +397,10 @@ guards: ["self:tests/order_graph/test_evidence_boundary.py#test_new_task_frame_d
 ### R2 brief 选择算法
 
 1. **规范化**：规范化仓库身份、相对路径和符号，拒绝越界路径。glob 由自研匹配器处理：`*` 不跨目录，`**` 跨目录，`?` 匹配单个字符。不用 `fnmatch`，因为它的 `*` 会跨目录。
-2. **固定内容**：总是输出 overview。术语只返回任务中直接出现的词，以及它们的 `_Avoid_` 别名。
-3. **候选优先级**：显式条目（`--entry`）或精确符号 → scope 路径匹配 → 标题、标签、术语匹配。
+2. **固定内容**：预算内输出 overview，必要时只保留完整段落。术语只返回任务中直接出现的词，以及它们的 `_Avoid_` 别名。
+3. **候选优先级**：显式条目（`--entry`）或精确符号 → scope 路径、守护测试路径或显式标签匹配 → 标题、标签、术语匹配。
+   - `guards` 中的 `别名:路径#测试名`，别名按 scope 的仓库身份规则指向当前项目，且路径与某个 `--path` 完全相同时，在 scope 同一层选中；理由为 `守护测试 <路径>`，具体程度按该路径的字面段数计算。
+   - `check:`、目录和 glob 不参与守护测试路径匹配。共享仓的 `self:` 指向共享仓自身，不匹配当前项目路径。
 4. **中文匹配**：
    - 词表由三部分组成：词汇表术语及别名、所有 `tags`、条目标题按标点和空白切出的词组。
    - 任务文本先规范化（ASCII 转小写、全角转半角），再从左到右做贪心最长匹配，每个词只计一次。
@@ -408,7 +411,8 @@ guards: ["self:tests/order_graph/test_evidence_boundary.py#test_new_task_frame_d
    3. 独立信号数；
    4. 文件路径。
 6. **扩展与放弃提醒**：
-   - 按 `related` 对选中条目扩展一层。
+   - 对所有非 RELATED 层选中的条目 P（含命中放弃做法的条目），加入 P 的 `related` 所指条目，以及 `related` 中写了 P 的条目。后者理由为 `与 <P> 关联`；新增条目进入 RELATED 层，只扩展一层，不传递。
+   - `related` 的别名按写下它的仓库的 `shared` 配置解析：身份等于当前项目时读取本仓条目；等于当前项目已配置的另一个共享仓时换成当前项目的别名；无法解析的忽略。无别名或 `self:` 始终指写下它的仓库，不递归读取其他仓库。
    - 命中 rejected 决策时，只展示理由部分。
    - 选中的 decision 有“放弃过的做法”时，展示每项的做法、放弃原因和重新考虑的条件。
    - 任务文本命中某项放弃过的做法时（按第 4 步的词组匹配，例如“永久删除”），即使 scope 没有命中，也单列一条“曾放弃”提醒。
@@ -417,9 +421,11 @@ guards: ["self:tests/order_graph/test_evidence_boundary.py#test_new_task_frame_d
 
 **预算**
 
-- 默认 6,000 个 Unicode 字符：overview 不超过 600，术语不超过 400，导航不超过 600，其余留给条目。
-- 条目按空行分段，只能整条放入。放不下时改为索引行，**禁止截断否定条件**。
-- 索引也放不下时，显示剩余数量和再次查询的方法。
+- 默认 6,000 个 Unicode 字符，最小 1,000；标题、说明、空行和省略提示都计入，输出不得超限。overview 正文不超过 1,200，术语行不超过 400；为导航预留 600，导航也可使用条目剩下的空间。
+- 先为“未找到的条目”和“共享仓”预留空间，再分配任务标题、总览、术语与条目。过长任务标题按剩余篇幅缩短，JSON 中保留完整任务；总览按段落缩短，能容纳时提示 `tw read overview.md`。
+- 条目只能整条放入，**禁止截断否定条件**。完整条目的来源摘要取首个 http(s) 链接，无链接取首项；超过 80 字符时保留前 80 字符并加“…”；多项显示 `等 N 项`，N 为来源总数；无来源显示“未写”，随后保留核实状态。`tw read` 仍显示完整来源。
+- 放不下的条目按排序进入“继续阅读”：`- <标题> → <标签>（<第一条理由>）`。该节和“曾放弃的方向”均按整行保留前缀；未列出的内容按类别计数，例如 `（未列出：4 个条目、5 条相关提交。用相同的 --task、--path 加 --index 查看）`；`--index` 模式改为提示加大 `--budget` 或用 `--entry`。各节的输出顺序不变：条目、曾放弃的方向、继续阅读、共享仓、相关提交、未找到的条目。“相关提交”最后分配，整节放不下就省略，行数也计入 N。
+- JSON 中 `rendered` 表示完整正文已输出；`listed` 表示完整正文或索引行实际出现。回放分别统计 `recall_full`、`recall_visible`，逐项列出不可见的 `missing`、仅索引可见的 `index_only` 和额外可见的 `extra`。
 
 **缓存**：输入为 HEAD，以及各知识文件的路径、大小和修改时间；工作区中有改动的文件另计内容哈希，使未提交的知识改动能立即被检索到。读取缓存时不写入；缓存缺失时在内存中计算。
 
@@ -439,15 +445,20 @@ guards: ["self:tests/order_graph/test_evidence_boundary.py#test_new_task_frame_d
 
 ## 建会话前确定语言
 创建事务前判定，随会话写入独立字段……
-来源：Issue #146 · 核实基线之后有 N 个相关提交，另有未提交修改
+来源：https://github.com/channelwill/cw2-live-chat/issues/146 等 3 项 · 核实于 2026-10-14，之后 scope 内有 2 个提交，另有未提交修改
 → decisions/2026-10-13-conversation-language.md
 
 ## 继续阅读
-- 语言回写规则 → rules/conversation-language-update.md
-- 代理侧弱输入边界 → agent-py:rules/language-evidence.md（检出：../cw2-live-chat-agent-py @ 4f2c… 无未提交修改）
+- 语言回写规则 → rules/conversation-language-update.md（守护测试 tests/test_language.py）
+- 代理侧弱输入边界 → agent-py:rules/language-evidence.md（与 decisions/2026-10-13-conversation-language.md 关联）
 
-## 相关提交
-（按本次路径筛选的提交标题与 Issue 链接）
+## 共享仓
+- agent-py：../cw2-live-chat-agent-py @ 4f2c123，无未提交修改
+
+## 未找到的条目
+- rules/missing.md
+
+（未列出：4 个条目。用相同的 --task、--path 加 --index 查看）
 ```
 
 不再输出回执、复核队列、11 类覆盖表和空字段。这些诊断信息移到 `tw audit`。

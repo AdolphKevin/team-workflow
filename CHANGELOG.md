@@ -1,5 +1,6 @@
 # 未发布（0.9.0-dev，合并重构）
 
+- `tw brief`：完整条目的来源改为摘要（首个链接或首项，加总数）；任务路径与条目的守护测试文件相同时按 scope 选中；related 双向扩展一层，并按写入仓的配置解析跨仓别名；“继续阅读”等导航按行截断，不再整节消失，输出不超过预算。JSON 新增 `listed`，表示条目在输出中可见；回放脚本改报 `recall_full`、`recall_visible`。迁移指南的准备步骤补充：守护测试需要的环境先确认能运行。
 - 破坏性变化：team-workflow 与 CS 合并为一个仓库、一个运行时。新增知识入口 `team-knowledge`，命令行为 `tw`；团队命令改为 `tw team <命令>`。项目内只保留 `.tw/` 一个目录：入库的 `config.json`、`overview.md`、`glossary.md`、`rules/`、`decisions/`、`lessons/`，以及被忽略的 `local/`。`.codestable/`、`.team-workflow.json`、`.team-workflow/` 不再使用，已接入项目由代理按迁移指南整理，不提供迁移脚本。
 - 知识直接编辑 Markdown，与代码在同一个 PR 评审。`tw check` 只查客观缺陷，`tw brief` 有字符预算，并会提醒“放弃过的做法”。删除计划令牌、锁、回执、内容指纹、`future_use`、11 类目录与任务记录入库。
 - 团队流程删除与 CS 的桥接：`knowledge`、`knowledge-template`、`adopt` 命令，以及 `--cs-skill`、`--profile` 参数。交付报告的 `knowledge` 改为“改动的知识文件或不需要的理由”。只提交知识不再使按内容绑定的检查过期。

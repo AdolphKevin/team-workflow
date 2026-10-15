@@ -1,9 +1,10 @@
 ---
 title: "迁移代理没有数据库环境，核实规则挡掉了大部分行为知识"
 scope: ["self:skills/team-knowledge/references/migration.md"]
-source: ["self:docs/validation.md"]
+source: ["self:docs/validation.md", "self:skills/team-knowledge/references/migration.md"]
 verified: {"self": {"commit": "9cb446629417d81a3a99f2ac492573cac502573d", "date": "2026-10-15"}}
 tags: ["迁移", "核实", "数据库", "沙箱", "守护测试", "回放"]
+related: ["decisions/2026-10-14-migration-by-agent.md"]
 ---
 # 迁移代理没有数据库环境，核实规则挡掉了大部分行为知识
 
@@ -11,8 +12,8 @@ tags: ["迁移", "核实", "数据库", "沙箱", "守护测试", "回放"]
 
 根因：迁移指南要求这类结论运行守护测试后才能迁入，跑不了就不迁入。迁移代理的沙箱起不了数据库，规则按设计把它们全部挡在外面。指南的准备步骤没有要求先备好运行环境。
 
-修复与防护：在沙箱外用一次性 PostgreSQL 运行 core 已登记的 db-suite，把原始结果交给迁移代理返工，覆盖升到 27 条。迁移前先确认已登记检查能在迁移代理的环境中运行；不能运行时，由主代理在可运行的环境中执行，提供原始结果。
+修复与防护：在沙箱外用一次性 PostgreSQL 运行 core 已登记的 db-suite，把原始结果交给迁移代理返工，覆盖升到 27 条。环境准备与结果交接按[迁移指南第 1 步](../../skills/team-knowledge/references/migration.md)执行。
 
-发现方法：迁移后用独立预期回放 brief，统计每条预期知识有没有对应条目；“未核实、未迁入”的比例异常高时，先查验证环境。
+发现方法：迁移后用独立预期回放 brief，核对每条预期知识是否在正文或索引中可见；“未核实、未迁入”的比例异常高时，先查验证环境。
 
 适用条件：迁移或补写持久化、并发、授权、跨服务行为的知识，且守护测试需要数据库等外部环境时。
