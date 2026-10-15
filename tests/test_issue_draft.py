@@ -14,6 +14,7 @@ from tw_runtime.team import platform_script as platform_read
 from platform_fixtures import CONFIG as PLATFORM_CONFIG, transport as platform_transport
 import issue_draft
 import workflow
+import plan_fixtures as plans
 
 CHILD = 'https://github.com/example/project/issues/2'
 
@@ -26,6 +27,7 @@ class IssueAdoption(unittest.TestCase):
         self.base.setUp(self)
         self.base.prepare(self)
         self.issue['body'] = 'Add two inputs.\n\nOriginal MATT spec text stays as written.'
+        self.design_path = plans.design_source(self.root, self.design)
         self.child = {'html_url': CHILD, 'state': 'open', 'assignees': [{'login': 'bob'}], 'comments_data': [],
                       'body': 'Follow-up: subtraction keeps working.'}
         self.child_task = copy.deepcopy(self.task)
@@ -40,10 +42,10 @@ class IssueAdoption(unittest.TestCase):
         return self.base.github(self, endpoint, paginate, binary)
 
     def test_legacy_issue_gets_body_design_and_approval_request_without_writes(self):
-        result = issue_draft.draft(self.root, self.profile, self.task, self.design, [self.child_task], 'carol')
+        result = issue_draft.draft(self.root, self.profile, self.task, self.design, [self.child_task], 'carol', design_path=self.design_path)
         self.assertTrue(result['read_only'])
         own, child = result['issues']
-        self.assertTrue(own['body'].startswith('Add two inputs.\n\nOriginal MATT spec text stays as written.\n\n```team-workflow-task'))
+        self.assertTrue(own['body'].startswith('Add two inputs.\n\nOriginal MATT spec text stays as written.\n\n<!-- tw-task:start -->'))
         self.assertIn('`A1`', own['approval_request'])
         self.assertIn('评审人：carol', own['approval_request'])
         self.assertNotIn('design_comment', child)
@@ -65,12 +67,12 @@ class IssueAdoption(unittest.TestCase):
         again = issue_draft.draft(self.root, self.profile, self.task)['issues'][0]
         self.assertEqual(again['body'], first)
         self.assertFalse(again['body_changed'])
-        self.assertEqual(again['body'].count('```team-workflow-task'), 1)
+        self.assertEqual(again['body'].count('<!-- tw-record '), 1)
 
     def test_child_must_declare_the_shared_design_parent(self):
         self.child_task.pop('parent')
         with self.assertRaisesRegex(Invalid, 'set "parent"'):
-            issue_draft.draft(self.root, self.profile, self.task, self.design, [self.child_task])
+            issue_draft.draft(self.root, self.profile, self.task, self.design, [self.child_task], design_path=self.design_path)
         with self.assertRaisesRegex(Invalid, 'owns the design'):
             issue_draft.draft(self.root, self.profile, dict(self.child_task, parent=self.url), self.design)
 
@@ -84,8 +86,7 @@ class IssueAdoption(unittest.TestCase):
         self.assertIn('issue-draft', result['next_action'])
 
     def test_adopted_child_reports_unadopted_parent_and_its_next_action(self):
-        self.child['body'] += '\n\n```team-workflow-task\n' + json.dumps(
-            {'data_version': 1, 'parent': self.url, 'task': self.child_task}) + '\n```\n'
+        self.child['body'] = plans.task_body(self.child_task, self.url, self.child['body'])
         fixtures.write_config(self.root, self.profile)
         output = io.StringIO()
         with contextlib.redirect_stdout(output):

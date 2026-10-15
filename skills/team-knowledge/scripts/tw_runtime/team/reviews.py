@@ -1,4 +1,6 @@
 """Editable review format 1; immutable bindings and source snapshots leave room for later rechecks."""
+import design_files
+import records
 import copy
 from datetime import datetime, timezone
 import hashlib
@@ -197,7 +199,7 @@ def snapshot(args, root, profile, task, draft_id, allow_incomplete=False):
     if status.get('review_mode') == 'combined':
         from commands import local
         bindings['approval_plan'] = review_history.approval_plan(
-            design, [read(local(root, path)) for path in args.design_history])
+            design, [design_files.read(local(root, path)) for path in args.design_history])
     from contracts import match_coverage
     sections = {row['id']: row for row in design['sections']}
     for row in task['acceptance']:
@@ -257,7 +259,7 @@ def render(value):
 
     lines = ['# 任务评审', '', '只填写下方评审字段；工具绑定、运行结果和风险列表保持原样。',
              '结论填写“通过”或“不通过”；证据文件可留空，补充时每行一个项目内路径。', '',
-             BIND_START, '```json', json.dumps(binding, ensure_ascii=False, indent=2), '```', BIND_END, '']
+             BIND_START, records.comment(binding), BIND_END, '']
     if value.get('changes'):
         lines += ['## 变化', _protected('changes', value['generated']['changes']), '',
                   '预填内容尚未重新确认；每个复核字段均须由评审人改为“已复核”。', '']
@@ -313,7 +315,7 @@ def _extract(text, start, end, section):
 def _sections(text, value):
     text = text.replace('\r\n', '\n').replace('\r', '\n')
     block, left, right = _extract(text, BIND_START, BIND_END, '绑定')
-    expected = BIND_START + '\n```json\n' + json.dumps(value['bindings'], ensure_ascii=False, indent=2) + '\n```\n' + BIND_END
+    expected = BIND_START + '\n' + records.comment(value['bindings']) + '\n' + BIND_END
     if block != expected:
         raise ReviewError('绑定', text[:left].count('\n') + 1, '工具填写的绑定区被改动，不能提交；请重新生成复核稿。')
     masked = text[:left] + re.sub(r'[^\n]', ' ', block) + text[right:]
@@ -617,8 +619,7 @@ def _binding(root, task_id, text, *, current_only=False):
     normalized = text.replace('\r\n', '\n').replace('\r', '\n')
     block, left, _ = _extract(normalized, BIND_START, BIND_END, '绑定')
     try:
-        match = re.search(r'```json\n(.*?)\n```', block, re.DOTALL)
-        value = json.loads(match[1]) if match else {}
+        value = records.block(block, 'review')
         draft_id = value.get('draft_id', '')
         if not re.fullmatch('[a-f0-9]{32}', draft_id):
             raise ValueError('缺少草稿编号')
@@ -687,7 +688,7 @@ def submit(args, root, profile, task, request):
             _value(sections, '评审信息', '批准说明', False), mode='combined',
             section_ids=status['required_sections'],
             deletion_ids=[row['id'] for row in status['deletions'] if row['required']],
-            history=[read(local(root, path)) for path in args.design_history],
+            history=[design_files.read(local(root, path)) for path in args.design_history],
             code_digest=fresh['bindings']['source_digest'], run_refs=refs)
     import issue_history
     issue_history.capture(request, task, review, [row['id'] for row in design['sections']])

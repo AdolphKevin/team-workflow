@@ -9,7 +9,7 @@ import tempfile
 from contextvars import ContextVar
 from datetime import datetime, timezone
 
-from tw_runtime import DATA_VERSION, VERSION, Invalid as RuntimeInvalid, install
+from tw_runtime import DATA_VERSION, VERSION, Invalid as RuntimeInvalid, install, repo_paths
 from tw_runtime.project import CONFIG, MAPPING, TEAM_KEYS, config_problems
 
 RECORD_SCHEMA = DATA_VERSION
@@ -426,6 +426,11 @@ def task_valid(task, profile, root):
     require(re.fullmatch(r'[0-9a-f]{40}|[0-9a-f]{64}', task['base']), 'Task base must be a full commit ID')
     git(root, 'cat-file', '-e', task['base'] + '^{commit}')
     strings(task['non_goals'])
+    try:
+        for path in strings(task.get('paths', [])):
+            repo_paths.normalize(path, scope=True)
+    except RuntimeInvalid as exc:
+        raise Invalid(str(exc)) from exc
     require(task['kind'] in KINDS, 'Unknown task kind')
     strings(task['risks'])
     require(set(task['risks']) <= RISKS, 'Unknown task risk')

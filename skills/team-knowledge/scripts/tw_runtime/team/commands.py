@@ -1,4 +1,5 @@
 """Command composition for the workflow CLI."""
+import design_files
 import json
 import shlex
 import copy
@@ -26,19 +27,25 @@ def readable(result):
     for key in ('problem', 'next_action'):
         if result.get(key) and str(result[key]) not in lines:
             lines.append(str(result[key]))
+    for warning in result.get('warnings', []):
+        lines.append('提示：' + str(warning))
     for gap in result.get('gaps', []):
         lines.append('- ' + str(gap))
     for key in ('artifact', 'task', 'design', 'brief'):
         item = result.get(key)
         if isinstance(item, dict) and item.get('path'):
             lines.append(key + ': ' + item['path'])
+    if result.get('pr_description') is not None:
+        lines += ['--- PR 描述草稿 ---', result['pr_description']]
+    if result.get('markdown'):
+        lines += ['--- 发布评论草稿 ---', result['markdown']]
     if result.get('summary_markdown'):
         lines += ['', result['summary_markdown']]
     for role, ref in result.get('verified_records', {}).items():
         lines.append({'acceptance': '已核实的业务验收记录', 'delivery': '已核实的交付记录'}[role] + '：' + ref['path'])
     if result.get('publication'):
         row = result['publication']
-        lines.append(row['summary'] + ('：' + row['url'] if row.get('url') else ''))
+        lines.append(row['summary'] + ('：' + row['url'] if row.get('url') else '') if isinstance(row, dict) else str(row))
     for row in result.get('review_failures', []):
         lines.append('- ' + row['id'] + '：' + row['reason'])
     if result.get('knowledge_next_action'):
@@ -145,7 +152,7 @@ def dispatch(args, root):
     if args.command == 'schema':
         directory = skill_resource('templates')
         return {'ok': True, 'summary': '统一项目数据格式与字段说明',
-                'templates': {p.stem: str(p) for p in sorted(directory.glob('*.json'))},
+                'templates': {p.stem: str(p) for p in sorted(directory.glob('*')) if p.suffix == '.json' or p.name == 'design.md'},
                 'reference': str(skill_resource('references/contracts.md')),
                 'data_version': RECORD_SCHEMA,
                 'next_action': 'Read the installed template and replace every placeholder.'}
@@ -161,6 +168,11 @@ def dispatch(args, root):
         mappings = {key: (root / Path(path).expanduser()).resolve() for key, path in location_settings(root)['repositories'].items()}
         return portable.aggregate(root, read(local(root, args.joint)), mappings)
     from tw_runtime.team import platform_script as platform_read
+    # Validate caller paths before materials.resolve replaces them with tool-owned snapshots.
+    for path in ([args.design] if args.design else []) + list(args.design_history):
+        design_files.read(local(root, path), internal=False)
+    if args.command == 'design-draft' and args.record:
+        design_files.read(local(root, args.record), internal=False)
     candidate = args.issue or (str(args.task) if args.task else None)
     if candidate:
         platform_read.is_task(root, candidate)
@@ -204,8 +216,9 @@ def dispatch(args, root):
         import issue_draft
         require(bool(args.task), 'issue-draft needs --task (the structured task for the issue)')
         return issue_draft.draft(root, profile, read(local(root, args.task)),
-                                 read(local(root, args.design)) if args.design else None,
-                                 [read(local(root, p)) for p in args.with_task], args.reviewer)
+                                 design_files.read(local(root, args.design)) if args.design else None,
+                                 [read(local(root, p)) for p in args.with_task], args.reviewer,
+                                 design_path=local(root, args.design) if args.design else None)
     platform = start['platform'] if start else None
     if args.issue and start is None:
         import coordination
@@ -278,6 +291,7 @@ def dispatch(args, root):
         value = getattr(args, name, None)
         if value:
             input_files[name] = artifact(root, local(root, value))
+    query_paths = relative_paths(root, args.path)
     inputs = {'command': args.command, 'phase': args.phase, 'task': digest(task), 'profile': digest(profile),
               'files': input_files, 'source': validation.source_digest(root, profile),
               'approvals': [artifact(root, local(root, p)) for p in args.approval],
@@ -285,7 +299,8 @@ def dispatch(args, root):
               'runs': [artifact(root, local(root, p)) for p in args.run],
               'batch': [read(local(root, p)) for p in args.with_task],
               'dependencies': [read(local(root, p)) for p in args.dependency],
-              'options': {'check': args.check, 'kind': args.kind, 'path': relative_paths(root, args.path), 'symbol': args.symbol,
+              'options': {'check': args.check, 'kind': args.kind, 'path': query_paths,
+                          'path_directories': [path for path in query_paths if path.directory], 'symbol': args.symbol,
                           'reason': args.reason,
                           'allow_modified_tool': args.allow_modified_tool,
                           'grant': args.grant, 'confirmed_by': args.confirmed_by}}
@@ -369,7 +384,7 @@ def missing_task_block(args, exc):
     return {'ok': False, 'error_code': 'issue-not-adopted' if requested else 'parent-issue-not-adopted',
             'problem': str(exc),
             'next_action': f'Draft the structured issue body first: tw team issue-draft --root "$PROJECT" '
-                           f'--task {task_input} [--design <design.json>] [--with-task <sibling.json>] '
+                           f'--task {task_input} [--design <design.md>] [--with-task <sibling.json>] '
                            f'[--reviewer <name>]  (issue {exc.issue_url})'}
 
 
@@ -408,7 +423,8 @@ def produce(args, root, profile, task, platform, request):
             value.update(implementation_ready=False, ready_to_implement=False,
                          summary='共享目录正在执行验收检查；源码和生成输入须保持不变。',
                          next_action='Wait for the active validation to finish before editing or changing checkouts.')
-        brief = value.get('knowledge') or knowledge.brief(root, task, args.path, args.symbol)
+        paths = knowledge.query_paths(root, task, selection['design'], args.path)
+        brief = value.get('knowledge') or knowledge.brief(root, task, paths, args.symbol)
         value['brief'] = request.publish('brief.json', brief)
         value.update(continued=True, task_id=task['id'], context=selection['previous_ref'],
                      task_directory=request.directory.parent.parent.relative_to(root).as_posix(),
@@ -424,6 +440,7 @@ def produce(args, root, profile, task, platform, request):
             value['next_action'] = progress['next_step']['next_command'] if progress['next_step'] else value['step_lines'][-1]
             if progress['finished']:
                 value['summary'] = '已交付；关闭需要授权，工具不执行关闭'
+        value['warnings'] = platform.get('warnings', []) if platform else []
         return {**value, 'artifact': request.publish('start.json', value, args.out)}
     if args.command == 'task-export':
         return {**emit(task, 'task.json'), 'summary': '仅导出任务；实施和交付条件尚未核对。', 'implementation_ready': False, 'business_accepted': False}
@@ -439,9 +456,7 @@ def produce(args, root, profile, task, platform, request):
                     root=root, profile=profile,
                     section_ids=task['section_ids'], changed_paths=validation.changed_paths(root, task, profile),
                     code_digest=validation.source_digest(root, profile), run_refs=[])
-        sections = {row['id']: row for row in design['sections']}
-        paths = args.path or task.get('paths') or sorted({path for key in task['section_ids']
-                    if sections[key]['type'] == 'task' for path in sections[key]['data']['scope']})
+        paths = knowledge.query_paths(root, task, design, args.path)
         brief = knowledge.brief(root, task, paths, args.symbol)
         from contracts import execution_environment
         from validation_session import active
@@ -462,6 +477,7 @@ def produce(args, root, profile, task, platform, request):
                    'rules_digest': rules_digest(), 'login_policy': login['policy'],
                    'authorizations': login['granted'], 'authorizations_needed': login['needed'],
                    'ok': not platform or not platform['gaps'], 'gaps': platform['gaps'] if platform else [],
+                   'warnings': platform.get('warnings', []) if platform else [],
                    'summary': '任务与知识材料已准备，请实际阅读简报和方案。',
                    'next_action': (('Before signing in to any declared test account, ask the user: '
                                     + login['needed'][0]['question'] + ' ') if login['needed'] else '')
@@ -469,7 +485,7 @@ def produce(args, root, profile, task, platform, request):
                                      else 'Obtain confirmation for the named plan sections.'),
                    'knowledge_claim': 'captured for reading; not evidence that knowledge was used'}
         result = {**emit(context, 'context.json'), **{k: context[k] for k in ('task', 'design', 'brief')},
-                  'continued': False, 'task_id': task['id'],
+                  'continued': False, 'task_id': task['id'], 'warnings': context['warnings'],
                   'task_directory': request.directory.parent.parent.relative_to(root).as_posix()}
         result['context'] = result['artifact']
         if selection['previous_ref']:
@@ -480,12 +496,12 @@ def produce(args, root, profile, task, platform, request):
         result.update(steps=progress['steps'], next_step=progress['next_step'], step_lines=checklist.render(progress))
         return result
     if args.command == 'brief':
-        return emit(knowledge.brief(root, task, args.path, args.symbol), 'brief.json')
+        return emit(knowledge.brief(root, task, relative_paths(root, args.path), args.symbol), 'brief.json')
     if args.command in ('design-draft', 'approval-draft', 'handoff', 'progress'):
         import coordination
         if not args.issue and args.command in ('design-draft', 'approval-draft'):
             import designs
-            design = read(local(root, args.design or args.record))
+            design = design_files.read(local(root, args.design or args.record))
             coordination.validate_task_design(task, design)
             if args.command == 'design-draft':
                 return emit(design, 'design.json')
@@ -493,7 +509,7 @@ def produce(args, root, profile, task, platform, request):
             require(isinstance(supplied, dict) and 'reviewer' in supplied, 'Approval input must name the reviewer')
             allowed = {'reviewer', 'confirmation', 'decision', 'section_ids', 'deletion_ids', 'mode', 'revision'}
             require(supplied.keys() <= allowed, 'Unknown approval input fields')
-            history = [read(local(root, p)) for p in args.design_history]
+            history = [design_files.read(local(root, p)) for p in args.design_history]
             assessments = designs.task_assessments(design, task['section_ids'])
             mode = supplied.pop('mode', 'combined' if any(v['complexity'] == 'simple' for v in assessments.values()) else 'design')
             binding = {'code_digest': validation.source_digest(root, profile),
@@ -502,7 +518,8 @@ def produce(args, root, profile, task, platform, request):
             return emit(result, 'approval.json')
         require(args.issue == task['id'], 'Shared draft requires its canonical --issue')
         if args.command == 'design-draft':
-            result = coordination.draft_design(args.issue, read(local(root, args.record or args.design)))
+            result = coordination.draft_design(args.issue, design_files.read(local(root, args.record or args.design)),
+                                               path=local(root, args.record or args.design), root=root)
         elif args.command == 'approval-draft':
             supplied = approval_input(args, root)
             if not args.record:
@@ -523,8 +540,8 @@ def produce(args, root, profile, task, platform, request):
     if args.command == 'design-diff':
         import designs
         require(bool(args.design_history), 'Design diff needs at least the previous snapshot')
-        previous = [read(local(root, p)) for p in args.design_history]
-        return emit(designs.impact(previous[-1], read(local(root, args.design)),
+        previous = [design_files.read(local(root, p)) for p in args.design_history]
+        return emit(designs.impact(previous[-1], design_files.read(local(root, args.design)),
                     history=previous, changed_paths=validation.changed_paths(root, task, profile)), 'design-diff.json')
     if args.command == 'run':
         tasks = [task] + [read(local(root, p)) for p in args.with_task]
@@ -581,7 +598,7 @@ def produce(args, root, profile, task, platform, request):
             report = report_input(args, root, task, include_knowledge=False)
             request.publish('report.json', report)
         issue_history.capture(request, task, read(local(root, report['review'])),
-            [r['id'] for r in read(local(root, report['design']))['sections']])
+            [r['id'] for r in design_files.read(local(root, report['design']))['sections']])
         phase = 'acceptance' if args.command == 'accept' else 'delivery'
         return emit(delivery.verify(root, profile, task, report, phase=phase), phase + '.json')
     raise Invalid('Unsupported command: ' + args.command)
@@ -689,6 +706,7 @@ def status(args, root, profile, task, platform=None):
     value['stale_materials'] = facts['stale_materials']
     value['ok'] = True  # A successful read reports unmet gates as facts, not as a failed status query.
     value['publication'] = status_records.publication(platform)
+    value['warnings'] = platform.get('warnings', []) if platform else []
     value['steps'] = progress['steps']
     value['next_step'] = progress['next_step']
     for key in ('authorizations', 'rules_changed'):
@@ -728,11 +746,11 @@ def _status(args, root, profile, task, platform=None):
     require(args.design is not None, 'Local task status needs --design or --context; provide --report to verify acceptance/delivery')
     import designs
     from coordination import validate_task_design
-    design = read(local(root, args.design))
+    design = design_files.read(local(root, args.design))
     validate_task_design(task, design)
     value = designs.approval_status(design, [read(local(root, p)) for p in args.approval],
                 root=root, profile=profile,
-                history=[read(local(root, p)) for p in args.design_history], section_ids=task['section_ids'],
+                history=[design_files.read(local(root, p)) for p in args.design_history], section_ids=task['section_ids'],
                 completed_tasks=cached_predecessors(args, root, profile),
                 changed_paths=validation.changed_paths(root, task, profile), code_digest=validation.source_digest(root, profile),
                 run_refs=[artifact(root, local(root, p)) for p in args.run])

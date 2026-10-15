@@ -4,6 +4,7 @@ from pathlib import Path
 from common import (RECORD_SCHEMA, LOCATIONS, digest, inside, knowledge_path, now, obj,
                     require, sha, strings, text)
 from tw_runtime import Invalid as RuntimeInvalid, brief as knowledge_brief, check, globs
+from tw_runtime.brief import relative_paths
 from tw_runtime.project import Project, document_source
 
 
@@ -14,10 +15,18 @@ def project(root):
     return current
 
 
+def query_paths(root, task, design, paths=()):
+    """Use explicit hints, task hints, then the selected design task scopes."""
+    sections = {row['id']: row for row in design['sections']}
+    selected = paths or task.get('paths') or sorted({path for key in task['section_ids']
+               if sections[key]['type'] == 'task' for path in sections[key]['data']['scope']})
+    return relative_paths(root, selected)
+
+
 def brief(root, task, paths=(), symbols=()):
     current = project(root)
     require(not current.config_errors, '；'.join(current.config_errors))
-    paths = list(paths or task.get('paths', []))
+    paths = relative_paths(root, paths or task.get('paths', []))
     symbols = list(symbols or task.get('symbols', []))
     result = knowledge_brief.build(current, task['goal'], paths=paths, symbols=symbols)
     files = {name: sha(inside(root, name)) for name in current.source.names if knowledge_path(name)}

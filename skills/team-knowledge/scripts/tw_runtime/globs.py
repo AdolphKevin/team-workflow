@@ -5,6 +5,8 @@
 from functools import lru_cache
 import re
 
+from . import repo_paths
+
 WILDCARDS = frozenset('*?')
 ALIAS = re.compile(r'^[A-Za-z0-9._-]+$')
 
@@ -41,6 +43,39 @@ def matches(pattern, path):
     if compiled(pattern).match(path):
         return True
     return not (WILDCARDS & set(pattern)) and path.startswith(pattern.rstrip('/') + '/')
+
+
+def overlaps(pattern, directory):
+    """Whether a pattern can match a path below a literal query directory.
+
+    Follow the pattern's segment states through the directory prefix. `**` can
+    consume a segment or advance without one; the remaining suffix need only be
+    satisfiable, so no directory walk or guessed sample filename is involved.
+    Literal patterns retain matches()'s directory-prefix semantics.
+    """
+    directory = repo_paths.normalize(directory)
+    if directory == '.':
+        return True
+    if not (WILDCARDS & set(pattern)):
+        return repo_paths.covers(pattern, directory) or repo_paths.covers(directory, pattern)
+    parts = pattern.rstrip('/').split('/')
+
+    def closure(states):
+        states = set(states)
+        for index in range(len(parts)):
+            if index in states and parts[index] == '**':
+                states.add(index + 1)
+        return states
+
+    states = closure({0})
+    for segment in directory.split('/'):
+        states = closure({index if parts[index] == '**' else index + 1
+                          for index in states if index < len(parts)
+                          and (parts[index] == '**' or compiled(parts[index]).fullmatch(segment))})
+        if not states:
+            return False
+    # A remaining segment (including **) can consume at least one descendant.
+    return any(index < len(parts) for index in states)
 
 
 def specificity(pattern):

@@ -5,15 +5,25 @@ import re
 from common import digest, require, task_valid
 import coordination
 import designs
+import records
 from tw_runtime.team import platform_script as platform_read
 
 BLOCK = re.compile(r'```team-workflow-task\s*\n.*?\n```', re.S)
 
 
 def body(issue, task, parent):
-    prose = BLOCK.sub('', issue.get('body') or '', count=1).rstrip()
-    record = json.dumps({'data_version': 1, 'parent': parent, 'task': task}, ensure_ascii=False, indent=2)
-    return (prose + '\n\n' if prose else '') + '```team-workflow-task\n' + record + '\n```\n'
+    prose = re.sub(r'<!-- tw-task:start -->.*?<!-- tw-task:end -->', '', issue.get('body') or '', flags=re.S)
+    prose = BLOCK.sub('', prose, count=1)
+    # Replace a standalone task comment produced outside this helper as well.
+    for match in reversed(records.matches(prose)):
+        if records.kind(records.read(match[0])) == 'task':
+            prose = prose[:match.start()] + prose[match.end():]
+    prose = prose.rstrip()
+    lines = ['<!-- tw-task:start -->', '## 任务', '', '目标：' + records.prose(task['goal']), '', '非目标：']
+    lines += ['- ' + records.prose(value) for value in task['non_goals']] or ['- 无']
+    lines += ['', '验收项：'] + ['- ' + records.prose(row['id']) + '：' + records.prose(row.get('expectation', '待补充验收预期')) for row in task['acceptance']]
+    lines += ['', records.comment({'data_version': 1, 'parent': parent, 'task': task}), '<!-- tw-task:end -->', '']
+    return (prose + '\n\n' if prose else '') + '\n'.join(lines)
 
 
 def approval_request(url, design, reviewer):
@@ -24,13 +34,12 @@ def approval_request(url, design, reviewer):
              '需要修改时说明章节和原因。', '']
     for row in design['sections']:
         lines.append(f'- `{row["id"]}` {row["title"]}（指纹 {sections[row["id"]]["own"][:12]}）')
-    lines += ['', '评审人确认后，由任何人运行下面的命令生成批准记录草稿并发布：', '',
-              '```bash', f'tw team approval-draft --root "$PROJECT" --issue {url} --record "$APPROVAL_INPUT"', '```',
-              '', '`$APPROVAL_INPUT` 内容示例：`{"reviewer": "' + (reviewer or '<评审人>') + '", "confirmation": "<认可的范围>"}`']
+    lines += ['', '评审人确认后，生成批准草稿并按已有授权发布：', '',
+              '```bash', f'tw team approval-draft --root "$PROJECT" --issue {url} --reviewer "{reviewer or "<评审人>"}" --confirmation "<认可的范围>"', '```']
     return '\n'.join(lines) + '\n'
 
 
-def draft(root, profile, task, design=None, siblings=(), reviewer=None):
+def draft(root, profile, task, design=None, siblings=(), reviewer=None, *, design_path=None):
     rows = []
     for item in [task, *siblings]:
         url = item['id']
@@ -53,7 +62,9 @@ def draft(root, profile, task, design=None, siblings=(), reviewer=None):
         row = {'issue': url, 'body': new_body, 'body_changed': new_body != issue.get('body'),
                'body_digest_before': digest(issue.get('body') or '')}
         if design is not None and design['task_id'] == url:
-            row['design_comment'] = coordination.draft_design(url, design, issue=adopted)['markdown']
+            published = coordination.draft_design(url, design, issue=adopted, path=design_path, root=root)
+            row['design_comment'] = published['markdown']
+            row['pr_description'] = published['pr_description']
             row['approval_request'] = approval_request(url, design, reviewer)
         rows.append(row)
     require(design is None or any('design_comment' in row for row in rows),

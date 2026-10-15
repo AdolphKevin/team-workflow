@@ -8,6 +8,9 @@ import re
 
 from common import Invalid, VERSION, digest, obj, read, require, strings, task_valid, text
 import designs
+import design_files
+import records
+from tw_runtime import Invalid as RuntimeInvalid, repo_paths
 from tw_runtime.team import platform_script as platform_read
 import knowledge
 import validation
@@ -20,28 +23,18 @@ def platform_issue(url, root=None):
             'repository': value['repository'], 'assignees': [{'login': owner} for owner in value['owners']],
             'comments_data': [{'html_url': item['url'], 'body': item['body'],
                                'user': {'login': item['author']}, 'created_at': item['created_at'],
-                               'updated_at': item['updated_at']} for item in value['items'][1:]]}
+                               'updated_at': item['updated_at'], 'kind': item['kind']} for item in value['items'][1:]]}
 
 
 class MissingTaskBlock(Invalid):
     """Keep the issue identity when a shared task or its parent lacks structured input."""
     def __init__(self, issue_url):
         self.issue_url = issue_url
-        super().__init__(issue_url + ': Missing team-workflow-task block; keep the MATT spec and add its structured record')
+        super().__init__(issue_url + ': Missing tw-record task comment；请用 issue-draft 重新生成任务草稿')
 
 
 def block(body, name, required=True):
-    matches = re.findall(r'^```team-workflow-' + name + r'\s*\n(.*?)^```\s*$', body or '', re.M | re.S)
-    require(len(matches) <= 1, 'Multiple structured ' + name + ' records')
-    if not matches and not required:
-        return None
-    require(bool(matches), 'Missing team-workflow-' + name + ' block; keep the MATT spec and add its structured record')
-    try:
-        value = json.loads(matches[0])
-    except ValueError as exc:
-        raise Invalid('Invalid ' + name + ' JSON') from exc
-    require(isinstance(value, dict), 'Expected a ' + name + ' object')
-    return value
+    return records.block(body, name, required)
 
 
 def validate_progress(row):
@@ -60,6 +53,8 @@ def validate_progress(row):
 def progress_history(issue):
     records, gaps = {}, []
     for comment in issue['comments_data']:
+        if comment.get('kind') == 'change':
+            continue
         try:
             row = block(comment.get('body'), 'progress', required=False)
             if row is None:
@@ -101,8 +96,8 @@ def task_source(issue):
     if value['parent']:
         platform_read.task_url(value['parent'])
         require(value['parent'] != issue['html_url'], 'Task cannot be its own parent')
-    prose = re.sub(r'```team-workflow-task\s*\n.*?\n```', '', issue.get('body', ''), count=1, flags=re.S)
-    return {**value, 'body_digest': digest(prose.replace('\r\n', '\n').replace('\r', '\n').strip())}
+    # Visible Markdown is for readers; task requirements come exclusively from tw-record.
+    return {**value, 'body_digest': digest('')}
 
 
 def requirements_signature(source):
@@ -148,9 +143,13 @@ def validate_task_design(task, design):
     require(set(identifiers) <= sections.keys(), 'Task references missing design sections')
     selected = [key for key in identifiers if sections[key]['type'] == 'task']
     require(bool(selected), 'Task must select at least one design task section')
-    declared_paths = [path for key in selected for path in sections[key]['data']['scope']]
-    require(all(any(scope == '.' or path == scope or path.startswith(scope.rstrip('/') + '/') for scope in declared_paths)
-                for path in task.get('paths', [])), 'Knowledge paths are outside the selected task scope')
+    try:
+        declared_paths = [repo_paths.normalize(path, scope=True) for key in selected for path in sections[key]['data']['scope']]
+        requested_paths = [repo_paths.normalize(path, scope=True) for path in task.get('paths', [])]
+    except RuntimeInvalid as exc:
+        raise Invalid(str(exc)) from exc
+    require(all(any(repo_paths.covers(scope, path) for scope in declared_paths)
+                for path in requested_paths), 'Knowledge paths are outside the selected task scope')
     risks = {risk for assessment in designs.task_assessments(design, selected).values() for risk in assessment['risks']}
     require(set(task['risks']) == risks, 'Task risks differ from its selected design assessment')
     accepted = {key for identifier in selected for key in sections[identifier]['data']['acceptance']}
@@ -167,10 +166,26 @@ def validate_task_design(task, design):
 
 
 def _history(issue):
-    return [{'url': row['html_url'], 'body': row.get('body', ''),
-             **{key: row[key] for key in ('created_at', 'updated_at') if row.get(key)},
-             **({'author': row['user']['login']} if row.get('user', {}).get('login') else {})}
-            for row in issue['comments_data'] if '```team-workflow-' in row.get('body', '')]
+    result = []
+    for row in issue['comments_data']:
+        if row.get('kind') == 'change':
+            continue
+        body = row.get('body', '')
+        if '<!-- tw-record' not in body and not records.LEGACY.search(body):
+            continue
+        try:
+            value = records.read(body, required=False)
+            if value is None:
+                continue
+            if records.kind(value) not in ('design', 'approval', 'handoff', 'progress'):
+                continue
+            body = records.comment(value)
+        except Invalid:
+            pass  # Keep malformed/legacy records in the history and report their gap below.
+        result.append({'url': row['html_url'], 'body': body,
+                       **{key: row[key] for key in ('created_at', 'updated_at') if row.get(key)},
+                       **({'author': row['user']['login']} if row.get('user', {}).get('login') else {})})
+    return result
 
 
 def _pointer(entry):
@@ -181,7 +196,7 @@ def _hash(value):
     require(isinstance(value, str) and re.fullmatch(r'[0-9a-f]{64}', value), 'Expected SHA-256 fingerprint')
 
 
-def _read(issue):
+def _read(issue, root=None):
     """Keep append order and explicit conflicts; timestamps never choose a winner."""
     source = task_source(issue)
     requirements = digest(source)
@@ -189,16 +204,28 @@ def _read(issue):
     problems = {name: [] for name in rows}
     seen = []
     for comment in _history(issue):
-        present = [name for name in rows if '```team-workflow-' + name in comment['body']]
+        try:
+            value = records.read(comment['body'], required=False)
+            present = [name for name in rows if value is not None and records.kind(value) == name]
+        except Invalid as exc:
+            legacy = re.search(r'```team-workflow-(design|approval|handoff)', comment['body'])
+            name = legacy[1] if legacy else 'design'
+            problems[name].append('Invalid ' + name + ' ' + comment['url'] + ': ' + str(exc))
+            seen.append(comment)
+            continue
         for name in present:
             try:
                 require(len(present) == 1, 'One platform record is allowed per comment')
                 row = block(comment['body'], name)
+                record_digest = digest(row)
+                source_reference, source_markdown = None, None
                 required = {'data_version', 'kind', 'task', 'requirements', 'history_digest', 'previous'}
                 if name == 'design':
                     obj(row, required | {'creator', 'design'}, {'resolution', 'requirements_signature'})
                     require(row['kind'] == 'design-record', 'Expected design-record envelope')
-                    designs.validate_design(row['design'])
+                    source_reference = row['design']
+                    design, source_markdown = design_files.source(platform_read.project_root(root), source_reference)
+                    row = {**row, 'design': design}
                     if 'requirements_signature' in row:
                         signature = obj(row['requirements_signature'], {'global', 'acceptance'})
                         _hash(signature['global'])
@@ -242,8 +269,9 @@ def _read(issue):
                             'Design revisions must advance by one without changing identity')
                 elif name == 'design':
                     require(row['design']['revision'] == 1, 'Design history must begin with revision 1')
-                rows[name].append({'url': comment['url'], 'digest': digest(row), 'record': row,
-                                   'recorded_by': comment.get('author')})
+                rows[name].append({'url': comment['url'], 'digest': record_digest, 'record': row,
+                                   'recorded_by': comment.get('author'),
+                                   **({'source': source_reference, 'markdown': source_markdown} if name == 'design' else {})})
             except (Invalid, ValueError, KeyError, TypeError) as exc:
                 problems[name].append('Invalid ' + name + ' ' + comment['url'] + ': ' + str(exc))
         seen.append(comment)
@@ -258,11 +286,12 @@ def load(url, issue=None, root=None):
 
     issue: a fetched issue with a drafted body, used to prepare records before the body is posted."""
     issue = issue or platform_issue(url, root)
-    state = _read(issue)
-    design_state = state
+    state = _read(issue, root)
+    design_state, design_issue = state, issue
     parent = state['source']['parent']
     if parent and not state['rows']['design']:
-        design_state = _read(platform_issue(parent, root))
+        design_issue = platform_issue(parent, root)
+        design_state = _read(design_issue, root)
     entries = design_state['rows']['design']
     latest = entries[-1] if entries else None
     design = latest['record']['design'] if latest else None
@@ -296,9 +325,13 @@ def load(url, issue=None, root=None):
         for item in entry['record']['questions']:
             if item['id'] not in known:
                 known[item['id']] = item
+    descriptions = [item for item in design_issue['comments_data']
+                    if item.get('kind') == 'change']
+    warnings = (['变更请求描述与最新发布的方案原文不一致，请更新展示内容。']
+                if latest and descriptions and descriptions[-1].get('body', '') != latest['markdown'] else [])
     return {'data_version': 1, 'kind': 'platform-task', 'ok': not gaps, 'issue': url,
             'assurance': 'continuation-only', 'delivery': 'not-evaluated',
-            'known_issues': list(known.values()),
+            'known_issues': list(known.values()), 'warnings': warnings,
             'task': state['source']['task'], 'source': state['source'], 'parent': parent,
             'requirements': state['requirements'], 'history_digest': state['history_digest'],
             'platform_history': state['platform_history'], 'design': design,
@@ -316,16 +349,33 @@ def load(url, issue=None, root=None):
             'progress': list(progress.values()), 'pending_progress': pending, 'gaps': sorted(set(gaps))}
 
 
-def _markdown(name, row, heading):
-    return '## ' + heading + '\n\n```team-workflow-' + name + '\n' + json.dumps(row, ensure_ascii=False, indent=2) + '\n```\n'
+def _markdown(name, row, heading, design=None):
+    if name == 'design':
+        ref = row['design']
+        prose = f'方案第 {ref["revision"]} 版已发布：{records.prose(ref["path"])}，提交 {ref["commit"][:7]}。'
+    elif name == 'approval':
+        approval = row['approval']
+        titles = {section['id']: section['title'] for section in (design or {}).get('sections', [])}
+        selected = '、'.join(titles.get(key, key) for key in approval['sections'])
+        deleted = ['删除章节 ' + row['id'] for row in approval.get('deletions', [])]
+        selected = records.prose('、'.join([selected, *deleted]).strip('、'))
+        action = {'approved': '批准', 'changes-requested': '要求修改', 'deferred': '暂缓'}.get(approval.get('decision'), '批准')
+        prose = (f'{records.prose(approval["reviewer"])} {action}方案第 {approval["design_revision"]} 版：{selected}。'
+                 + '依据：' + records.prose(approval.get('confirmation', '')))
+    else:
+        owner = records.prose(row.get('owner') or row.get('author', ''))
+        status = '已完成' if not row.get('remaining') else '进行中'
+        prose = f'负责人：{owner}\n\n状态：{status}\n\n剩余事项：\n'
+        prose += '\n'.join('- ' + records.prose(item) for item in row.get('remaining', [])) or '- 无'
+        if row.get('handoff_kind') == 'close':
+            prose += '\n\n' + records.prose(row['close']['summary'])
+    return '## ' + heading + '\n\n' + prose + '\n\n' + records.comment(row) + '\n'
 
 
-def _draft_result(name, url, row, gaps=()):
+def _draft_result(name, url, row, gaps=(), *, design=None):
     headings = {'design': '方案记录', 'approval': '方案评审', 'handoff': '工作交接', 'progress': '工作进度'}
     heading = '收尾说明' if row.get('handoff_kind') == 'close' else headings[name]
-    body = _markdown(name, row, heading)
-    if row.get('handoff_kind') == 'close':
-        body = body.replace('\n\n```', '\n\n' + row['close']['summary'].strip() + '\n\n```', 1)
+    body = _markdown(name, row, heading, design)
     return {'data_version': 1, 'kind': name + '-draft', 'ok': not gaps,
             'issue': url, 'record': row, 'markdown': body,
             'history_digest': row.get('history_digest'), 'gaps': list(gaps),
@@ -333,9 +383,10 @@ def _draft_result(name, url, row, gaps=()):
             'publication': 'draft-only; re-read history before an authorized append, then run tw team start'}
 
 
-def draft_design(url, design, resolution=None, issue=None):
+def draft_design(url, design, resolution=None, issue=None, *, path=None, root=None):
     designs.validate_design(design)
-    state = load(url, issue)
+    reference, markdown = design_files.publication(platform_read.project_root(root), path, design)
+    state = load(url, issue, root=root)
     require(design['task_id'] == url, 'Append the design to its own task issue')
     require(not state['design'] or state['design_issue'] == url,
             'Update the shared design on its own task issue')
@@ -346,14 +397,14 @@ def draft_design(url, design, resolution=None, issue=None):
     row = {'data_version': 1, 'kind': 'design-record', 'task': url,
            'creator': text(design['roles']['design_owner']), 'requirements': state['requirements'],
            'requirements_signature': requirements_signature(state['source']),
-           'history_digest': state['history_digest'], 'previous': state['design_previous'], 'design': design}
+           'history_digest': state['history_digest'], 'previous': state['design_previous'], 'design': reference}
     if resolution:
         require(resolution.get('history_digest') == state['history_digest'], 'History changed since reconciliation')
         text(resolution.get('reason'))
         row.update(resolution=resolution, previous=None)
     require(not any('Invalid design ' in gap for gap in state['gaps']) or resolution,
             'Read all design branches and provide an explicit resolution')
-    return _draft_result('design', url, row)
+    return {**_draft_result('design', url, row), 'pr_description': markdown}
 
 
 def draft_approval(url, value):
@@ -375,7 +426,7 @@ def draft_approval(url, value):
            'previous': state['approval_previous'], 'approval': approval}
     if resolution:
         row.update(resolution=resolution, previous=None)
-    return _draft_result('approval', url, row)
+    return _draft_result('approval', url, row, design=state['design'])
 
 
 HANDOFF_KINDS = ('design', 'implementation', 'close')
@@ -516,7 +567,7 @@ def _knowledge(root, task, design):
     for key in task['section_ids']:
         if sections[key]['type'] == 'task':
             paths.update(sections[key]['data']['scope'])
-    return knowledge.brief(root, task, sorted(paths), task.get('symbols', []))
+    return knowledge.brief(root, task, knowledge.relative_paths(root, sorted(paths)), task.get('symbols', []))
 
 
 def _approval(root, profile, state, completed_tasks=()):

@@ -1,4 +1,5 @@
 """Read current evidence without executing checks or publishing workflow materials."""
+import design_files
 import copy
 
 from common import Invalid, artifact, artifact_valid, digest, read
@@ -49,7 +50,7 @@ def inspect(args, root, profile, task, progress, approval_status):
     if expected and expected.get('review'):
         try:
             import designs
-            design = read(local(root, expected['design']))
+            design = design_files.read(local(root, expected['design']))
             hashes = designs.fingerprints(design)['sections']
             selected = {key: hashes[key] for key in task['section_ids']}
             review = read(local(root, expected['review']))

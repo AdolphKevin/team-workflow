@@ -47,8 +47,7 @@ class CoordinationCases(unittest.TestCase):
         self.gets = []
 
     def body(self):
-        return 'Add two inputs.\n\n```team-workflow-task\n' + json.dumps(
-            {'data_version': 1, 'parent': None, 'task': self.task}) + '\n```\n'
+        return plans.task_body(self.task, prose='Add two inputs.')
 
     def github(self, endpoint, paginate=False, binary=False):
         self.gets.append(endpoint)
@@ -69,7 +68,7 @@ class CoordinationCases(unittest.TestCase):
 
     def establish_design(self, approved=True):
         plans.plan(self.design)
-        draft = coordination.draft_design(self.url, self.design)
+        draft = plans.draft_design(self.root, self.url, self.design)
         self.publish_fixture(draft, 'alice')
         if approved:
             approval = coordination.draft_approval(self.url, {'reviewer': 'carol',
@@ -84,7 +83,7 @@ class CoordinationCases(unittest.TestCase):
     def test_reads_named_approval_without_publishing_or_claiming_delivery(self):
         self.prepare()
         with patch.object(platform_read, 'call', side_effect=platform_transport(self.github)):
-            draft = coordination.draft_design(self.url, self.design)
+            draft = plans.draft_design(self.root, self.url, self.design)
             self.assertEqual(self.issue['comments_data'], [])
             self.publish_fixture(draft, 'alice')
             missing = coordination.load(self.url)
@@ -139,7 +138,7 @@ class CoordinationCases(unittest.TestCase):
         self.prepare()
         with patch.object(platform_read, 'call', side_effect=platform_transport(self.github)):
             plans.plan(self.design)
-            self.publish_fixture(coordination.draft_design(self.url, self.design), 'bob')
+            self.publish_fixture(plans.draft_design(self.root, self.url, self.design), 'bob')
             approval = coordination.draft_approval(self.url, {'reviewer': 'carol'})
             self.assertEqual(approval['record']['approval']['confirmation'], '')
             self.publish_fixture(approval, 'bob')
@@ -158,7 +157,7 @@ class CoordinationCases(unittest.TestCase):
         self.prepare()
         with patch.object(platform_read, 'call', side_effect=platform_transport(self.github)):
             plans.plan(self.design)
-            self.publish_fixture(coordination.draft_design(self.url, self.design), 'alice')
+            self.publish_fixture(plans.draft_design(self.root, self.url, self.design), 'alice')
             for value in ({}, {'reviewer': ''}, {'reviewer': 'carol', 'confirmation': None}):
                 with self.subTest(value=value), self.assertRaises(Invalid):
                     coordination.draft_approval(self.url, value)
@@ -169,7 +168,8 @@ class CoordinationCases(unittest.TestCase):
             self.establish_design()
             self.publish_fixture(coordination.draft(self.root, self.profile, self.url, self.handoff(), kind='design'), 'alice')
             self.assertTrue(coordination.resume(self.root, self.profile, self.url)['ok'])
-            self.issue['body'] += '\nReject negative values too.\n'
+            revised_task = {**self.task, 'goal': self.task['goal'] + ' Reject negative values too.'}
+            self.issue['body'] = plans.task_body(revised_task)
             requirements = coordination.resume(self.root, self.profile, self.url)
             self.assertFalse(requirements['ready_to_implement'])
             self.assertIn('Requirements changed', str(requirements['gaps']))
@@ -198,7 +198,9 @@ class CoordinationCases(unittest.TestCase):
             self.publish_fixture(reconciled, 'alice')
             self.assertTrue(coordination.resume(self.root, self.profile, self.url)['ok'])
             self.assertEqual(len(self.issue['comments_data']), 5)
-            self.issue['comments_data'][2]['body'] += '\nEarlier comment was changed.\n'
+            changed = coordination.block(self.issue['comments_data'][2]['body'], 'handoff')
+            changed['next'] = 'Earlier recorded handoff was changed.'
+            self.issue['comments_data'][2]['body'] = coordination._draft_result('handoff', self.url, changed)['markdown']
             altered = coordination.resume(self.root, self.profile, self.url)
         self.assertFalse(altered['ok'])
         self.assertIn('history changed', str(altered['gaps']))
@@ -305,7 +307,7 @@ class CoordinationCases(unittest.TestCase):
             revised = copy.deepcopy(self.design)
             revised['revision'] = 2
             revised['sections'][0]['body'] = 'Addition works for integers'
-            self.publish_fixture(coordination.draft_design(self.url, revised), 'alice')
+            self.publish_fixture(plans.draft_design(self.root, self.url, revised), 'alice')
             self.publish_fixture(coordination.draft_approval(self.url,
                 {'reviewer': 'carol', 'confirmation': 'Approved integer scope.'}), 'carol')
             refreshed = coordination.draft(self.root, self.profile, self.url, self.handoff(), kind='design')
@@ -346,8 +348,7 @@ class CoordinationCases(unittest.TestCase):
         child_url = 'https://github.com/example/project/issues/2'
         child_task = {**self.task, 'id': child_url, 'parent': self.url, 'acceptance_scope': 'task'}
         child = {'html_url': child_url, 'state': 'open', 'assignees': [{'login': 'bob'}],
-                 'body': '```team-workflow-task\n' + json.dumps(
-                     {'data_version': 1, 'parent': self.url, 'task': child_task}) + '\n```\n',
+                 'body': plans.task_body(child_task, self.url),
                  'comments_data': []}
 
         def transport(endpoint, **kwargs):
@@ -415,7 +416,7 @@ class CoordinationCases(unittest.TestCase):
             revised = copy.deepcopy(self.design)
             revised['revision'] = 2
             revised['sections'][-1]['body'] = 'Changed independent implementation requirements'
-            self.publish_fixture(coordination.draft_design(self.url, revised), 'alice')
+            self.publish_fixture(plans.draft_design(self.root, self.url, revised), 'alice')
             resumed = coordination.resume(self.root, self.profile, self.url)
         self.assertTrue(resumed['ok'], resumed)
         self.assertEqual(resumed['approval_status']['tasks']['T2']['state'], 'needs-review')
@@ -438,7 +439,7 @@ class CoordinationCases(unittest.TestCase):
             revised = copy.deepcopy(self.design)
             revised['revision'] = 2
             revised['sections'][1]['body'] = 'Updated first requirement'
-            self.publish_fixture(coordination.draft_design(self.url, revised), 'alice')
+            self.publish_fixture(plans.draft_design(self.root, self.url, revised), 'alice')
             state = coordination.load(self.url)
         import designs
         status = designs.approval_status(state['design'], state['approvals'], history=state['history'], changed_paths=[])

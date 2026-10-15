@@ -253,3 +253,29 @@
 两处都已修正，改为按类别计数，并提示“用相同的 --task、--path 加 --index 查看”。试用者用修正后的包复跑：一个任务的提示为“未列出：3 个条目、5 条相关提交”，照提示加 `--index` 后恰好多出 3 个条目和 5 条提交；另一个任务没有隐藏内容，也就没有提示。
 
 试用还发现 common 登记的原文 RFC 0001、0002 仍把事务发件箱写成现行设计，与 core 的事件投递决策冲突。这是项目原文的问题，已报告用户。
+
+## 任务范围路径缺陷的修复前复现（2026-10-15）
+
+基线：`550f4c9`，2026-10-15。在该版本写入 `tests/test_scope_paths.py` 后、修改实现前运行：
+
+```sh
+PYTHONPATH=tests python3 -m unittest tests.test_scope_paths -v
+```
+
+本地任务使用真实 `tw team start` 入口与临时 git 仓库；平台任务使用同一开工入口和只读平台脚本边界的离线夹具。没有访问平台。
+
+| 测试 | 修复前观察 |
+| --- | --- |
+| `LocalScopeStart.test_root_start_and_continuation` | 范围 `.`、任务 paths 为空，首次开工失败：`路径必须是仓库内的相对路径：.` |
+| `LocalScopeStart.test_directory_start_and_continuation` | 范围 `tests`，开工成功，但简报 entries 为空，遗漏 scope 为 `self:tests/test_*.py` 的规则 |
+| `LocalScopeStart.test_dot_file_start_and_continuation` | 范围 `./app.py`、任务 paths 为 `app.py`，首次开工失败：`Knowledge paths are outside the selected task scope` |
+
+平台组 `PlatformScopeStart` 复现同类失败。修复前运行摘要原文（错误数含新接口缺失的多个子用例）：
+
+```text
+Ran 20 tests in 13.571s
+
+FAILED (failures=11, errors=25)
+```
+
+排查确认：方案按路径前缀解释范围，简报却按具体路径校验和单向 glob 匹配；平台任务范围核对直接比较原字符串。防护用例还覆盖不安全路径、目录深浅、`*`、`?`、`**`、接续与回放。正式格式和目录取用规则在方案 R2 与分节方案参考中维护。

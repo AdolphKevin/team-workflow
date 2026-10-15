@@ -1,4 +1,5 @@
 """One explicit, content-bound material group per task; no latest-file inference."""
+import design_files
 from tw_runtime.team import platform_script as platform_read
 import copy
 import hashlib
@@ -146,7 +147,7 @@ def resolve(args, root):
     snapshot['stale_roles'] = []
     validate(root, defaults, replaced)
     if args.command == 'status' and args.design and defaults.get('design'):
-        if digest(read(local(root, args.design))) != digest(read(checked(root, defaults['design'], 'design', task_id))):
+        if digest(design_files.read(local(root, args.design))) != digest(design_files.read(checked(root, defaults['design'], 'design', task_id))):
             snapshot['stale_roles'].append('design')
     if not value['context']:
         raise MaterialGap('context', '不存在；请先 start', task_id)
@@ -189,7 +190,7 @@ def resolve(args, root):
             platform = coordination.load(task_id, root=root)
         except (Invalid, OSError, ValueError, TypeError, KeyError) as exc:
             raise MaterialGap('current', '无法核对平台材料：' + str(exc), task_id) from exc
-        stored = defaults.get('platform') or {'design': digest(read(root / defaults['design']['path'])),
+        stored = defaults.get('platform') or {'design': digest(design_files.read(root / defaults['design']['path'])),
                                              'approvals': [digest(read(root / ref['path'])) for ref in defaults['approvals']]}
         fresh = platform_signature(platform)
         for role in ('design', 'approvals'):
@@ -198,7 +199,7 @@ def resolve(args, root):
                     snapshot['stale_roles'].append(role)
                 else:
                     raise MaterialGap(role, '平台材料比记录更新，须重新 start', task_id)
-        selected_design = read(local(root, args.design)) if args.design else None
+        selected_design = design_files.read(local(root, args.design)) if args.design else None
         if selected_design != platform['design']:
             if args.command == 'status':
                 snapshot['stale_roles'].append('design')
@@ -215,7 +216,7 @@ def resolve(args, root):
             import designs
             status = designs.approval_status(selected_design, selected_approvals,
                 root=root, profile=load_profile(root),
-                history=[read(local(root, p)) for p in args.design_history],
+                history=[design_files.read(local(root, p)) for p in args.design_history],
                 section_ids=read(args.task)['section_ids'], changed_paths=[])
             if set(status['stale']) & set(status['required_sections']) and args.command != 'status':
                 raise MaterialGap('approvals', '所选批准已过期，不能覆盖平台当前批准', task_id)

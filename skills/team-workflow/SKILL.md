@@ -6,9 +6,9 @@ disable-model-invocation: true
 
 # 团队任务与开发方法
 
-先读[方法与知识约定](references/matt-integration.md)。接手时沿用有效批准、验收和未决问题。团队任务、缺陷及每周复盘按[业务验收标准](references/business-acceptance.md)执行；首次接入时读[接入指南](references/onboarding.md)，包括“项目平台脚本”一节；缺少测试入口时也读该指南。
+先读[方法与知识约定](references/matt-integration.md)。接手时沿用有效批准、验收和未决问题。团队任务、缺陷及每周复盘按[业务验收标准](references/business-acceptance.md)执行；首次接入或缺测试入口时读[接入指南](references/onboarding.md)，按“项目平台脚本”接入。
 
-下文 `tw` 指 `python3 <team-knowledge 技能目录>/scripts/tw.py`；`--root`、`--repository` 可写在团队子命令前后。参数见 `--help`。
+`tw` 指 `python3 <team-knowledge 技能目录>/scripts/tw.py`；`--root`、`--repository` 可写在团队子命令前后。参数见 `--help`。
 
 ## 四步交付
 
@@ -16,9 +16,9 @@ disable-model-invocation: true
 
 方案分别评估复杂度、风险、工作量与待定事项。简单任务用短方案，开发后合并评审；中等、复杂任务先获具名批准，可用 `approval-draft --reviewer <姓名> --mode plan` 生成记录。复用已有授权和有效批准。
 
-平台中等、复杂任务先开只含方案块的草稿变更请求，评审通过后再写代码（团队约定，工具不强制）。方案与批准可在描述和评审中，提交号可用 `approval-draft --revision` 记录。
+平台草稿变更请求描述为已提交的 Markdown 方案；中等、复杂任务获批后实施（团队约定，工具不强制）。发布与批准用隐藏记录，见[方案格式](references/designs.md)；`--revision` 记提交号。
 
-1. **start**：首次用 `tw team start --task <任务文件> --design <方案> [--approval <批准>]`。后续用 `--task <身份>`（任务编号或完整 Issue 地址）补齐材料。实施或委派前读简报、确认实施条件；输入变化新建上下文。
+1. **start**：用 `tw team start --task <任务文件> --design <方案> [--approval <批准>]`。后续用 `--task <身份>`（任务编号或完整 Issue 地址）补齐材料。实施或委派前读简报、确认实施条件；输入变化新建上下文。
 2. **run**：`tw team run --task <身份>` 执行登记检查。必需结果可用后自动给出 `review.md`；失败保留原始输出，聚焦补跑失败或过期项。最终验收期间共享目录保持稳定。
 3. **评审**：未参与实施的人填写姓名、规范与需求及逐项验收结论、理由、问题处置；人工观察由观察人填写。简单任务需合并批准时填“批准方案与代码：是”。配置平台时，将完整 Markdown 作为变更请求评审提交，`deliver` 自动导入；也可显式 `review --task <身份> --from-platform`。本地用 `review --task <身份> --submit`。不通过意见也可提交；绑定区与自动结果不改。
 4. **deliver**：不改知识时用 `tw team deliver --task <身份> --reason <理由>`，顺序完成业务验收、知识处置报告和最终核查。失败停在对应步骤，重试复用有效记录，不手写报告 JSON。

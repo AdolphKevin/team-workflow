@@ -1,4 +1,5 @@
 """A single-person task closes with one reviewed note instead of a separate implementation handoff."""
+import plan_fixtures as plans
 import copy
 import json
 import unittest
@@ -31,12 +32,11 @@ class CloseNote(unittest.TestCase):
         self.git('add', '.tw')
         self.git('commit', '-qm', 'project configuration and knowledge')
         self.issue = {'html_url': URL, 'state': 'open', 'assignees': [{'login': 'bob'}], 'comments_data': [],
-                      'body': 'Fix buyer credential.\n\n```team-workflow-task\n'
-                              + json.dumps({'data_version': 1, 'parent': None, 'task': self.task}) + '\n```\n'}
+                      'body': plans.task_body(self.task, prose='Fix buyer credential.')}
         self.patch = patch.object(platform_read, 'call', side_effect=platform_transport(self.github))
         self.patch.start()
         self.addCleanup(self.patch.stop)
-        self.publish(coordination.draft_design(URL, self.design), 'alice')
+        self.publish(plans.draft_design(self.root, URL, self.design), 'alice')
         approval = coordination.draft_approval(URL, {'reviewer': 'carol', 'confirmation': 'Plan and code accepted',
             'code_digest': validation.source_digest(self.root, self.profile),
             'run_refs': [artifact(self.root, self.root / path) for path in self.runs]})

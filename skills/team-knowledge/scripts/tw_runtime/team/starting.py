@@ -1,4 +1,5 @@
 """Select a task's most recent prepared context and compare its actual preparation inputs."""
+import design_files
 import copy
 from pathlib import Path
 
@@ -71,7 +72,7 @@ def select(args, root, profile):
                 raise
     if supplied_context:
         require(context_task['id'] == task_id,
-                'Context belongs to another task; run tw team start --task <task.json> --design <design.json> for this task')
+                'Context belongs to another task; run tw team start --task <task.json> --design <design.md> for this task')
         require(not previous_ref or previous_ref == explicit['context'],
                 'This context was superseded; run tw team start --task ' + task_id)
         previous_ref, previous = explicit['context'], supplied_context
@@ -86,16 +87,16 @@ def select(args, root, profile):
             platform_gap = 'Cannot read platform task: ' + str(exc)
     task = supplied_task or (platform or {}).get('task') or (
         read(artifact_valid(root, previous['task'])) if previous else None)
-    require(task is not None, 'No prepared context for this identity; run tw team start --task <task.json> --design <design.json>')
-    design = (read(local(root, args.design)) if args.design else (platform or {}).get('design') or
+    require(task is not None, 'No prepared context for this identity; run tw team start --task <task.json> --design <design.md>')
+    design = (design_files.read(local(root, args.design)) if args.design else (platform or {}).get('design') or
               (read(artifact_valid(root, previous['design'])) if previous else None))
-    require(design is not None, 'start needs --design <design.json> or a shared plan')
+    require(design is not None, 'start needs --design <design.md> or a shared plan')
     # A platform task block is always fully specified and is never generated locally.
     if not args.issue:
         task = fill_acceptance(task, design)
     approvals = ([read(local(root, p)) for p in args.approval] if args.approval else
                  platform['approvals'] if platform else _values(root, previous or {}, 'approvals'))
-    history = ([read(local(root, p)) for p in args.design_history] if args.design_history else
+    history = ([design_files.read(local(root, p)) for p in args.design_history] if args.design_history else
                platform['history'] if platform else _values(root, previous or {}, 'design_history'))
     dependencies = ([read(local(root, p)) for p in args.dependency] if args.dependency else
                     (previous or {}).get('dependencies', []))
@@ -140,7 +141,7 @@ def resolve_accept_context(args, root):
     ref, context = latest_context(root, task_id)
     if ref is None and args.report and supplied:
         return  # Existing complete reports keep the original explicit-task entry.
-    require(ref is not None, 'accept needs a prepared context; run tw team start --task <task.json> --design <design.json>')
+    require(ref is not None, 'accept needs a prepared context; run tw team start --task <task.json> --design <design.md>')
     if supplied:
         captured = read(artifact_valid(root, context['task']))
         # The original file may still contain ID-only rows; every explicitly supplied field must agree.

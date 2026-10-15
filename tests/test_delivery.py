@@ -67,10 +67,13 @@ class DeliveryCases(unittest.TestCase):
         self.write('report', self.report)
 
     def name(self, name):
-        return '.tw/local/' + name + '.json'
+        return plans.design_name(name)
 
     def write(self, name, value):
-        write(self.root / self.name(name), value)
+        if isinstance(value, dict) and value.get('kind') == 'design':
+            plans.write_design(self.root / self.name(name), value)
+        else:
+            write(self.root / self.name(name), value)
 
     def evidence_targets(self):
         other = self.root / '.tw/local/other-repository'
@@ -480,8 +483,7 @@ class DeliveryCases(unittest.TestCase):
         parent_task = {**self.task, 'id': parent, 'acceptance_scope': 'requirement'}
         parent_task.pop('parent', None)
         def issue(url, task, parent_url=None):
-            return {'html_url': url, 'body': '```team-workflow-task\n' + json.dumps(
-                {'data_version': 1, 'parent': parent_url, 'task': task}) + '\n```',
+            return {'html_url': url, 'body': plans.task_body(task, parent_url),
                 'assignees': [{'login': 'bob'}], 'comments_data': []}
         parent_issue, child_issue = issue(parent, parent_task), issue(child, self.task, parent)
         withdrawal, watching, count = None, False, 0
@@ -499,7 +501,7 @@ class DeliveryCases(unittest.TestCase):
         self.profile['platform'] = copy.deepcopy(PLATFORM_CONFIG)
         fixtures.write_config(self.root, self.profile)
         with patch.object(platform_read, 'call', side_effect=platform_transport(api)):
-            append(coordination.draft_design(parent, self.design))
+            append(plans.draft_design(self.root, parent, self.design))
             accepted = coordination.draft_approval(parent, {'reviewer': 'carol', 'confirmation': 'Final code and plan accepted',
                 'code_digest': validation.source_digest(self.root, self.profile),
                 'run_refs': [artifact(self.root, self.root / path) for path in self.runs]})

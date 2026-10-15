@@ -5,7 +5,7 @@ import json
 from pathlib import Path
 import re
 
-from . import Invalid, KB, cache, entries, gitutil, globs, textmatch
+from . import Invalid, KB, cache, entries, gitutil, globs, repo_paths, textmatch
 
 KNOWLEDGE = ('rule', 'decision', 'lesson')
 EXPLICIT, SCOPE, TEXT, RELATED = range(4)
@@ -17,7 +17,7 @@ class Pick:
     entry: object
     root: Path
     tier: int
-    specificity: int = 0
+    specificity: float = 0
     reasons: list = field(default_factory=list)
 
     def key(self):
@@ -27,18 +27,11 @@ class Pick:
 def relative_paths(root, paths):
     result = []
     for value in paths or ():
-        path = Path(value)
-        if path.is_absolute():
-            try:
-                path = path.resolve().relative_to(root)
-            except ValueError as exc:
-                raise Invalid(f'路径不在仓库内：{value}') from exc
-        text = path.as_posix()
-        while text.startswith('./'):
-            text = text[2:]
-        if globs.problem(text):
+        path = repo_paths.normalize(value, root=root)
+        # Preserve query syntax acceptance; these characters are never expanded.
+        if any(char in path for char in '*?[]{}') and globs.problem(path):
             raise Invalid(f'路径必须是仓库内的相对路径：{value}')
-        result.append(text)
+        result.append(path)
     return result
 
 
@@ -65,6 +58,9 @@ def applies_here(project, repo, alias):
 
 
 def select(project, task, paths, symbols, refs, tags):
+    paths = relative_paths(project.root, paths)
+    directories = {path for path in paths if path.directory}
+    scoped_paths = [path for path in paths if path != '.']
     shared = project.shared()
     candidates = [(e, project.root, None) for e in project.entries() if e.kind in KNOWLEDGE]
     for repo in shared.values():
@@ -88,16 +84,18 @@ def select(project, task, paths, symbols, refs, tags):
             add(entry, root, EXPLICIT, f'符号 {symbol}')
         for alias, pattern in entry.scopes():
             if applies_here(project, repo, alias):
-                for path in paths:
-                    if globs.matches(pattern, path):
-                        add(entry, root, SCOPE, f'路径 {path}', globs.specificity(pattern))
+                for path in scoped_paths:
+                    directory = path in directories
+                    if (globs.overlaps if directory else globs.matches)(pattern, path):
+                        specificity = len(path.split('/')) - 0.5 if directory else globs.specificity(pattern)
+                        add(entry, root, SCOPE, f'路径 {path}', specificity)
         for value in entry.values('guards'):
             target, sep, test = value.partition('#')
             alias, path, issue = globs.split(target)
             if (not sep or not test.strip() or issue or alias == 'check' or path.endswith('/')
                     or globs.WILDCARDS & set(path) or (project.root / path).is_dir()):
                 continue
-            if applies_here(project, repo, alias) and path in paths:
+            if applies_here(project, repo, alias) and path in scoped_paths and path not in directories:
                 add(entry, root, SCOPE, f'守护测试 {path}', globs.specificity(path))
         for tag in entry.values('tags'):
             if textmatch.normalize(tag) in wanted_tags:
@@ -270,6 +268,7 @@ def build(project, task, paths=(), symbols=(), refs=(), tags=(), budget=6000, in
     picks, terms, abandoned_hits, missing = select(project, task, paths, symbols, refs, tags)
     shared = project.shared()
     commits = gitutil.recent_commits(project.root, paths)
+    path_notice = '范围为整个仓库，未按路径筛选\n\n' if '.' in paths else ''
     # Counted per kind: entries, abandoned reminders, commits, then shared/missing lines.
     hidden = [0, 0, 0, 0]
     units = ('个条目', '条曾放弃的方向', '条相关提交', '行共享仓或未找到的条目')
@@ -280,7 +279,7 @@ def build(project, task, paths=(), symbols=(), refs=(), tags=(), budget=6000, in
         return f'（未列出：{"、".join(parts)}。{hint}）\n' if parts else ''
 
     # Reserve the longest footer the counts could produce.
-    left = budget - len(footer([len(picks), len(abandoned_hits), len(commits), len(missing) + len(shared)]))
+    left = budget - len(path_notice) - len(footer([len(picks), len(abandoned_hits), len(commits), len(missing) + len(shared)]))
     reserved = {}
     for title, lines in [
         ('未找到的条目', [f'- {label}\n' for label in missing]),
@@ -349,7 +348,7 @@ def build(project, task, paths=(), symbols=(), refs=(), tags=(), budget=6000, in
     if len(commit_nav) > left:
         hidden[2] = len(commits)
         commit_nav = ''
-    markdown = (heading + intro + glossary + ''.join(block for _, _, block in rendered) + reminder_nav + index_nav
+    markdown = (heading + path_notice + intro + glossary + ''.join(block for _, _, block in rendered) + reminder_nav + index_nav
                 + reserved['共享仓'] + commit_nav + reserved['未找到的条目']
                 + footer(hidden)).rstrip('\n') + '\n'
     selected = [(p, status) for p, status, _ in rendered] + indexed

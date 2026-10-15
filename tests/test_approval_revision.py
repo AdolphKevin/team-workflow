@@ -1,4 +1,5 @@
 """Optional approved commit binding, using local Git objects and content fingerprints."""
+import plan_fixtures as plans
 import json
 import subprocess
 import sys
@@ -24,7 +25,7 @@ class ApprovalRevision(unittest.TestCase):
         self.configure('medium')
         revision = self.git('rev-parse', 'HEAD').strip()
         code, result = self.command('approval-draft', '--task', '.tw/local/task.json',
-            '--design', '.tw/local/design.json', '--reviewer', 'carol', '--mode', 'plan', '--revision', revision)
+            '--design', '.tw/local/design.md', '--reviewer', 'carol', '--mode', 'plan', '--revision', revision)
         self.assertEqual(code, 0, result)
         approval = read(self.root / result['artifact']['path'])
         self.assertEqual(approval['revision'], revision)
@@ -35,7 +36,7 @@ class ApprovalRevision(unittest.TestCase):
         approval = designs.approval_draft(self.design, 'carol', mode='combined', revision=revision,
                                          code_digest=validation.source_digest(self.root, self.profile), run_refs=[])
         write(self.root / '.tw/local/approval.json', approval)
-        write(self.root / '.tw/local/report.json', {'design': '.tw/local/design.json',
+        write(self.root / '.tw/local/report.json', {'design': '.tw/local/design.md',
             'approvals': ['.tw/local/approval.json'], 'runs': []})
         return self.command('status', '--task', '.tw/local/task.json', '--report', '.tw/local/report.json')
 
