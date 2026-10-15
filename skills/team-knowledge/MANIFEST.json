@@ -41,7 +41,7 @@
     "scripts/tw_runtime/team/guidance.py": "bdaf69ca28af082c8861231f14e1ff70a865910abdabb23ba643e5b8cda257cc",
     "scripts/tw_runtime/team/issue_draft.py": "ae629a85efea55062c2ff240e0e64927298378f5539a214243b7cf40418ceb0e",
     "scripts/tw_runtime/team/issue_history.py": "d3bfe9cf824b5ce44d94a00b5405e4e4b9269667447fc6201bd0fbc8cdd51dc4",
-    "scripts/tw_runtime/team/knowledge.py": "6f7d69c22d6e58c141c34d4d6a79f7d47ae1ff0762d5f7d4fadc22983ec8f510",
+    "scripts/tw_runtime/team/knowledge.py": "d5704cebb7393015a29d105214025f178329ac6fa66bd2b0e9fe228e0b3966bf",
     "scripts/tw_runtime/team/materials.py": "1609528da0d5ce5c3a2d97afca8268a4a37db3489b12f4739fa766f8c1545ab6",
     "scripts/tw_runtime/team/metrics.py": "09940c231db68d0fd4b58c1033c64bbdee0fbf970befea3e6a429b7dcfa365f7",
     "scripts/tw_runtime/team/platform_script.py": "0b646f53df2561abea3218008c27b230e690f533aff80aceed7e19a7ffe9fff0",
@@ -53,7 +53,7 @@
     "scripts/tw_runtime/team/starting.py": "edb6b7bb212e1f3bb31d06739f47d86adc0db380125cd9812dfb4017a7c1ce9f",
     "scripts/tw_runtime/team/status_records.py": "18778f4b88076ea4c0aca59178a1115cd91ed6f8120b8896658eda5d0d50cf7f",
     "scripts/tw_runtime/team/summary.py": "48ff2a6a64a7ac0b558384278eb20ff09e15c42be61ab8a5c8f4d8e974db8963",
-    "scripts/tw_runtime/team/validation.py": "7319f64d111b2614532c33ddd962e26b4e7f480e59fcd42a03bb52517729f888",
+    "scripts/tw_runtime/team/validation.py": "4eba30628c378b5c7d304f0e5f23f71f25f05a1edf1c2387a8c4d7d4d13923b0",
     "scripts/tw_runtime/team/validation_session.py": "102330983c1833e7eedc2a004d0e3e334c5d58c0a9a2f9fea0d55f62118bd153",
     "scripts/tw_runtime/team/workflow.py": "a69df7694cd59ccaeac548e1a28b784927cb82f9958dae23ef72e76b89a3abe6",
     "scripts/tw_runtime/textmatch.py": "9a5d82f0c8d0529b0fbe21e85d809a7c480283643e7eef9829e08a5c826f8af3"

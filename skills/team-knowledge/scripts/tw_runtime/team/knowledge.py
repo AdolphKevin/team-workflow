@@ -65,10 +65,11 @@ def state(root):
 
 
 def changed_since(root, base):
-    """Knowledge files changed in this task: differences from the task base plus untracked files."""
+    """Knowledge files changed in this task: differences from its effective base plus untracked files."""
     from common import git
+    from validation import effective_base
     names = set()
-    for args in (('diff', '--name-only', '--no-renames', '-z', base),
+    for args in (('diff', '--name-only', '--no-renames', '-z', effective_base(root, base)),
                  ('ls-files', '--others', '--exclude-standard', '-z')):
         names.update(n.decode() for n in git(root, *args).split(b'\0') if n)
     return {n for n in names if knowledge_path(n)}
@@ -83,8 +84,9 @@ def verify(root, value, base=None):
         if inside(root, name, exists=False).is_file():
             continue
         from common import git
+        from validation import effective_base
         try:
-            git(root, 'cat-file', '-e', f'{base}:{name}')
+            git(root, 'cat-file', '-e', f'{effective_base(root, base)}:{name}')
             deleted = True
         except Exception:
             deleted = False
