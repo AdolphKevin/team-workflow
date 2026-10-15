@@ -17,7 +17,8 @@ import delivery
 import designs
 import validation
 import coordination
-import github_read
+from tw_runtime.team import platform_script as platform_read
+from platform_fixtures import CONFIG as PLATFORM_CONFIG, transport as platform_transport
 import workflow
 from common import Invalid
 
@@ -338,7 +339,7 @@ class StartPlatform(unittest.TestCase):
         fixtures.write_config(self.root, self.profile)
         self.git('add', '.tw/config.json')
         self.git('commit', '-qm', 'share the platform check configuration')
-        with patch.object(github_read, 'api', side_effect=self.github):
+        with patch.object(platform_read, 'call', side_effect=platform_transport(self.github)):
             self.establish_design()
             if with_handoff:
                 self.publish_fixture(coordination.draft(self.root, self.profile, self.url, self.handoff(), kind='design'), 'alice')
@@ -349,7 +350,7 @@ class StartPlatform(unittest.TestCase):
 
     def test_platform_continuation_keeps_handoff_and_source_checks(self):
         first = self.prepared_platform()
-        with patch.object(github_read, 'api', side_effect=self.github):
+        with patch.object(platform_read, 'call', side_effect=platform_transport(self.github)):
             code, resumed = self.command()
             self.assertEqual(code, 0, resumed)
             self.assertTrue(resumed['continued'])
@@ -364,7 +365,7 @@ class StartPlatform(unittest.TestCase):
 
     def test_platform_read_failure_is_a_continuation_gap_with_a_saved_brief(self):
         first = self.prepared_platform()
-        with patch.object(github_read, 'api', side_effect=Invalid('offline fixture')):
+        with patch.object(platform_read, 'call', side_effect=Invalid('offline fixture')):
             code, refused = self.command()
         self.assertEqual(code, 1, refused)
         self.assertTrue(refused['continued'])
@@ -375,7 +376,7 @@ class StartPlatform(unittest.TestCase):
 
     def test_platform_continuation_still_requires_the_confirmed_handoff(self):
         self.prepared_platform(with_handoff=False)
-        with patch.object(github_read, 'api', side_effect=self.github):
+        with patch.object(platform_read, 'call', side_effect=platform_transport(self.github)):
             code, refused = self.command()
         self.assertEqual(code, 1, refused)
         self.assertIn('No confirmed handoff', str(refused['gaps']))
@@ -384,7 +385,7 @@ class StartPlatform(unittest.TestCase):
         self.prepared_platform()
         self.task['acceptance'] = [{'id': 'A1'}]
         self.issue['body'] = self.body()
-        with patch.object(github_read, 'api', side_effect=self.github):
+        with patch.object(platform_read, 'call', side_effect=platform_transport(self.github)):
             code, refused = self.command()
         self.assertEqual(code, 1, refused)
         self.assertIn('expectation', refused['problem'])

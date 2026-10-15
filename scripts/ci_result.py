@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Capture this repository's real regressions, or verify their Actions artifact."""
+"""Capture this repository's real regressions, or verify their CI artifact."""
 import argparse
 import json
 import os
@@ -22,7 +22,7 @@ def profile():
                 'format': 'junit', 'report': '{output}/tests.xml', 'artifacts': ['{output}/tests.evidence.json'],
                 'required_cases': [], 'required_env': [], 'environment': {'kind':'stateless'},
                 'coverage': {'level':'journey','entrypoints':['tw team'],'environment':'isolated-test-repositories',
-                'substitutes':['GitHub API fixtures'],'isolation':'isolated','isolation_evidence':[]}}},
+                'substitutes':['project platform script fixtures'],'isolation':'isolated','isolation_evidence':[]}}},
             'required_checks': {'code': ['regression'], 'docs': []}, 'risk_checks': {}, 'inputs': [],
             'environment_versions': {'python': ['python3', '--version']}}
 
@@ -42,8 +42,8 @@ def main():
             'kind': 'code', 'risks': [], 'acceptance': [{'id': 'A1', 'expectation': 'Every regression executes and passes', 'checks': ['regression']}]}
     path, record = validation.run_batch(ROOT, profile(), [task], portable=True)
     output = path.parent / 'regression'
-    if os.environ.get('GITHUB_OUTPUT'):
-        with open(os.environ['GITHUB_OUTPUT'], 'a') as stream:
+    if os.environ.get('TW_CI_OUTPUT'):
+        with open(os.environ['TW_CI_OUTPUT'], 'a') as stream:
             stream.write('directory=' + str(output) + '\n')
     result = record['results'][0]
     passed = record['source_unchanged'] and result['status'] == 'passed'

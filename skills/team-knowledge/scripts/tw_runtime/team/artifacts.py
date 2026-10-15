@@ -4,6 +4,7 @@ import re
 import hashlib
 import time
 import uuid
+from urllib.parse import urlsplit
 
 from common import VERSION, Invalid, artifact, create, create_text, digest, ensure_local, inside, now, read, require, sha
 
@@ -16,11 +17,13 @@ def directory(root, task_id, request_id=None):
 
 def task_directory(task_id):
     """Readable prefix plus a hash of the full identity, so foo-bar/baz#1 and foo/bar-baz#1 stay apart."""
-    issue = re.fullmatch(r'https://github\.com/([^/]+)/([^/]+)/issues/(\d+)', task_id)
+    parts = urlsplit(task_id)
+    issue = re.fullmatch(r'/([^/]+)/([^/]+)/issues/(\d+)', parts.path) if parts.scheme in ('http', 'https') else None
     if issue:
         slug = '-'.join(re.sub(r'[^a-z0-9]+', '-', part.lower()).strip('-') for part in issue.groups())
     else:
-        slug = re.sub(r'[^a-z0-9]+', '-', task_id.lower()).strip('-')[:40].rstrip('-') or 'task'
+        name = parts.path.strip('/') if parts.scheme in ('http', 'https') else task_id
+        slug = re.sub(r'[^a-z0-9]+', '-', name.lower()).strip('-')[:40].rstrip('-') or 'task'
     return slug + '-' + hashlib.sha256(task_id.encode('utf-8')).hexdigest()[:8]
 
 

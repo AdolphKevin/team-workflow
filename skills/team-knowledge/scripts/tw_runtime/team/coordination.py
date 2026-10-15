@@ -1,4 +1,4 @@
-"""Version 5 platform coordination. Every network operation is a GitHub GET.
+"""Version 5 coordination through the project's read-only platform script.
 
 Drafts are values, never publications. Readiness concerns continuation only;
 business acceptance and permission to close belong to the delivery verifier.
@@ -8,9 +8,19 @@ import re
 
 from common import Invalid, VERSION, digest, obj, read, require, strings, task_valid, text
 import designs
-import github_read as github
+from tw_runtime.team import platform_script as platform_read
 import knowledge
 import validation
+
+
+def platform_issue(url, root=None):
+    """Keep the record parser's input view stable, using only normalized contract fields."""
+    value = platform_read.task(platform_read.project_root(root), url)
+    return {'html_url': value['id'], 'body': value['items'][0]['body'], 'state': value['state'],
+            'repository': value['repository'], 'assignees': [{'login': owner} for owner in value['owners']],
+            'comments_data': [{'html_url': item['url'], 'body': item['body'],
+                               'user': {'login': item['author']}, 'created_at': item['created_at'],
+                               'updated_at': item['updated_at']} for item in value['items'][1:]]}
 
 
 class MissingTaskBlock(Invalid):
@@ -38,7 +48,7 @@ def validate_progress(row):
     obj(row, {'data_version', 'kind', 'task', 'request_id', 'requirements', 'author',
               'done', 'verified', 'remaining', 'questions'})
     require(row['data_version'] == 1 and row['kind'] == 'progress', 'Expected progress data_version 1')
-    github.issue_ref(row['task'])
+    platform_read.task_url(row['task'])
     for name in ('request_id', 'requirements', 'author'):
         text(row[name])
     for name in ('done', 'verified', 'remaining'):
@@ -89,7 +99,7 @@ def task_source(issue):
     require(value['task'].get('id') == issue['html_url'], 'Task ID must be its canonical issue URL')
     require(value['task'].get('parent') == value['parent'], 'Inner and shared task parent differ')
     if value['parent']:
-        github.issue_ref(value['parent'])
+        platform_read.task_url(value['parent'])
         require(value['parent'] != issue['html_url'], 'Task cannot be its own parent')
     prose = re.sub(r'```team-workflow-task\s*\n.*?\n```', '', issue.get('body', ''), count=1, flags=re.S)
     return {**value, 'body_digest': digest(prose.replace('\r\n', '\n').replace('\r', '\n').strip())}
@@ -214,7 +224,7 @@ def _read(issue):
                 require(row['history_digest'] == digest(seen),
                         'Preceding history changed or concurrent record was appended; reconcile explicitly')
                 require(not (comment.get('created_at') and comment.get('updated_at'))
-                        or comment['created_at'] == comment['updated_at'],
+                        or platform_read.timestamp(comment['created_at']) == platform_read.timestamp(comment['updated_at']),
                         'An edited platform record cannot serve as immutable history; append a reconciliation')
                 latest = rows[name][-1] if rows[name] else None
                 resolution = row.get('resolution')
@@ -243,16 +253,16 @@ def _read(issue):
             'history_digest': digest(seen), 'platform_history': seen}
 
 
-def load(url, issue=None):
+def load(url, issue=None, root=None):
     """Read task, versioned design, explicit approvals and all outstanding progress.
 
     issue: a fetched issue with a drafted body, used to prepare records before the body is posted."""
-    issue = issue or github.issue(url)
+    issue = issue or platform_issue(url, root)
     state = _read(issue)
     design_state = state
     parent = state['source']['parent']
     if parent and not state['rows']['design']:
-        design_state = _read(github.issue(parent))
+        design_state = _read(platform_issue(parent, root))
     entries = design_state['rows']['design']
     latest = entries[-1] if entries else None
     design = latest['record']['design'] if latest else None
@@ -420,7 +430,7 @@ def _validate_handoff(row):
               'included_progress'}, {'resolution', 'close'})
     require(row['data_version'] == 1 and row['kind'] == 'handoff', 'Expected data_version 1 handoff')
     require(row['handoff_kind'] in HANDOFF_KINDS, 'Unknown handoff kind')
-    github.issue_ref(row['task'])
+    platform_read.task_url(row['task'])
     for name in ('creator', 'owner', 'next'):
         text(row[name])
     obj(row['roles'], {'design_owner', 'implementation_owner', 'acceptance_owner'})
@@ -463,7 +473,7 @@ def _validate_handoff(row):
     seen = set()
     for version in row['versions']:
         obj(version, {'repository', 'commit', 'content'})
-        github.repository(version['repository'])
+        platform_read.repository(version['repository'])
         require(version['repository'] not in seen, 'Duplicate repository version')
         seen.add(version['repository'])
         require(re.fullmatch(r'[a-f0-9]{40}|[a-f0-9]{64}', text(version['commit'])), 'Expected full commit ID')
@@ -472,8 +482,8 @@ def _validate_handoff(row):
         require(isinstance(row[name], list), name + ' must be a list')
     for item in row['participants']:
         obj(item, {'issue', 'repository', 'owner', 'role'})
-        github.issue_ref(item['issue'])
-        github.repository(item['repository'])
+        platform_read.task_url(item['issue'])
+        platform_read.repository(item['repository'])
         text(item['owner'])
         text(item['role'])
     for item in row['contracts']:
@@ -483,11 +493,11 @@ def _validate_handoff(row):
         _hash(item['sha256'])
     for item in row['dependencies']:
         obj(item, {'repository', 'role', 'commit'}, {'issue', 'evidence'})
-        github.repository(item['repository'])
+        platform_read.repository(item['repository'])
         require(item['role'] in ('build', 'modified', 'joint'), 'Unknown dependency responsibility')
         require(re.fullmatch(r'[a-f0-9]{40}|[a-f0-9]{64}', text(item['commit'])), 'Expected full dependency commit')
         if item.get('issue'):
-            github.issue_ref(item['issue'])
+            platform_read.task_url(item['issue'])
         if item.get('evidence'):
             text(item['evidence'])
     require(isinstance(row['joint_owner'], str), 'Joint owner must be text')
@@ -566,12 +576,12 @@ def _handoff_gaps(root, profile, state, row, status, documents):
         gaps.append('External file inputs need a shared repository version for handoff')
     for repo, version in versions.items():
         try:
-            github.commit(repo, version['commit'])
+            platform_read.commit(root, repo, version['commit'])
         except Invalid as exc:
             gaps.append(str(exc))
     for url in row['references']:
         try:
-            github.reachable(url)
+            platform_read.reference(root, url)
         except Invalid as exc:
             gaps.append(str(exc))
     from contracts import reconcile, unresolved
@@ -628,10 +638,9 @@ def _handoff_gaps(root, profile, state, row, status, documents):
             gaps.append('Modified or joint dependency needs delivery evidence: ' + repo)
         try:
             if dependency.get('issue'):
-                require(github.issue_ref(dependency['issue'])[0] == repo, 'Dependency task belongs to another repository')
-                github.issue(dependency['issue'])
+                require(platform_issue(dependency['issue'], root)['repository'] == repo, 'Dependency task belongs to another repository')
             if dependency.get('evidence'):
-                github.reachable(dependency['evidence'])
+                platform_read.reference(root, dependency['evidence'])
         except Invalid as exc:
             gaps.append(str(exc))
     for repo in set(declared) - set(dependencies):
@@ -652,11 +661,11 @@ def _handoff_gaps(root, profile, state, row, status, documents):
         participant_owners.add(participant['owner'])
         try:
             require(repo in versions, 'Participant version missing: ' + repo)
-            require(github.issue_ref(participant['issue'])[0] == repo, 'Participant task belongs to another repository')
+            require(platform_issue(participant['issue'], root)['repository'] == repo, 'Participant task belongs to another repository')
             if participant['issue'] == state['issue']:
                 source, owners = state['source'], state['owners']
             else:
-                child = github.issue(participant['issue'])
+                child = platform_issue(participant['issue'], root)
                 source = task_source(child)
                 owners = [value['login'] for value in child.get('assignees', [])]
             require((source['parent'] or source['task']['id']) == (state['parent'] or state['issue']),
@@ -676,14 +685,14 @@ def _handoff_gaps(root, profile, state, row, status, documents):
         if contract['provider'] not in versions or contract['consumer'] not in versions:
             gaps.append('Contract provider or consumer has no source version: ' + contract['document'])
         try:
-            github.reachable(contract['confirmation'])
+            platform_read.reference(root, contract['confirmation'])
         except Invalid as exc:
             gaps.append(str(exc))
     return gaps
 
 
 def resume(root, profile, url, completed_tasks=()):
-    state = load(url)
+    state = load(url, root=root)
     task_valid(state['task'], profile, root)
     gaps = list(state['gaps'])
     from validation_session import active
@@ -712,7 +721,7 @@ def resume(root, profile, url, completed_tasks=()):
         gaps.append('Task has no assigned owner')
     if state['pending_progress']:
         gaps.append('New progress has not been confirmed in the current handoff')
-    fresh = load(url)
+    fresh = load(url, root=root)
     observed = ('requirements', 'history_digest', 'design_history_digest', 'owners')
     if any(fresh[key] != state[key] for key in observed):
         gaps.append('Platform changed while reading; refresh requirements, responsibilities and progress')
@@ -725,7 +734,7 @@ def resume(root, profile, url, completed_tasks=()):
 
 
 def draft(root, profile, url, progress, kind='implementation', completed_tasks=(), close=None):
-    state = load(url)
+    state = load(url, root=root)
     task_valid(state['task'], profile, root)
     require(kind in HANDOFF_KINDS, 'Handoff kind must be design, implementation or close')
     require((kind == 'close') == (close is not None), 'A close note is drafted by final delivery verification')
@@ -793,7 +802,7 @@ def draft(root, profile, url, progress, kind='implementation', completed_tasks=(
 
 
 def progress_draft(root, profile, url, progress, request_id):
-    issue = github.issue(url)
+    issue = platform_issue(url, root)
     source = task_source(issue)
     task_valid(source['task'], profile, root)
     obj(progress, {'author', 'done', 'verified', 'remaining', 'questions'})

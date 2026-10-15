@@ -61,7 +61,7 @@ def remote_identity(root):
 
 
 def normalize_remote(url):
-    """`git@github.com:a/b.git`, `https://github.com/a/b` and `ssh://git@github.com:22/a/b.git` -> `github.com/a/b`."""
+    """Normalize SSH and HTTP(S) remotes to host/path, without credentials or a port."""
     url = url.strip()
     if '://' in url:
         parts = urlsplit(url)

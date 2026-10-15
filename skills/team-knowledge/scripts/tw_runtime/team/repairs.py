@@ -1,4 +1,5 @@
 """Concrete recovery commands for the seven user-facing workflow operations."""
+from tw_runtime.team import platform_script as platform_read
 import shlex
 from pathlib import Path
 
@@ -28,7 +29,7 @@ def action(args, problem, existing=None, error_code=None, checks=None):
         old = old.replace('<身份>', shlex.quote(str(identity)))
     group = selection.get('effective') or selection.get('value') or {}
     if error_code == 'current-materials-incomplete' and group:
-        if str(identity).startswith('https://github.com/'):
+        if platform_read.is_task(args.root.resolve(), str(identity), required=False):
             return '保留原证据，按 Issue 身份重新读取平台材料：' + command(args, 'start')
         def valid(ref):
             try:

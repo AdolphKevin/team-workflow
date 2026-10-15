@@ -1,4 +1,5 @@
 """Business acceptance and final delivery are separate read-only decisions."""
+from tw_runtime.team import platform_script as platform_read
 from datetime import datetime
 
 from common import (RECORD_SCHEMA, Invalid, artifact, artifact_valid, digest, evidence_file, external_path, inside, obj, read,
@@ -190,8 +191,8 @@ def verify(root, profile, task, report, phase='delivery', _seen=None, live=None)
     issues_before = digest(issue_history.known(root, task['id']))
     before = validation.source_digest(root, profile)
     platform_state = None
-    if task['id'].startswith('https://github.com/'):
-        platform_state = coordination.load(task['id'])
+    if platform_read.is_task(root, task['id']):
+        platform_state = coordination.load(task['id'], root=root)
         require(not platform_state['gaps'], 'Platform records are incomplete: ' + '; '.join(platform_state['gaps']))
         require(platform_state['task'] == task, 'Platform task changed; read current requirements')
     if platform_state is not None:
@@ -336,7 +337,7 @@ def verify(root, profile, task, report, phase='delivery', _seen=None, live=None)
     result['summary_markdown'] = summary.render({**result, 'knowledge_disposition': (
         summary.disposition(completed) if phase == 'delivery' else None)}, task, profile)
     if platform_state is not None:
-        latest = coordination.load(task['id'])
+        latest = coordination.load(task['id'], root=root)
         observed = ('requirements', 'history_digest', 'design_requirements', 'design_history_digest', 'owners')
         require(all(latest[key] == platform_state[key] for key in observed) and not latest['gaps'],
                 'Platform requirements, approvals or progress changed during verification')

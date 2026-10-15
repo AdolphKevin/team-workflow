@@ -65,7 +65,7 @@
 
 | 操作 | 参数 | 输出 |
 | --- | --- | --- |
-| `task` | `--id <任务身份>` | `{"id", "url", "items": [{"url", "author", "created_at", "body", "kind"}], "raw"}`。`items` 是任务本身及其全部评论；方案与批准在变更请求上时，一并包含变更请求描述与评审，`kind` 区分 `task`、`comment`、`change`、`review` |
+| `task` | `--id <任务身份>` | `{"id", "url", "state", "owners", "items": [{"url", "author", "created_at", "updated_at", "body", "kind"}], "raw"}`。`state` 为 `open` 或 `closed`，`owners` 为负责人数组（可为空），`updated_at` 为最后编辑时间，未编辑时等于 `created_at`；这三项保留现有的负责人、关闭状态和历史被编辑的核查。`items` 是任务本身及其全部评论；方案与批准在变更请求上时，一并包含变更请求描述与评审，`kind` 区分 `task`、`comment`、`change`、`review` |
 | `commit` | `--repo <仓库身份> --revision <完整提交号>` | `{"exists", "revision", "author", "time"}` |
 | `reference` | `--url <链接>` | `{"reachable", "kind", "revision?"}`；`kind` 为 `commit`、`file`、`task`、`change`、`comment` |
 | `ci-result` | `--locator <JSON>` `--output <目录>` | `{"provenance": {...}, "archive": "<目录内的文件名>"}`；产物下载到工具给定的目录 |

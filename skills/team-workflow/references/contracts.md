@@ -307,14 +307,14 @@ Issue 身份自动触发平台核查，漏传 `--issue` 不能绕过。交付完
 平台输入和冲突规则见[任务协作与交接](coordination.md)。沿用已有授权发布，之后重新读取
 平台状态；批准记录必须实际出现在对应任务上，单独本地文件不能冒充共享批准。
 
-外部仓库输入为 `{"kind":"repository","repository":"owner/repo","role":"build"}`，
-`role` 还可为 `modified` 或 `joint`；本机目录通过 `--repository owner/repo=/path` 或
+外部仓库输入为 `{"kind":"repository","repository":"host/group/repo","role":"build"}`，
+`role` 还可为 `modified` 或 `joint`；本机目录通过 `--repository host/group/repo=/path` 或
 本地映射提供。检查的 `repository` 决定实际运行目录，前端检查需在前端仓库执行。
-`evidence --evidence-repository owner/repo --path <仓内路径>` 保留原仓身份和内容指纹。
+`evidence --evidence-repository host/group/repo --path <仓内路径>` 保留原仓身份和内容指纹。
 
-需要导入 GitHub Actions 实际结果或做多仓联合验收时，读取[跨机器结果](portable.md)。
+平台读取遵守[平台脚本契约](platform.md)；导入实际结果或做多仓联合验收时，读取[跨机器结果](portable.md)。
 入口分别为 `run --portable`、`import-result --result <定位文件>` 和
-`aggregate --joint <联合清单> --repository owner/repo=/path`。原始报告和平台运行来源始终
+`aggregate --joint <联合清单> --repository host/group/repo=/path`。原始报告和平台运行来源始终
 需要核对。
 
 ## 重试与清理

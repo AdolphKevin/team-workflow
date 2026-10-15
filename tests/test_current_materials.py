@@ -18,7 +18,8 @@ import artifacts
 import cleanup
 import coordination
 import designs
-import github_read
+from tw_runtime.team import platform_script as platform_read
+from platform_fixtures import CONFIG as PLATFORM_CONFIG, transport as platform_transport
 import workflow
 
 TW = test_start_accept.TW
@@ -465,14 +466,14 @@ class PlatformCurrentMaterials(unittest.TestCase):
 
     def test_issue_address_as_identity_preserves_the_complete_url(self):
         self.prepared_platform()
-        with patch.object(github_read, 'api', side_effect=self.github):
+        with patch.object(platform_read, 'call', side_effect=platform_transport(self.github)):
             code, result = self.identity_command('task-export')
         self.assertEqual(code, 0, result)
         self.assertEqual(read(self.root / result['artifact']['path'])['id'], self.url)
 
     def test_platform_design_newer_than_the_record_requires_start(self):
         self.prepared_platform()
-        with patch.object(github_read, 'api', side_effect=self.github):
+        with patch.object(platform_read, 'call', side_effect=platform_transport(self.github)):
             revised = copy.deepcopy(self.design)
             revised['revision'] = 2
             revised['sections'][-1]['body'] = 'Updated implementation instructions'
@@ -485,7 +486,7 @@ class PlatformCurrentMaterials(unittest.TestCase):
 
     def test_platform_approval_newer_than_the_record_requires_start(self):
         self.prepared_platform()
-        with patch.object(github_read, 'api', side_effect=self.github):
+        with patch.object(platform_read, 'call', side_effect=platform_transport(self.github)):
             self.publish_fixture(coordination.draft_approval(self.url,
                 {'reviewer': 'carol', 'confirmation': 'New explicit approval'}), 'carol')
             code, refused = self.identity_command('task-export')
@@ -495,7 +496,7 @@ class PlatformCurrentMaterials(unittest.TestCase):
 
     def test_explicit_old_platform_context_cannot_bypass_the_current_design(self):
         first = self.prepared_platform()
-        with patch.object(github_read, 'api', side_effect=self.github):
+        with patch.object(platform_read, 'call', side_effect=platform_transport(self.github)):
             revised = copy.deepcopy(self.design)
             revised['revision'] = 2
             revised['sections'][-1]['body'] = 'New approved implementation instructions'
@@ -514,7 +515,7 @@ class PlatformCurrentMaterials(unittest.TestCase):
     def test_explicit_old_platform_design_or_approval_cannot_replace_the_current_group(self):
         first = self.prepared_platform()
         old_context = read(self.root / first['context']['path'])
-        with patch.object(github_read, 'api', side_effect=self.github):
+        with patch.object(platform_read, 'call', side_effect=platform_transport(self.github)):
             revised = copy.deepcopy(self.design)
             revised['revision'] = 2
             revised['sections'][-1]['body'] = 'New approved implementation instructions'

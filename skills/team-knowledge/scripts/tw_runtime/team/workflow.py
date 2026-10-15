@@ -23,7 +23,7 @@ class TeamParser(argparse.ArgumentParser):
 def parser():
     p = TeamParser(prog='tw team', description=__doc__)
     p.add_argument('--root', type=Path, default=Path.cwd())
-    p.add_argument('--repository', action='append', default=[], help='Local checkout mapping owner/repo=/path')
+    p.add_argument('--repository', action='append', default=[], help='本机仓库映射 host/group/repo=/path')
     # Shared dispatch and request fingerprints retain their explicit defaults, without exposing unrelated options.
     p.set_defaults(task=None, issue=None, context=None, design=None, brief=None, approval=[], design_history=[],
                    dependency=[], with_task=[], run=[], review=None, report=None, progress=None, record=None,
@@ -35,13 +35,13 @@ def parser():
     locations = argparse.ArgumentParser(add_help=False)
     locations.add_argument('--root', type=Path, default=argparse.SUPPRESS)
     locations.add_argument('--repository', dest='sub_repository', action='append', default=[],
-                           metavar='REPOSITORY', help='Local checkout mapping owner/repo=/path')
+                           metavar='REPOSITORY', help='本机仓库映射 host/group/repo=/path')
     output = argparse.ArgumentParser(add_help=False)
     output.add_argument('--format', choices=['json', 'text'], default='json')
     task = argparse.ArgumentParser(add_help=False)
     task.add_argument('--task',
                       help='任务文件或已开工的任务身份（本地编号、完整 Issue 地址）')
-    task.add_argument('--issue', help='Canonical GitHub issue URL')
+    task.add_argument('--issue', help='规范任务地址')
     task.add_argument('--context', type=Path, help='Prepared context artifact; resolves task/design/brief inputs')
     inputs = argparse.ArgumentParser(add_help=False)
     inputs.add_argument('--input', action='append', default=[], help='Local external file mapping name=/path')
@@ -75,6 +75,12 @@ def parser():
         return sub.add_parser(name, help=summary, description=summary, parents=[locations, output, *parents])
 
     command('project', '核对项目配置、知识结构与安装', home, override)
+    c = command('platform', '核对项目平台脚本的格式与已知提交')
+    c.add_argument('--check', action='store_true')
+    c.add_argument('--id', dest='platform_id', help='真实任务的规范地址')
+    c.add_argument('--commit', help='本地已知提交，默认 HEAD')
+    c.add_argument('--reference', help='待核对的链接，默认任务地址')
+    c.add_argument('--locator', help='ci-result 的不透明 JSON 定位信息；声明该操作时必填')
     command('snapshot', '读取源码与任务的内容指纹', task, inputs)
     c = command('run', '执行项目登记的检查并保存结果', task, inputs, request)
     c.add_argument('--with-task', action='append', default=[], type=Path,
@@ -109,7 +115,7 @@ def parser():
     c = command('delivery-template', '生成最终交付报告草稿', task, inputs, request, report)
     c.add_argument('--acceptance', type=Path, help='Business acceptance record produced by verification')
     c = command('import-result', '导入有来源证明的持续集成执行结果', inputs, request)
-    c.add_argument('--result', type=Path, help='GitHub Actions result locator')
+    c.add_argument('--result', type=Path, help='平台产物定位信息')
     c = command('status', '查看任务材料与下一步，成功核对后登记显式替换', task, inputs, design, history, runs)
     c.add_argument('--report', type=Path)
     c = command('agents', '查看或更新代理工作台账')
@@ -147,7 +153,7 @@ def parser():
     c.add_argument('--reviewer', help='The named person asked to review the design')
     c = command('metrics', '只读汇总任务的本机运行统计')
     c.add_argument('--task', type=Path)
-    c.add_argument('--issue', help='Canonical GitHub issue URL')
+    c.add_argument('--issue', help='规范任务地址')
     c.add_argument('--since', help='Only requests started at or after this ISO time')
     return p
 
@@ -179,6 +185,9 @@ def _main(argv=None):
     home_token = INSTALL_HOME.set(args.home)
     token = LOCATIONS.set({'repositories': {}, 'inputs': {}})
     import commands
+    from tw_runtime.team import platform_script as platform_read
+    platform_read.clear_cache()
+    platform_token = platform_read.PROJECT_ROOT.set(root)
     try:
         mappings = {'repositories': {}, 'inputs': {}}
         for kind, values in (('repositories', args.repository), ('inputs', args.input)):
@@ -190,6 +199,9 @@ def _main(argv=None):
         skill_resource()
         if args.command == 'version':
             result = tool_identity()
+        elif args.command == 'platform':
+            require(args.check and args.platform_id, 'platform 需要 --check --id <任务身份>')
+            result = platform_read.check(root, args.platform_id, args.commit, args.reference, args.locator)
         elif args.command == 'guidance':
             import guidance
             result = guidance.run(root, args.scope, args.apply, args.home, args.file)
@@ -221,6 +233,7 @@ def _main(argv=None):
         print(json.dumps({'scope': args.command, **commands.tool_defect(exc)}, ensure_ascii=False))
         return 1
     finally:
+        platform_read.PROJECT_ROOT.reset(platform_token)
         LOCATIONS.reset(token)
         INSTALL_HOME.reset(home_token)
 

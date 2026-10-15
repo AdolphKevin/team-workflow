@@ -157,6 +157,10 @@ def dispatch(args, root):
         import portable
         mappings = {key: (root / Path(path).expanduser()).resolve() for key, path in location_settings(root)['repositories'].items()}
         return portable.aggregate(root, read(local(root, args.joint)), mappings)
+    from tw_runtime.team import platform_script as platform_read
+    candidate = args.issue or (str(args.task) if args.task else None)
+    if candidate:
+        platform_read.is_task(root, candidate)
     profile = load_profile(root)
     import materials
     materials.resolve(args, root)
@@ -203,7 +207,7 @@ def dispatch(args, root):
     if args.issue and start is None:
         import coordination
         try:
-            platform = coordination.load(args.issue)
+            platform = coordination.load(args.issue, root=root)
         except coordination.MissingTaskBlock as exc:
             return missing_task_block(args, exc)
     task = start['task'] if start else read(local(root, args.task)) if args.task else platform['task'] if platform else None

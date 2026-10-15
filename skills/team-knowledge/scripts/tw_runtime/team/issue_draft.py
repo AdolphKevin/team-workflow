@@ -1,11 +1,11 @@
-"""Bring existing issues into the team flow in one step. Reads GitHub; every output is a draft to post."""
+"""Bring existing tasks into the team flow; every output is a draft to post."""
 import json
 import re
 
 from common import digest, require, task_valid
 import coordination
 import designs
-import github_read as github
+from tw_runtime.team import platform_script as platform_read
 
 BLOCK = re.compile(r'```team-workflow-task\s*\n.*?\n```', re.S)
 
@@ -34,7 +34,7 @@ def draft(root, profile, task, design=None, siblings=(), reviewer=None):
     rows = []
     for item in [task, *siblings]:
         url = item['id']
-        github.issue_ref(url)
+        platform_read.task_url(url)
         task_valid(item, profile, root)
         parent = None
         if design is not None and design['task_id'] != url:
@@ -45,7 +45,7 @@ def draft(root, profile, task, design=None, siblings=(), reviewer=None):
             require(item.get('parent') in (None, parent), f'{url}: parent differs from the design owner issue')
         if design is not None:
             coordination.validate_task_design(item, design)
-        issue = github.issue(url)
+        issue = coordination.platform_issue(url, root)
         require(issue.get('state', 'open') == 'open', f'{url} is closed; reopen it before drafting')
         new_body = body(issue, item, parent)
         adopted = {**issue, 'body': new_body}
@@ -66,4 +66,4 @@ def draft(root, profile, task, design=None, siblings=(), reviewer=None):
     steps.append('Run tw team start --issue <URL> for each issue; implementation starts only when it reports implementation_ready.')
     return {'ok': True, 'kind': 'issue-adoption-draft', 'read_only': True, 'issues': rows, 'next_steps': steps,
             'publication': 'draft-only; post in this order after reading the current issue again',
-            'summary': f'已为 {len(rows)} 个 Issue 生成接入草稿；工具没有修改 GitHub。'}
+            'summary': f'已为 {len(rows)} 个任务生成接入草稿；工具没有修改平台。'}

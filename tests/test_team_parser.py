@@ -28,6 +28,7 @@ INPUT = {'--input'}
 QUERY = {'--path', '--symbol'}
 REPORT = {'--design', '--brief', '--approval', '--design-history', '--run', '--review', '--dependency'}
 EXPECTED = {
+    'platform': {'--check', '--id', '--commit', '--reference', '--locator'},
     'project': {'--home', '--allow-modified-tool'},
     'snapshot': TASK | INPUT,
     'run': TASK | INPUT | REQUEST | {'--with-task', '--check', '--portable'},
@@ -219,15 +220,15 @@ class TeamOptionBehavior(unittest.TestCase):
                         'https://github.com/acme/dependency.git'], check=True)
         path = checkout / 'original.txt'
         path.write_text('actual dependency evidence\n')
-        self.profile['external_inputs'] = {'dependency': {'kind': 'repository', 'repository': 'acme/dependency'}}
+        self.profile['external_inputs'] = {'dependency': {'kind': 'repository', 'repository': 'github.com/acme/dependency'}}
         test_workflow.write_config(self.root, self.profile)
-        args = ['evidence', '--evidence-repository', 'acme/dependency', '--path', path.name]
+        args = ['evidence', '--evidence-repository', 'github.com/acme/dependency', '--path', path.name]
         code, missing = self.command(*args)
         self.assertEqual(code, 1)
-        self.assertIn('acme/dependency', missing['problem'])
-        code, result = self.command(*args, '--repository', 'acme/dependency=' + str(checkout))
+        self.assertIn('github.com/acme/dependency', missing['problem'])
+        code, result = self.command(*args, '--repository', 'github.com/acme/dependency=' + str(checkout))
         self.assertEqual(code, 0, result)
-        self.assertEqual(result['artifacts'], [{'repository': 'acme/dependency', 'path': path.name,
+        self.assertEqual(result['artifacts'], [{'repository': 'github.com/acme/dependency', 'path': path.name,
                                               'sha256': hashlib.sha256(path.read_bytes()).hexdigest()}])
 
 

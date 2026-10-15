@@ -127,7 +127,7 @@ def knowledge_checks(root):
     return {'manifest_files': len(shipped['files']), 'characters': sizes, 'first_read': first}
 
 
-TEAM_BUDGETS = {'SKILL.md': 3000, 'references/matt-integration.md': 3000}
+TEAM_BUDGETS = {'SKILL.md': 3000, 'references/matt-integration.md': 3000, 'references/platform.md': 3000}
 
 
 def team_checks(root):
@@ -136,7 +136,7 @@ def team_checks(root):
     sizes = {name: len((skill / name).read_text(encoding='utf-8')) for name in TEAM_BUDGETS}
     for name, limit in TEAM_BUDGETS.items():
         assert sizes[name] <= limit, f'skills/team-workflow/{name} has {sizes[name]} characters, budget {limit}'
-    first = sum(sizes.values())
+    first = sum(sizes[name] for name in ('SKILL.md', 'references/matt-integration.md'))
     assert first <= 8000, f'team-workflow first-read chain has {first} characters, budget 8000'
     return {'characters': sizes, 'first_read': first}
 

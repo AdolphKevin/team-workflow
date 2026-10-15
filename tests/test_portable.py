@@ -20,7 +20,8 @@ import plan_fixtures as plans
 from common import Invalid, artifact, now, read, write
 import delivery
 import designs
-import github_read
+from tw_runtime.team import platform_script as platform_read
+from platform_fixtures import CONFIG as PLATFORM_CONFIG, transport as platform_transport
 import knowledge
 import portable
 import validation
@@ -33,6 +34,11 @@ class PortableCases(unittest.TestCase):
 
     def prepare(self, xml=None, **options):
         self.git('remote', 'add', 'origin', 'https://github.com/example/project.git')
+        self.profile['platform'] = copy.deepcopy(PLATFORM_CONFIG)
+        fixtures.write_config(self.root, self.profile)
+        self.git('add', '.tw/config.json')
+        self.git('commit', '-qm', 'platform fixture configuration')
+        self.task['base'] = self.git('rev-parse', 'HEAD').strip()
         self.task['design_id'] = 'addition'
         self.configure_check(xml, **options)
 
@@ -46,8 +52,8 @@ class PortableCases(unittest.TestCase):
 
     def capture(self, provider=True):
         self.directory = self.root / '.tw/local/ci' / uuid.uuid4().hex
-        context = {'GITHUB_ACTIONS': 'true', 'GITHUB_REPOSITORY': 'example/project',
-                   'GITHUB_RUN_ID': '17', 'GITHUB_RUN_ATTEMPT': '2', 'GITHUB_JOB': 'test'} if provider else {'GITHUB_ACTIONS': 'false'}
+        context = {'TW_RUN_CONTEXT': json.dumps({'repository': 'github.com/example/project',
+                   'run_id': '17', 'attempt': '2', 'job': 'test'}) if provider else ''}
         with patch.dict(os.environ, context):
             before = portable.source_state(self.root, self.profile)
             start = now()
@@ -68,7 +74,7 @@ class PortableCases(unittest.TestCase):
         self.archive = archive.getvalue()
         start = datetime.now(timezone.utc) - timedelta(minutes=1)
         finish = datetime.now(timezone.utc) + timedelta(minutes=1)
-        self.locator = {'kind': 'github-actions', 'repository': 'example/project', 'run_id': 17,
+        self.locator = {'kind': 'github-actions', 'repository': 'github.com/example/project', 'run_id': 17,
                         'attempt': 2, 'job_id': 21, 'artifact_id': 22}
         self.run = {'run_attempt': 2, 'head_sha': self.task['base'], 'status': 'completed', 'conclusion': 'success'}
         self.job = {'run_id': 17, 'run_attempt': 2, 'name': 'test (3.13)', 'status': 'completed', 'conclusion': 'success',
@@ -91,7 +97,7 @@ class PortableCases(unittest.TestCase):
         raise Invalid('Unexpected provider endpoint: ' + endpoint)
 
     def import_result(self):
-        with patch.object(github_read, 'api', side_effect=self.api):
+        with patch.object(platform_read, 'call', side_effect=platform_transport(self.api)):
             return portable.import_result(self.root, self.profile, self.locator)
 
     def test_capture_and_import_redecode_original_case_with_portable_paths(self):
@@ -99,12 +105,12 @@ class PortableCases(unittest.TestCase):
         manifest = self.capture()
         self.assertNotIn(str(self.directory), json.dumps(manifest))
         path, record = self.import_result()
-        with patch.object(github_read, 'api', side_effect=self.api):
+        with patch.object(platform_read, 'call', side_effect=platform_transport(self.api)):
             result, original = portable.validate_import(self.root, self.profile, read(path))
         self.assertEqual(record['kind'], 'imported-execution')
         self.assertEqual(result['cases'], {'Arithmetic::adds': 'passed'})
         self.assertEqual(result['status'], 'passed')
-        self.assertEqual(original['source_before']['repositories']['example/project']['commit'], self.task['base'])
+        self.assertEqual(original['source_before']['repositories']['github.com/example/project']['commit'], self.task['base'])
         self.assertTrue(all(not Path(row['path']).is_absolute() for row in result['artifacts']))
         self.assertEqual(record['started_at'], original['started_at'])
 
@@ -129,7 +135,7 @@ class PortableCases(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             relocated = Path(temporary) / 'relocated'
             shutil.copytree(self.root, relocated)
-            with patch.object(github_read, 'api', side_effect=self.api):
+            with patch.object(platform_read, 'call', side_effect=platform_transport(self.api)):
                 result, _ = portable.validate_import(relocated, self.profile, read(relocated / path.relative_to(self.root)))
             self.assertEqual(result['cases'], {'Arithmetic::adds': 'passed'})
 
@@ -158,8 +164,8 @@ class PortableCases(unittest.TestCase):
         current = self.git('rev-parse', 'HEAD').strip()
         self.assertNotEqual(tested, current)
         _, imported = self.import_result()
-        self.assertEqual(imported['tested_source']['repositories']['example/project']['commit'], tested)
-        self.assertEqual(imported['import_source']['repositories']['example/project']['commit'], current)
+        self.assertEqual(imported['tested_source']['repositories']['github.com/example/project']['commit'], tested)
+        self.assertEqual(imported['import_source']['repositories']['github.com/example/project']['commit'], current)
 
     def test_revision_sensitive_execution_rejects_a_different_commit(self):
         self.prepare(revision_sensitive=True)
@@ -225,7 +231,7 @@ class PortableCases(unittest.TestCase):
         path, _ = self.import_result()
         names = [path.relative_to(self.root).as_posix()]
         marker.unlink()
-        with patch.object(github_read, 'api', side_effect=self.api):
+        with patch.object(platform_read, 'call', side_effect=platform_transport(self.api)):
             result = validation.verify_runs(self.root, self.profile, self.task, names, live=False)
             self.assertEqual(result['results']['unit']['cases'], {'Arithmetic::adds': 'passed'})
             self.assertEqual(result['results']['unit']['binding']['environment']['fixture']['identity'],
@@ -252,15 +258,15 @@ class PortableCases(unittest.TestCase):
         (frontend / '.gitignore').write_text('__pycache__/\n')
         subprocess.check_call(['git', '-C', str(frontend), 'add', '.'])
         subprocess.check_call(['git', '-C', str(frontend), 'commit', '-qm', 'frontend fixture'])
-        write(self.root / '.tw/local/repositories.json', {'repositories': {'example/frontend': str(frontend)}})
-        self.profile['external_inputs'] = {'web': {'kind': 'repository', 'repository': 'example/frontend', 'role': 'modified'}}
+        write(self.root / '.tw/local/repositories.json', {'repositories': {'github.com/example/frontend': str(frontend)}})
+        self.profile['external_inputs'] = {'web': {'kind': 'repository', 'repository': 'github.com/example/frontend', 'role': 'modified'}}
         check = self.profile['checks']['unit']
-        check['repository'] = 'example/frontend'
+        check['repository'] = 'github.com/example/frontend'
         check['argv'][2] = check['argv'][2].replace('assert app.add(1,2)==3', 'assert app.frontend_behavior()=="frontend-only"')
         manifest = self.capture()
         _, imported = self.import_result()
-        self.assertEqual(imported['result']['repository'], 'example/frontend')
-        self.assertEqual(set(manifest['source_before']['repositories']), {'example/project', 'example/frontend'})
+        self.assertEqual(imported['result']['repository'], 'github.com/example/frontend')
+        self.assertEqual(set(manifest['source_before']['repositories']), {'github.com/example/project', 'github.com/example/frontend'})
         self.assertEqual(imported['result']['cases'], {'Arithmetic::adds': 'passed'})
 
     def test_provider_head_and_download_digest_must_match_original_execution(self):
@@ -344,20 +350,20 @@ class AggregateCases(unittest.TestCase):
                                 design_id='design-' + name, section_ids=['T1'], paths=['app.py'], acceptance_scope='task')
             fixture.check('import app; assert app.add(1,2)==3')
             self.fixtures[name] = fixture
-            self.roots['example/' + name] = fixture.root
+            self.roots['github.com/example/' + name] = fixture.root
         core = self.fixtures['core']
         self.root = core.root
         core.task['risks'] = ['cross-service']
         core.profile['risk_checks'] = {'cross-service': ['unit']}
         core.profile['external_inputs'] = {
-            'gateway': {'kind': 'repository', 'repository': 'example/gateway', 'role': 'joint'},
-            'common': {'kind': 'repository', 'repository': 'example/common', 'role': 'build'}}
+            'gateway': {'kind': 'repository', 'repository': 'github.com/example/gateway', 'role': 'joint'},
+            'common': {'kind': 'repository', 'repository': 'github.com/example/common', 'role': 'build'}}
         write(core.root / '.tw/local/repositories.json', {'repositories': {
-            key: str(value) for key, value in self.roots.items() if key != 'example/core'}})
+            key: str(value) for key, value in self.roots.items() if key != 'github.com/example/core'}})
         core.profile['checks']['unit']['argv'][2] = (
             'import app, json, importlib.util; from pathlib import Path; assert app.add(1,2)==3; '
             'locations=json.loads(Path(".tw/local/repositories.json").read_text())["repositories"]; '
-            '\nfor repo in ("example/gateway","example/common"):\n'
+            '\nfor repo in ("github.com/example/gateway","github.com/example/common"):\n'
             ' spec=importlib.util.spec_from_file_location("dependency", str(Path(locations[repo])/"app.py")); '
             'module=importlib.util.module_from_spec(spec); spec.loader.exec_module(module); assert module.add(1,2)==3\n'
             'print("joint public arithmetic behavior passed")')
@@ -366,12 +372,12 @@ class AggregateCases(unittest.TestCase):
             fixture.git('add', '.tw/config.json')
             fixture.git('commit', '-qm', 'configure participant checks')
             fixture.task['base'] = fixture.git('rev-parse', 'HEAD').strip()
-        self.manifest = {'data_version': 1, 'task_id': 'JOINT-fixture', 'joint': 'example/core',
-            'participants': [{'repository': 'example/' + name, 'commit': fixture.task['base'],
+        self.manifest = {'data_version': 1, 'task_id': 'JOINT-fixture', 'joint': 'github.com/example/core',
+            'participants': [{'repository': 'github.com/example/' + name, 'commit': fixture.task['base'],
                 'profile': '.tw/config.json', 'task': '.tw/local/task.json',
                 'report': '.tw/local/report.json'}
                 for name, fixture in self.fixtures.items() if name != 'common'],
-            'dependencies': [{'repository': 'example/common', 'commit': self.fixtures['common'].task['base']}]}
+            'dependencies': [{'repository': 'github.com/example/common', 'commit': self.fixtures['common'].task['base']}]}
         for name in ('core', 'gateway'):
             self.complete(self.fixtures[name], portable_run=name == 'core')
         from types import SimpleNamespace
@@ -379,7 +385,7 @@ class AggregateCases(unittest.TestCase):
         parent_task.pop('parent', None)
         self.parent_fixture = SimpleNamespace(root=self.root, profile=self.fixtures['core'].profile, task=parent_task)
         self.complete(self.parent_fixture, prefix='parent-', knowledge_complete=False)
-        self.manifest['requirement'] = {'repository': 'example/core', 'task': '.tw/local/parent-task.json', 'report': '.tw/local/parent-report.json'}
+        self.manifest['requirement'] = {'repository': 'github.com/example/core', 'task': '.tw/local/parent-task.json', 'report': '.tw/local/parent-report.json'}
 
     def complete(self, fixture, portable_run=False, prefix='', knowledge_complete=True):
         root, profile, task = fixture.root, fixture.profile, fixture.task
@@ -436,14 +442,14 @@ class AggregateCases(unittest.TestCase):
         raise Invalid('Unexpected aggregate provider call: ' + endpoint)
 
     def aggregate(self, manifest=None):
-        with patch.object(github_read, 'api', side_effect=self.api):
+        with patch.object(platform_read, 'call', side_effect=platform_transport(self.api)):
             return portable.aggregate(self.root, manifest or self.manifest, self.roots)
 
     def test_joint_execution_covers_both_deliveries_and_build_dependency(self):
         result = self.aggregate()
         self.assertTrue(result['delivery_complete'])
         self.assertFalse(result['closable'])
-        self.assertEqual(set(result['versions']), {'example/core', 'example/gateway', 'example/common'})
+        self.assertEqual(set(result['versions']), {'github.com/example/core', 'github.com/example/gateway', 'github.com/example/common'})
         self.assertEqual(len(result['participants']), 2)
         self.assertEqual(set(result['tested_versions'][0]['repositories']), set(result['versions']))
 
@@ -504,7 +510,7 @@ class AggregateCases(unittest.TestCase):
         manifest['task_id'] = 'unrelated-work'
         with self.assertRaisesRegex(Invalid, 'another parent'):
             self.aggregate(manifest)
-        del self.roots['example/common']
+        del self.roots['github.com/example/common']
         with self.assertRaisesRegex(Invalid, 'checkout mapping'):
             self.aggregate()
 
@@ -515,8 +521,8 @@ class AggregateCases(unittest.TestCase):
         current = common.git('rev-parse', 'HEAD').strip()
         self.manifest['dependencies'][0]['commit'] = current
         result = self.aggregate()
-        self.assertEqual(result['versions']['example/common'], current)
-        self.assertEqual(result['tested_versions'][0]['repositories']['example/common'], tested)
+        self.assertEqual(result['versions']['github.com/example/common'], current)
+        self.assertEqual(result['tested_versions'][0]['repositories']['github.com/example/common'], tested)
 
 
 class PortableHelpers(unittest.TestCase):

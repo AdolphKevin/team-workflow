@@ -28,7 +28,8 @@ def configuration(root, profile):
             'project': {'id': remote_identity(root) or 'local:sample', 'name': profile['project']},
             'context': list(profile['context']), 'shared': {}, 'documents': [],
             **{key: profile[key] for key in ('checks', 'required_checks', 'risk_checks', 'inputs',
-                                          'external_inputs', 'environment_versions', 'accounts')}}
+                                          'external_inputs', 'environment_versions', 'accounts')},
+            **({'platform': profile['platform']} if 'platform' in profile else {})}
 
 
 def write_config(root, profile):
@@ -40,6 +41,9 @@ class WorkflowCases(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.root = Path(self.tmp.name).resolve()
+        from tw_runtime.team import platform_script as platform_read
+        token = platform_read.PROJECT_ROOT.set(self.root)
+        self.addCleanup(platform_read.PROJECT_ROOT.reset, token)
         self.git('init', '-q')
         self.git('config', 'user.email', 'test@example.invalid')
         self.git('config', 'user.name', 'Fixture')

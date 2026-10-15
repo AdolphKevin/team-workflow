@@ -9,7 +9,8 @@ import test_delivery
 from common import Invalid, artifact
 import coordination
 import delivery
-import github_read
+from tw_runtime.team import platform_script as platform_read
+from platform_fixtures import CONFIG as PLATFORM_CONFIG, transport as platform_transport
 import knowledge
 import validation
 
@@ -24,13 +25,15 @@ class CloseNote(unittest.TestCase):
     def setUp(self):
         self.base.setUp(self)
         self.git('remote', 'add', 'origin', 'https://github.com/example/project.git')
+        self.profile['platform'] = copy.deepcopy(PLATFORM_CONFIG)
+        fixtures.write_config(self.root, self.profile)
         self.setup_task(task_id=URL)
         self.git('add', '.tw')
         self.git('commit', '-qm', 'project configuration and knowledge')
         self.issue = {'html_url': URL, 'state': 'open', 'assignees': [{'login': 'bob'}], 'comments_data': [],
                       'body': 'Fix buyer credential.\n\n```team-workflow-task\n'
                               + json.dumps({'data_version': 1, 'parent': None, 'task': self.task}) + '\n```\n'}
-        self.patch = patch.object(github_read, 'api', side_effect=self.github)
+        self.patch = patch.object(platform_read, 'call', side_effect=platform_transport(self.github))
         self.patch.start()
         self.addCleanup(self.patch.stop)
         self.publish(coordination.draft_design(URL, self.design), 'alice')

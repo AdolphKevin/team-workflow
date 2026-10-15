@@ -78,7 +78,7 @@ def select(args, root, profile):
     platform, platform_gap = None, None
     if args.issue:
         try:
-            platform = coordination.load(args.issue)
+            platform = coordination.load(args.issue, root=root)
         except coordination.MissingTaskBlock:
             raise
         except (Invalid, OSError, ValueError, TypeError, KeyError) as exc:

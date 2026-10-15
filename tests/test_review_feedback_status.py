@@ -16,7 +16,8 @@ import test_workflow as fixtures
 import test_close_note as close_note
 from common import artifact_valid, read, write
 import coordination
-import github_read
+from tw_runtime.team import platform_script as platform_read
+from platform_fixtures import CONFIG as PLATFORM_CONFIG, transport as platform_transport
 import issue_history
 import workflow
 
@@ -295,7 +296,7 @@ class PlatformStatus(unittest.TestCase):
 
     def test_platform_newer_plan_is_displayed_as_stale_without_adopting_it(self):
         self.prepared_platform()
-        with patch.object(github_read, 'api', side_effect=self.github):
+        with patch.object(platform_read, 'call', side_effect=platform_transport(self.github)):
             revised = copy.deepcopy(self.design)
             revised['revision'] = 2
             revised['sections'][-1]['body'] = 'New shared requirement'
@@ -308,7 +309,7 @@ class PlatformStatus(unittest.TestCase):
 
     def test_platform_newer_approval_is_displayed_as_stale(self):
         self.prepared_platform()
-        with patch.object(github_read, 'api', side_effect=self.github):
+        with patch.object(platform_read, 'call', side_effect=platform_transport(self.github)):
             self.publish_fixture(coordination.draft_approval(self.url,
                 {'reviewer': 'carol', 'confirmation': 'New explicit approval'}), 'carol')
             code, status = self.identity_command('status')
@@ -318,7 +319,7 @@ class PlatformStatus(unittest.TestCase):
         import materials
         group = materials.load(self.root, self.url)
         artifact_valid(self.root, group['brief']).unlink()
-        with patch.object(github_read, 'api', side_effect=self.github):
+        with patch.object(platform_read, 'call', side_effect=platform_transport(self.github)):
             code, refused = self.identity_command('status')
         self.assertEqual(code, 1, refused)
         self.assertIn('--task ' + self.url, refused['next_action'])
@@ -326,7 +327,7 @@ class PlatformStatus(unittest.TestCase):
 
     def test_status_reads_publication_from_platform_records(self):
         self.prepared_platform()
-        with patch.object(github_read, 'api', side_effect=self.github):
+        with patch.object(platform_read, 'call', side_effect=platform_transport(self.github)):
             self.publish_fixture(coordination.draft(self.root, self.profile, self.url,
                 self.handoff(creator='bob'), kind='implementation'), 'bob')
             code, status = self.identity_command('status')

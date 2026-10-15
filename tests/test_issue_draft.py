@@ -10,7 +10,8 @@ from unittest.mock import patch
 import test_coordination
 from common import Invalid, write
 import coordination
-import github_read
+from tw_runtime.team import platform_script as platform_read
+from platform_fixtures import CONFIG as PLATFORM_CONFIG, transport as platform_transport
 import issue_draft
 import workflow
 
@@ -29,7 +30,7 @@ class IssueAdoption(unittest.TestCase):
                       'body': 'Follow-up: subtraction keeps working.'}
         self.child_task = copy.deepcopy(self.task)
         self.child_task.update(id=CHILD, parent=self.url, acceptance_scope='task')
-        self.patch = patch.object(github_read, 'api', side_effect=self.github)
+        self.patch = patch.object(platform_read, 'call', side_effect=platform_transport(self.github))
         self.patch.start()
         self.addCleanup(self.patch.stop)
 

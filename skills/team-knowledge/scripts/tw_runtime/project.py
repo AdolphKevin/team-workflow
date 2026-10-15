@@ -9,7 +9,7 @@ from . import DATA_VERSION, FORMAT, KB, Invalid, entries, gitutil, globs
 CONFIG = f'{KB}/config.json'
 MAPPING = f'{KB}/local/repositories.json'
 TEAM_KEYS = ('checks', 'required_checks', 'risk_checks', 'inputs', 'external_inputs', 'environment_versions', 'accounts')
-KEYS = ('format', 'data_version', 'project', 'context', 'shared', 'documents') + TEAM_KEYS
+KEYS = ('format', 'data_version', 'project', 'context', 'shared', 'documents', 'platform') + TEAM_KEYS
 DOC_ID = re.compile(r'^[a-z0-9][a-z0-9._-]*$')
 LEGACY = ('.codestable', '.team-workflow.json', '.team-workflow')
 
@@ -57,6 +57,28 @@ def config_problems(config):
     for key in TEAM_KEYS:
         if key in config and not isinstance(config[key], (dict, list)):
             problems.append(f'{key} 的类型不正确')
+    if 'platform' in config:
+        problems.extend(platform_problems(config['platform']))
+    return problems
+
+
+def platform_problems(value):
+    if not isinstance(value, dict):
+        return ['platform 必须是对象']
+    problems = []
+    if not {'argv', 'operations'} <= value.keys() <= {'argv', 'timeout', 'operations'}:
+        problems.append('platform 应包含 argv、operations，可选 timeout')
+    argv = value.get('argv')
+    if not (isinstance(argv, list) and argv and all(isinstance(v, str) and v.strip() for v in argv)):
+        problems.append('platform.argv 必须是非空字符串数组')
+    timeout = value.get('timeout', 60)
+    if type(timeout) is not int or timeout <= 0:
+        problems.append('platform.timeout 必须是正整数')
+    operations = value.get('operations')
+    if not (isinstance(operations, list) and all(isinstance(v, str) for v in operations)
+            and 'task' in operations and set(operations) <= {'task', 'commit', 'reference', 'ci-result'}
+            and len(set(operations)) == len(operations)):
+        problems.append('platform.operations 只能声明 task、commit、reference、ci-result，且必须包含 task，不得重复')
     return problems
 
 
@@ -113,8 +135,13 @@ class Repo:
         return f'{self.root} @ {head}，{state}'
 
 
-def load_entries(source, repo='self'):
+def load_entries(source, repo='self', config=None):
     found, strays = entries.classify(source.names)
+    platform = (config or {}).get('platform', {})
+    argv = platform.get('argv', []) if isinstance(platform, dict) else []
+    scripts = {Path(value).as_posix() for value in argv if isinstance(value, str)
+               and value.endswith('.py') and not Path(value).is_absolute() and '..' not in Path(value).parts}
+    strays = [name for name in strays if name not in scripts]
     loaded = []
     for kind, ref in found:
         try:
@@ -158,7 +185,7 @@ class Project:
 
     def entries(self):
         if self._entries is None:
-            self._entries, self.strays = load_entries(self.source)
+            self._entries, self.strays = load_entries(self.source, config=self.config)
         return self._entries
 
     def mapping(self):
@@ -185,7 +212,8 @@ class Project:
             mapping = self.mapping()
             for alias, value in declared.items():
                 expected = value.get('id') if isinstance(value, dict) else None
-                self._shared[alias] = resolve(alias, mapping.get(alias) or mapping.get(expected) or mapping.get((expected or '').removeprefix('github.com/')), expected)
+                self._shared[alias] = resolve(alias, mapping.get(alias) or mapping.get(expected)
+                                              or mapping.get((expected or '').partition('/')[2]), expected)
         return self._shared
 
 
@@ -212,7 +240,7 @@ def resolve(alias, path, expected):
         repo.config = json.loads((root / CONFIG).read_text(encoding='utf-8'))
     except ValueError:
         repo.config = {}
-    repo.entries, _ = load_entries(source, alias)
+    repo.entries, _ = load_entries(source, alias, repo.config)
     return repo
 
 

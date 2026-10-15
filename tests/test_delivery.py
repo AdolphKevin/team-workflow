@@ -17,7 +17,8 @@ import knowledge
 import validation
 import workflow
 import coordination
-import github_read
+from tw_runtime.team import platform_script as platform_read
+from platform_fixtures import CONFIG as PLATFORM_CONFIG, transport as platform_transport
 
 
 class DeliveryCases(unittest.TestCase):
@@ -78,10 +79,10 @@ class DeliveryCases(unittest.TestCase):
         subprocess.check_call(['git', '-C', str(other), 'remote', 'add', 'origin',
                                'https://github.com/example/evidence.git'])
         self.profile['external_inputs'] = {'other': {'kind': 'repository',
-            'repository': 'example/evidence', 'role': 'build'}}
-        write(self.root / '.tw/local/repositories.json', {'repositories': {'example/evidence': str(other)}})
+            'repository': 'github.com/example/evidence', 'role': 'build'}}
+        write(self.root / '.tw/local/repositories.json', {'repositories': {'github.com/example/evidence': str(other)}})
         fixtures.write_config(self.root, self.profile)
-        return [(self.root, {}), (other, {'repository': 'example/evidence'})]
+        return [(self.root, {}), (other, {'repository': 'github.com/example/evidence'})]
 
     def test_referenced_large_evidence_requires_explicit_override(self):
         for target, identity in self.evidence_targets():
@@ -495,7 +496,9 @@ class DeliveryCases(unittest.TestCase):
                 if count == 2:
                     append(withdrawal)
             return copy.deepcopy(selected['comments_data'] if '/comments' in endpoint else selected)
-        with patch.object(github_read, 'api', side_effect=api):
+        self.profile['platform'] = copy.deepcopy(PLATFORM_CONFIG)
+        fixtures.write_config(self.root, self.profile)
+        with patch.object(platform_read, 'call', side_effect=platform_transport(api)):
             append(coordination.draft_design(parent, self.design))
             accepted = coordination.draft_approval(parent, {'reviewer': 'carol', 'confirmation': 'Final code and plan accepted',
                 'code_digest': validation.source_digest(self.root, self.profile),

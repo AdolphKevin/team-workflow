@@ -11,11 +11,14 @@ from pathlib import Path
 import re
 import stat
 import uuid
+import tempfile
+import json
 import zipfile
 
 from common import (RECORD_SCHEMA, Invalid, artifact, artifact_valid, create, digest, git, inside, now, obj,
                     load_profile, profile_valid, local_write_guard, read, require, reserved, sha, snapshot, text)
-import github_read as github
+from tw_runtime.team import platform_script as platform_read
+from tw_runtime import gitutil
 
 
 def during(start, value, end):
@@ -27,13 +30,10 @@ def during(start, value, end):
 
 
 def repository_id(root):
-    try:
-        remote = git(root, 'remote', 'get-url', 'origin').decode().strip()
-    except Invalid as exc:
-        raise Invalid('Cross-machine records need a shared github.com origin; configure the project remote first') from exc
-    match = re.fullmatch(r'(?:https://github\.com/|git@github\.com:)([^/]+/[^/]+?)(?:\.git)?', remote)
-    require(bool(match), 'Portable evidence needs a github.com origin')
-    return github.repository(match[1])
+    identity = gitutil.remote_identity(root)
+    require(identity and not identity.startswith('local:'),
+            '跨机器记录需要可共享的 git 远端；请先配置 origin')
+    return platform_read.repository(identity)
 
 
 def source_state(root, profile):
@@ -64,37 +64,35 @@ def source_state(root, profile):
     return {'repositories': repositories, 'files': files}
 
 
-def provider(locator):
-    obj(locator, {'kind', 'repository', 'run_id', 'attempt', 'job_id', 'artifact_id'})
-    require(locator['kind'] == 'github-actions', 'Only GitHub Actions has a verified external provider; other files are reference material')
-    repo = github.repository(locator['repository'])
-    for key in ('run_id', 'attempt', 'job_id', 'artifact_id'):
-        require(type(locator[key]) is int and locator[key] > 0, 'Expected positive provider ID: ' + key)
-    run = github.api(f'repos/{repo}/actions/runs/{locator["run_id"]}')
-    require(run.get('run_attempt') == locator['attempt'], 'A newer run attempt exists')
-    require(run.get('status') == 'completed' and run.get('conclusion') == 'success', 'Actions run has not succeeded')
-    job = github.api(f'repos/{repo}/actions/jobs/{locator["job_id"]}')
-    require(job.get('run_id') == locator['run_id'] and job.get('run_attempt') == locator['attempt'], 'Job belongs to another attempt')
-    require(job.get('status') == 'completed' and job.get('conclusion') == 'success', 'Actions job has not succeeded')
-    artifact_info = github.api(f'repos/{repo}/actions/artifacts/{locator["artifact_id"]}')
-    require(not artifact_info.get('expired', True), 'Actions artifact expired')
-    origin = artifact_info.get('workflow_run', {})
-    require(origin.get('id') == locator['run_id'] and origin.get('head_sha') == run.get('head_sha'), 'Artifact belongs to another run/source')
-    require(bool(re.fullmatch(r'sha256:[a-f0-9]{64}', artifact_info.get('digest', ''))), 'Provider did not supply an artifact digest')
-    # A rerun may leave old artifacts on the same run: match actual job times too.
-    require(during(job['started_at'], artifact_info['created_at'], job['completed_at']), 'Artifact is not from the selected job attempt')
-    return {'run': run, 'job': job, 'artifact': artifact_info}
+def provider(root, locator, output=None):
+    if output is None:
+        with tempfile.TemporaryDirectory(prefix='tw-platform-ci-') as temporary:
+            return provider(root, locator, Path(temporary))
+    result = platform_read.ci_result(root, locator, output)
+    receipt = result['provenance']
+    run, job, artifact_info = receipt['run'], receipt['job'], receipt['artifact']
+    require(run['attempt'] == run['latest_attempt'], 'A newer run attempt exists')
+    require(run['succeeded'], 'Platform run has not succeeded')
+    require(job['run_id'] == run['id'] and job['attempt'] == run['attempt'], 'Job belongs to another attempt')
+    require(job['succeeded'], 'Platform job has not succeeded')
+    require(not artifact_info['expired'], 'Platform artifact expired')
+    require(artifact_info['run_id'] == run['id'] and artifact_info['revision'] == receipt['revision'],
+            'Artifact belongs to another run/source')
+    require(during(job['started_at'], artifact_info['created_at'], job['finished_at']),
+            'Artifact is not from the selected job attempt')
+    return result
 
 
 def provider_binding(locator, receipt, manifest):
     context = manifest.get('run_context')
     require(isinstance(context, dict), 'No provider context captured during execution')
-    require(context.get('repository') == locator['repository'] and context.get('run_id') == str(locator['run_id'])
-            and context.get('attempt') == str(locator['attempt']), 'Execution belongs to another provider attempt')
-    key, name = context.get('job', ''), receipt['job'].get('name', '')
-    require(bool(key) and (name == key or name.startswith(key + ' (')), 'Captured job differs from selected Actions job; keep the workflow job ID as its display name')
-    require(during(receipt['job']['started_at'], manifest['started_at'], receipt['job']['completed_at'])
-            and during(receipt['job']['started_at'], manifest['finished_at'], receipt['job']['completed_at']),
+    require(context.get('repository') == receipt['repository'] and context.get('run_id') == str(receipt['run']['id'])
+            and context.get('attempt') == str(receipt['run']['attempt']), 'Execution belongs to another provider attempt')
+    key, name = context.get('job', ''), receipt['job']['name']
+    require(bool(key) and (name == key or name.startswith(key + ' (')),
+            'Captured job differs from selected platform job; keep the job ID as its display name')
+    require(during(receipt['job']['started_at'], manifest['started_at'], receipt['job']['finished_at'])
+            and during(receipt['job']['started_at'], manifest['finished_at'], receipt['job']['finished_at']),
             'Execution was not captured during the selected job')
 
 
@@ -155,11 +153,7 @@ def capture(directory, profile, row, before_source, after_source, started, finis
     manifest = {'data_version': RECORD_SCHEMA, 'kind': 'portable-execution', 'project': profile['project'],
                 'execution': execution, 'source_before': before_source, 'source_after': after_source,
                 'started_at': started, 'finished_at': finished,
-                'run_context': ({'repository': os.environ.get('GITHUB_REPOSITORY'),
-                                 'run_id': os.environ.get('GITHUB_RUN_ID'),
-                                 'attempt': os.environ.get('GITHUB_RUN_ATTEMPT'),
-                                 'job': os.environ.get('GITHUB_JOB')}
-                                if os.environ.get('GITHUB_ACTIONS') == 'true' else None)}
+                'run_context': json.loads(os.environ['TW_RUN_CONTEXT']) if os.environ.get('TW_RUN_CONTEXT') else None}
     create(directory / 'result.json', manifest)
     return manifest
 
@@ -169,7 +163,7 @@ def _source(value):
     require(isinstance(value['repositories'], dict) and value['repositories'], 'Missing portable source repositories')
     require(isinstance(value['files'], dict), 'Portable external inputs must be a map')
     for repo, row in value['repositories'].items():
-        github.repository(repo)
+        platform_read.repository(repo)
         obj(row, {'commit', 'content', 'clean'}, {'changes'})
         require(re.fullmatch(r'[a-f0-9]{40}|[a-f0-9]{64}', text(row['commit'])), 'Expected original full commit')
         require(re.fullmatch(r'[a-f0-9]{64}', text(row['content'])), 'Expected source content fingerprint')
@@ -248,13 +242,13 @@ def validate_result(root, profile, manifest, directory, *, remote=False, live=Tr
     return {**row, **evaluated, 'artifacts': artifacts}
 
 
-def _provider_source(locator, receipt, manifest):
-    repo = locator['repository']
-    require(manifest['source_before']['repositories'].get(repo, {}).get('commit') == receipt['run']['head_sha'],
+def _provider_source(root, locator, receipt, manifest):
+    repo = receipt['repository']
+    require(manifest['source_before']['repositories'].get(repo, {}).get('commit') == receipt['revision'],
             'Provider head differs from the actually tested checkout')
     provider_binding(locator, receipt, manifest)
     for identity, source in manifest['source_before']['repositories'].items():
-        github.commit(identity, source['commit'])
+        platform_read.commit(root, identity, source['commit'])
 
 
 def _archive_matches(archive, directory, manifest):
@@ -275,11 +269,6 @@ def _archive_matches(archive, directory, manifest):
 
 
 def import_result(root, profile, locator, directory=None):
-    receipt = provider(locator)
-    data = github.api(f'repos/{locator["repository"]}/actions/artifacts/{locator["artifact_id"]}/zip', binary=True)
-    expected_digest = receipt['artifact']['digest']
-    require('sha256:' + hashlib.sha256(data).hexdigest() == expected_digest,
-            'Downloaded archive differs from provider digest')
     directory = Path(directory) if directory is not None else root / '.tw/local/imports' / uuid.uuid4().hex
     if not directory.is_absolute():
         directory = root / directory
@@ -289,16 +278,25 @@ def import_result(root, profile, locator, directory=None):
         raise Invalid('Import directory must be inside the project') from exc
     local_write_guard(directory)
     directory.mkdir(parents=True, exist_ok=False)
+    download = directory / 'download'
+    download.mkdir()
+    downloaded = provider(root, locator, download)
+    receipt = downloaded['provenance']
+    archive = platform_read.archive_path(download, downloaded['archive'])
+    data = archive.read_bytes()
+    expected_digest = receipt['artifact']['digest']
+    require('sha256:' + hashlib.sha256(data).hexdigest() == expected_digest,
+            'Downloaded archive differs from provider digest')
     (directory / 'archive.zip').write_bytes(data)
     unpack(data, directory / 'content')
     manifest_path = inside(directory, 'content/result.json')
     manifest = read(manifest_path)
     row = validate_result(root, profile, manifest, manifest_path.parent, remote=True)
-    _provider_source(locator, receipt, manifest)
-    fresh = provider(locator)
+    _provider_source(root, locator, receipt, manifest)
+    fresh = provider(root, locator)['provenance']
     require(fresh == receipt, 'Provider run or artifact changed during import')
     record = {'data_version': RECORD_SCHEMA, 'kind': 'imported-execution', 'project': profile['project'],
-              'locator': locator, 'retrieved_at': now(), 'started_at': manifest['started_at'],
+              'locator': locator, 'provenance': receipt, 'retrieved_at': now(), 'started_at': manifest['started_at'],
               'finished_at': manifest['finished_at'], 'source_unchanged': True,
               'archive': artifact(root, directory / 'archive.zip'), 'manifest': artifact(root, manifest_path),
               'provider_digest': expected_digest,
@@ -313,12 +311,13 @@ def import_result(root, profile, locator, directory=None):
 
 def validate_import(root, profile, record, *, live=True):
     obj(record, {'data_version', 'kind', 'project', 'locator', 'retrieved_at', 'started_at', 'finished_at',
-                 'source_unchanged', 'archive', 'manifest', 'provider_digest', 'result', 'tested_source',
+                 'source_unchanged', 'archive', 'manifest', 'provider_digest', 'provenance', 'result', 'tested_source',
                  'import_source', 'assurance'})
     require(record['data_version'] == RECORD_SCHEMA and record['kind'] == 'imported-execution',
             f'Expected imported execution version {RECORD_SCHEMA}; import the result again with the current tool')
     require(record['project'] == profile['project'] and record['source_unchanged'] is True, 'Imported execution identity changed')
-    receipt = provider(record['locator'])
+    receipt = provider(root, record['locator'])['provenance']
+    require(receipt == record['provenance'], 'Provider provenance changed since import')
     archive = artifact_valid(root, record['archive'])
     require('sha256:' + sha(archive) == record['provider_digest'] == receipt['artifact']['digest'],
             'Provider evidence changed')
@@ -326,7 +325,7 @@ def validate_import(root, profile, record, *, live=True):
     manifest = read(path)
     _archive_matches(archive, path.parent, manifest)
     result = validate_result(root, profile, manifest, path.parent, remote=True, live=live)
-    _provider_source(record['locator'], receipt, manifest)
+    _provider_source(root, record['locator'], receipt, manifest)
     require(record['started_at'] == manifest['started_at'] and record['finished_at'] == manifest['finished_at']
             and record['tested_source'] == manifest['source_before'], 'Imported provenance differs from original execution')
     stable = {**result, 'argv': list(profile['checks'][result['id']]['argv'])}
@@ -373,7 +372,7 @@ def aggregate(root, manifest, repositories):
     obj(manifest, {'data_version', 'task_id', 'joint', 'participants', 'dependencies', 'requirement'})
     require(manifest['data_version'] == 1, 'Expected joint data_version 1')
     text(manifest['task_id'])
-    github.repository(manifest['joint'])
+    platform_read.repository(manifest['joint'])
     require(isinstance(manifest['participants'], list) and len(manifest['participants']) >= 2,
             'Joint delivery needs at least two participating repositories')
     require(isinstance(manifest['dependencies'], list), 'Joint dependencies must be a list')
@@ -383,7 +382,7 @@ def aggregate(root, manifest, repositories):
     expected, starts, materials = {}, {}, {}
     for row in manifest['participants'] + manifest['dependencies']:
         require(isinstance(row, dict), 'Expected a participant or dependency object')
-        repo = github.repository(row['repository'])
+        repo = platform_read.repository(row['repository'])
         require(repo not in expected, 'Duplicate participant or dependency repository: ' + repo)
         require(re.fullmatch(r'[a-f0-9]{40}|[a-f0-9]{64}', text(row['commit'])), 'Expected pinned full commit')
         require(repo in locations, 'Missing local checkout mapping: ' + repo)
@@ -391,7 +390,7 @@ def aggregate(root, manifest, repositories):
         require(repository_id(checkout) == repo
                 and git(checkout, 'rev-parse', 'HEAD').decode().strip() == row['commit'],
                 'Participant or dependency commit differs: ' + repo)
-        github.commit(repo, row['commit'])
+        platform_read.commit(root, repo, row['commit'])
         state = source_state(checkout, {'inputs': []})
         _source(state)
         starts[repo] = state
@@ -410,11 +409,11 @@ def aggregate(root, manifest, repositories):
         task, report = read(paths['task']), read(paths['report'])
         require(task.get('data_version') == 1 and report.get('data_version') == RECORD_SCHEMA,
                 f'Joint delivery requires current-format tasks and schema {RECORD_SCHEMA} reports')
-        if task['id'].startswith('https://github.com/'):
+        if platform_read.is_task(checkout, task['id']):
             from coordination import load
-            platform = load(task['id'])
+            platform = load(task['id'], root=checkout)
             require(platform['task'] == task and not platform['gaps'], 'Joint task changed or has unresolved platform records')
-            platform_states[task['id']] = platform
+            platform_states[task['id']] = (checkout, platform)
             parent = platform['parent'] or task['id']
         else:
             parent = task.get('parent') or task['id']
@@ -445,7 +444,7 @@ def aggregate(root, manifest, repositories):
                 # validate_result checked the whole current content binding.
                 # Keep original tested commits even when only commit metadata changed.
                 for identity, source in tested['repositories'].items():
-                    github.commit(identity, source['commit'])
+                    platform_read.commit(root, identity, source['commit'])
     parent = obj(manifest['requirement'], {'repository', 'task', 'report'})
     require(parent['repository'] == manifest['joint'] and parent['repository'] in locations,
             'Parent business acceptance must belong to the joint owner')
@@ -455,9 +454,9 @@ def aggregate(root, manifest, repositories):
     parent_task = read(parent_task_path)
     require(parent_task.get('id') == manifest['task_id'] and parent_task.get('acceptance_scope') == 'requirement'
             and not parent_task.get('parent'), 'Joint delivery needs explicit parent business acceptance')
-    if parent_task['id'].startswith('https://github.com/'):
+    if platform_read.is_task(parent_root, parent_task['id']):
         from coordination import load
-        platform_states[parent_task['id']] = load(parent_task['id'])
+        platform_states[parent_task['id']] = (parent_root, load(parent_task['id'], root=parent_root))
     parent_profile = load_profile(parent_root)
     parent_acceptance = delivery.verify(parent_root, parent_profile, parent_task, read(parent_report_path), phase='acceptance')
     materials[parent['repository']] += [artifact(parent_root, parent_task_path), artifact(parent_root, parent_report_path), *parent_acceptance['materials']]
@@ -467,9 +466,9 @@ def aggregate(root, manifest, repositories):
     for repo, refs in materials.items():
         for ref in refs:
             artifact_valid(locations[repo], ref)
-    for url, before in platform_states.items():
+    for url, (platform_root, before) in platform_states.items():
         from coordination import load
-        after = load(url)
+        after = load(url, root=platform_root)
         fields = ('requirements', 'history_digest', 'design_history_digest', 'owners')
         require(not after['gaps'] and all(after[key] == before[key] for key in fields),
                 'Platform requirements, assignments or progress changed during joint verification')

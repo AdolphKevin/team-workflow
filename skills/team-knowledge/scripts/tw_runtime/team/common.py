@@ -296,12 +296,14 @@ def load_profile(root, check_context=True):
     missing = [key for key in TEAM_KEYS if key not in config and key not in optional]
     require(not missing, '.tw/config.json 尚未配置团队功能，缺少字段：' + ', '.join(missing))
     profile = {key: config.get(key, optional.get(key)) for key in TEAM_KEYS}
+    if 'platform' in config:
+        profile['platform'] = config['platform']
     profile.update(data_version=config['data_version'], project=config['project']['name'], context=config.get('context', []))
     return profile_valid(profile, root, check_context)
 
 
 def profile_valid(profile, root, check_context=True):
-    obj(profile, {'data_version', 'project', 'context', *TEAM_KEYS})
+    obj(profile, {'data_version', 'project', 'context', *TEAM_KEYS}, {'platform'})
     require(type(profile['data_version']) is int and profile['data_version'] == DATA_VERSION,
             '项目数据只支持 data_version 1')
     accounts(profile['accounts'])
@@ -319,7 +321,8 @@ def profile_valid(profile, root, check_context=True):
             require(item['role'] in ('build', 'modified', 'joint'), 'Dependency role must be build, modified or joint')
         require(item['kind'] in ('file', 'repository'), 'External input must be a file or Git repository')
         if item['kind'] == 'repository':
-            require(bool(re.fullmatch(r'[^/\s]+/[^/\s]+', text(item.get('repository')))), 'Expected owner/repository identity')
+            from tw_runtime.team import platform_script as platform_read
+            platform_read.repository(item.get('repository'))
         else:
             require('repository' not in item, 'File locations belong in local inputs')
     require(isinstance(profile['checks'], dict), 'checks must be an object')

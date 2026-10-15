@@ -29,6 +29,12 @@
       "id": "redesign",
       "title": "合并重构方案",
       "source": "self:docs/proposals/2026-10-14-unified-redesign.md"
+    },
+    {
+      "id": "platform-contract",
+      "title": "平台脚本契约",
+      "source": "self:skills/team-workflow/references/platform.md",
+      "scope": ["self:skills/team-knowledge/scripts/tw_runtime/team/platform_script.py", "self:skills/team-knowledge/scripts/tw_runtime/team/**", "self:tests/test_platform.py"]
     }
   ],
   "checks": {
@@ -59,7 +65,7 @@
         ],
         "environment": "isolated-test-repositories",
         "substitutes": [
-          "GitHub API fixtures"
+          "项目平台脚本夹具"
         ],
         "isolation": "isolated",
         "isolation_evidence": []

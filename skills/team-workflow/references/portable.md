@@ -15,7 +15,7 @@
 - 检查编号、定义、命令、执行目录、实际运行仓库及原始用例结果。
 - 实际源码内容、执行器版本和环境的指纹，以及运行前后是否一致。
 - 所有参与仓库和构建输入的原始提交、内容指纹及是否存在未共享改动。
-- 实际开始与结束时间；在 GitHub Actions 中同时记录仓库、运行编号、重试次数和任务名称。
+- 实际开始与结束时间；通过 `TW_RUN_CONTEXT` 记录仓库、运行编号、重试次数和任务名称，字段见[平台脚本契约](platform.md)。
 
 原始文件路径以检查输出目录为起点保存，`argv` 按配置模板记录并保留 `{output}`。
 业务命令和仓库身份保持原样。前端检查必须声明其运行仓库，不能用后端检查的
@@ -27,20 +27,9 @@
 
 ## 导入与复用
 
-`import-result --result <来源文件>` 读取如下 GitHub Actions 来源定位信息：
-
-```json
-{
-  "kind": "github-actions",
-  "repository": "example/service",
-  "run_id": 17,
-  "attempt": 2,
-  "job_id": 21,
-  "artifact_id": 22
-}
-```
-
-工具只执行 GitHub GET。它核对运行、任务、重试次数、时间范围、平台公布的产物
+`import-result --result <来源文件>` 将文件中的 JSON 定位信息原样交给项目的
+`ci-result` 操作，格式由项目脚本决定。来源证明和下载目录按[平台脚本契约](platform.md)。
+工具只读平台。它核对运行、任务、重试次数、时间范围、平台公布的产物
 摘要和实际下载内容，再从原始报告重新计算用例结果。来源不明、零用例、必要用例
 跳过、失败、环境缺失、执行期间源码变化或未共享改动，均不能通过。
 
@@ -76,14 +65,14 @@
 {
   "data_version": 1,
   "task_id": "共同的总任务编号或 Issue URL",
-  "joint": "example/core",
-  "requirement": {"repository":"example/core","task":".tw/local/requirement.json","report":".tw/local/requirement-report.json"},
+  "joint": "code.example/group/core",
+  "requirement": {"repository":"code.example/group/core","task":".tw/local/requirement.json","report":".tw/local/requirement-report.json"},
   "participants": [
-    {"repository":"example/core","commit":"完整提交编号","profile":".tw/config.json","task":".tw/local/task.json","report":".tw/local/report.json"},
-    {"repository":"example/gateway","commit":"完整提交编号","profile":".tw/config.json","task":".tw/local/task.json","report":".tw/local/report.json"}
+    {"repository":"code.example/group/core","commit":"完整提交编号","profile":".tw/config.json","task":".tw/local/task.json","report":".tw/local/report.json"},
+    {"repository":"code.example/group/gateway","commit":"完整提交编号","profile":".tw/config.json","task":".tw/local/task.json","report":".tw/local/report.json"}
   ],
   "dependencies": [
-    {"repository":"example/common","commit":"完整提交编号"}
+    {"repository":"code.example/group/common","commit":"完整提交编号"}
   ]
 }
 ```

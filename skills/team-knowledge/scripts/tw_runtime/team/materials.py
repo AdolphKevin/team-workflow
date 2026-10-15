@@ -1,4 +1,5 @@
 """One explicit, content-bound material group per task; no latest-file inference."""
+from tw_runtime.team import platform_script as platform_read
 import copy
 import hashlib
 import json
@@ -30,7 +31,7 @@ class MaterialGap(Invalid):
         option = OPTIONS.get(role)
         repair = ('显式指定 --' + option.replace('_', '-') + ' <材料路径>，或' if option else '')
         self.next_action = repair + '重新开工：tw team start --task <任务文件> --design <方案文件>'
-        if str(task_id).startswith('https://github.com/'):
+        if str(task_id).startswith(('http://', 'https://')):
             self.next_action += '；平台任务用 tw team start --issue ' + shlex.quote(task_id)
         super().__init__(f'{LABELS.get(role, role)}（{role}）{detail}。{self.next_action}')
 
@@ -113,7 +114,7 @@ def resolve(args, root):
     snapshot = {'task_id': task_id, 'value': value, 'token': token,
                 'explicit': explicit, 'identity': identity, 'repair': False}
     args.material_selection = snapshot
-    if task_id.startswith('https://github.com/') and identity:
+    if platform_read.is_task(root, task_id):
         args.issue = task_id
     if args.command == 'start':
         if value:
@@ -182,10 +183,10 @@ def resolve(args, root):
             if option not in explicit and field in supplied_report:
                 raw = supplied_report[field]
                 setattr(args, option, [Path(v) for v in raw] if isinstance(raw, list) else Path(raw) if raw else None)
-    if task_id.startswith('https://github.com/'):
+    if platform_read.is_task(root, task_id):
         import coordination
         try:
-            platform = coordination.load(task_id)
+            platform = coordination.load(task_id, root=root)
         except (Invalid, OSError, ValueError, TypeError, KeyError) as exc:
             raise MaterialGap('current', '无法核对平台材料：' + str(exc), task_id) from exc
         stored = defaults.get('platform') or {'design': digest(read(root / defaults['design']['path'])),
