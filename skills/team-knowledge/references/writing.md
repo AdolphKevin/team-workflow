@@ -47,7 +47,8 @@
 ```
 
 - `documents` 是数组，`source` 写 `self:路径`（可用 glob）、`别名:路径` 或 http(s) 链接。
-- `shared` 只写远端身份。本机路径写在 `.tw/local/repositories.json`：`{"repositories": {"common": "../common"}}`。
+- `shared` 只写远端身份。用户级 `${XDG_CONFIG_HOME:-~/.config}/tw/repositories.json` 按 `project.id` 提供默认路径：`{"projects": {"github.com/acme/core": {"repositories": {"common": "~/src/common"}}}}`；检出目录 `.tw/local/repositories.json` 的格式为 `{"repositories": {"common": "../common"}}`。命令行 > 检出目录 > 用户级，按键覆盖，工具只读。`inputs` 的外部文件路径同样合并。
+- 知识与原文写结论和关键数据；具体本机材料不作可共享的引用，原件仅留执行者本机。目录布局可以说明；试点和手工输出放在仓库外。
 
 ## 正例
 

@@ -30,6 +30,7 @@ def check(root=ROOT):
     import common
     assert common.VERSION == VERSION
     from tw_runtime.project import config_problems
+    from tw_runtime.check import local_reference_problems
     template = json.loads((root / 'skills/team-workflow/templates/config.json').read_text())
     assert not config_problems(template)
     catalog = json.loads((root / '.agents/plugins/marketplace.json').read_text())
@@ -79,6 +80,9 @@ def check(root=ROOT):
         if path.suffix not in ('.md', '.py', '.json', '.yaml', '.yml', '.patch', '.txt'):
             continue
         text = path.read_text()
+        if path.is_relative_to(root / 'docs'):
+            problems = local_reference_problems(text)
+            assert not problems, f'{path.relative_to(root)}: ' + '; '.join(problems)
         for pattern in (r'/' + r'Users/[^/\s]+/', r'/private/' + 'var/folders/', r'gh[pousr]_[A-Za-z0-9]{30,}',
                         r'-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----'):
             assert not re.search(pattern, text), f'private material in {path.relative_to(root)}'

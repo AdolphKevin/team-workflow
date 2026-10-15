@@ -17,6 +17,16 @@
 - **执行绑定**：知识正文与 `.tw/local/` 不参与。`.tw/config.json` 按检查分别绑定。按提交绑定的检查照常绑定 HEAD。只提交知识不会使按内容绑定的检查过期。
 - **跨仓**：事实写在契约提供方仓库，其他仓用 `related` 引用；读取共享仓时展示实际的检出目录、HEAD 与未提交状态。
 
+## 本机状态
+
+按[本机状态边界方案](proposals/2026-10-15-local-state-location.md)，项目内本机状态继续放在被忽略的 `.tw/local/`，按检出目录隔离。手工试点输出放在仓库外；`tw audit` 复用清理命令的分类列出不归工具管理的条目和大小，缓存仍按工具目录处理。
+
+共享仓与外部文件路径有两层配置：`${XDG_CONFIG_HOME:-~/.config}/tw/repositories.json` 按 `project.id` 分组提供默认值，`.tw/local/repositories.json` 提供检出目录覆盖，命令行优先。按键逐项合并，别名、仓库身份和外部文件名称保留各自含义；工具只读这两个文件，不自动迁移或克隆。
+
+`tw check` 检查知识条目和已登记原文中的本机材料引用，发行检查另外扫描本仓 `docs/`。只要本机路径第一级不属于 `tasks`、`batches`、`imports`、`validation-active`、`agents`、`cache`、`repositories.json` 就报错；工具目录的布局说明可以保留。
+
+清理先预览 `tw team cleanup`，再按计划应用。整目录删除、`git clean -fdx` 的后果和任务发布方式见[成员说明](member-guide.md#本机材料与清理)。
+
 ## 方案与协作
 
 方案按稳定编号分节，保存完整历史。批准绑定明确章节及其依赖内容；新增、删除、依赖调整或实质变化按新旧关系计算影响，未受影响的批准可以继续使用。算法和格式由[分节方案约定](../skills/team-workflow/references/designs.md)维护。

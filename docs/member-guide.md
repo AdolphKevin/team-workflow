@@ -15,6 +15,37 @@
 
 条目存在就表示它现在有效。决定改变时，正文改写为新结论，旧做法和放弃原因保留在“放弃过的做法”中；完整的修改过程查 git 历史。
 
+## 本机材料与清理
+
+`.tw/local/` 按检出目录隔离，被 Git 忽略。各处用途如下：
+
+| 位置（位于 `.tw/local/` 下） | 用途 |
+| --- | --- |
+| `tasks/` | 每项任务的上下文、方案与批准副本、检查输出、评审及交付材料 |
+| `batches/` | 批次操作的材料 |
+| `imports/` | 导入的材料与结果 |
+| `validation-active/` | 正在验证的进程标记，防止清理使用中的材料 |
+| `agents/` | 代理分工与进度台账 |
+| `cache/` | 可重新生成的知识查询缓存 |
+| `repositories.json` | 这个检出目录的共享仓与外部文件路径覆盖 |
+| `.maintenance-lock` | 清理操作的互斥标记 |
+
+整目录删除后，进行中任务需要重走流程；没有 Issue 的离线任务，其方案和批准无法从平台找回，只能依靠本机备份恢复；已交付任务也会失去原始证据。检出目录内的映射覆盖会丢失，缓存可以重建。
+
+`git clean -fdx` 同样会删除 `.tw/local/`。清理构建产物时，可用保留忽略文件的 `git clean -fd`，或用 `git clean -fdx -e .tw/local` 明确保留本机材料。
+
+清理任务材料时，先用 `tw team cleanup --cleanup-scope all` 预览，把计划保存到仓库外，核对后再用 `tw team cleanup --apply --plan <计划文件>` 应用。`tw audit` 会列出不归工具管理的条目及大小。试点和手工输出应放在仓库外，例如系统临时目录。
+
+共享仓默认路径放在 `${XDG_CONFIG_HOME:-~/.config}/tw/repositories.json`，按 `.tw/config.json` 的 `project.id` 分组：
+
+```json
+{"projects": {"github.com/acme/core": {"repositories": {"common": "~/src/common"}}}}
+```
+
+查找顺序为命令行 `--repository` > 检出目录的 `.tw/local/repositories.json` > 用户级文件，按别名逐项覆盖；`inputs` 中的外部文件路径同样逐项合并。两个文件由成员或代理编辑，工具只读。已有项目可以继续只用检出目录的文件；缺少路径时按提示配置，工具不会猜测或自动克隆。
+
+任务只要对别人重要，就开 Issue。方案、批准、交接和交付结论以草稿形式发布到 Issue 或变更请求，方便本机材料丢失后找回。
+
 ## 日常
 
 - 开工前，代理用 `tw brief` 读取相关知识。brief 里出现“曾放弃的方向”时，不要在没有新理由的情况下重新采用。

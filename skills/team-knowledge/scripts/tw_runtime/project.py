@@ -1,6 +1,7 @@
 """Project configuration, file sources and shared repositories."""
 from dataclasses import dataclass, field
 import json
+import os
 from pathlib import Path
 import re
 
@@ -12,6 +13,57 @@ TEAM_KEYS = ('checks', 'required_checks', 'risk_checks', 'inputs', 'external_inp
 KEYS = ('format', 'data_version', 'project', 'context', 'shared', 'documents', 'platform') + TEAM_KEYS
 DOC_ID = re.compile(r'^[a-z0-9][a-z0-9._-]*$')
 LEGACY = ('.codestable', '.team-workflow.json', '.team-workflow')
+
+
+def user_mapping_path():
+    return Path(os.environ.get('XDG_CONFIG_HOME') or '~/.config').expanduser() / 'tw/repositories.json'
+
+
+def location_settings(root, project_id=None, overrides=None):
+    """Read user defaults and checkout overrides; keys retain their caller's meaning."""
+    root = Path(root)
+
+    def read_json(path):
+        try:
+            return json.loads(path.read_text(encoding='utf-8'))
+        except (ValueError, OSError, UnicodeError) as exc:
+            raise Invalid(f'{path} 无法解析：{exc}') from exc
+
+    def merge(result, settings, path):
+        if not isinstance(settings, dict) or settings.keys() - {'repositories', 'inputs'}:
+            raise Invalid(f'{path} 只允许 repositories、inputs 对象')
+        for kind in result:
+            values = settings.get(kind, {})
+            if not isinstance(values, dict):
+                raise Invalid(f'{path} 的 {kind} 必须是对象')
+            for name, value in values.items():
+                if not all(isinstance(v, str) and v.strip() and '__REPLACE__' not in v for v in (name, value)):
+                    raise Invalid(f'{path} 的 {kind} 名称和路径必须是非空文本')
+            result[kind].update(values)
+
+    if project_id is None and (root / CONFIG).is_file():
+        config = read_json(root / CONFIG)
+        project = config.get('project', {}) if isinstance(config, dict) else {}
+        project_id = project.get('id') if isinstance(project, dict) else None
+    result = {'repositories': {}, 'inputs': {}}
+    user_path = user_mapping_path()
+    if user_path.exists():
+        data = read_json(user_path)
+        if not isinstance(data, dict) or set(data) != {'projects'} or not isinstance(data['projects'], dict):
+            raise Invalid(f'{user_path} 必须是包含 projects 对象的用户级映射')
+        for name, settings in data['projects'].items():
+            if not isinstance(name, str) or not name.strip():
+                raise Invalid(f'{user_path} 的项目身份必须是非空文本')
+            defaults = {'repositories': {}, 'inputs': {}}
+            merge(defaults, settings, user_path)
+            if name == project_id:
+                result = defaults
+    path = root / MAPPING
+    if path.exists():
+        merge(result, read_json(path), path)
+    if overrides:
+        merge(result, overrides, '--repository / --input')
+    return result
 
 
 def config_problems(config):
@@ -123,7 +175,8 @@ class Repo:
 
     def describe(self):
         if self.status == 'unmapped':
-            return f'未配置本机路径（在 {MAPPING} 中登记，或使用 --repository {self.alias}=<路径>）'
+            return (f'未配置本机路径（在 {MAPPING} 或用户级 {user_mapping_path()} 中登记，'
+                    f'或使用 --repository {self.alias}=<路径>）')
         if self.status == 'missing':
             return f'本机路径不是 git 仓库：{self.root}'
         if self.status == 'mismatch':
@@ -189,20 +242,10 @@ class Project:
         return self._entries
 
     def mapping(self):
-        result = {}
-        path = self.root / MAPPING
-        if path.is_file():
-            try:
-                data = json.loads(path.read_text(encoding='utf-8'))
-            except ValueError as exc:
-                raise Invalid(f'{MAPPING} 无法解析：{exc}') from exc
-            repositories = data.get('repositories', {}) if isinstance(data, dict) else {}
-            if not isinstance(repositories, dict):
-                raise Invalid(f'{MAPPING} 的 repositories 必须是对象')
-            for alias, value in repositories.items():
-                result[alias] = (self.root / value).resolve() if isinstance(value, str) else None
-        result.update({alias: Path(value).expanduser().resolve() for alias, value in self.overrides.items()})
-        return result
+        overrides = {alias: str(Path(value).expanduser().resolve()) for alias, value in self.overrides.items()}
+        settings = location_settings(self.root, self.id, {'repositories': overrides})
+        return {alias: (self.root / Path(value).expanduser()).resolve()
+                for alias, value in settings['repositories'].items()}
 
     def shared(self):
         """Resolve each configured shared repository once; entries are read from its working tree."""

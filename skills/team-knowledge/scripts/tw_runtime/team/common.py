@@ -10,7 +10,8 @@ from contextvars import ContextVar
 from datetime import datetime, timezone
 
 from tw_runtime import DATA_VERSION, VERSION, Invalid as RuntimeInvalid, install, repo_paths
-from tw_runtime.project import CONFIG, MAPPING, TEAM_KEYS, config_problems
+from tw_runtime.project import CONFIG, MAPPING, TEAM_KEYS, config_problems, user_mapping_path
+from tw_runtime.project import location_settings as project_locations
 
 RECORD_SCHEMA = DATA_VERSION
 RISKS = {'authorization', 'persistence', 'concurrency', 'messaging', 'public-contract', 'cross-service'}
@@ -126,25 +127,18 @@ def create_text(path, value):
 
 
 def location_settings(root):
-    path = root / '.tw/local/repositories.json'
-    settings = read(path) if path.exists() else {}
-    obj(settings, (), {'repositories', 'inputs'})
-    result = {}
-    for kind in ('repositories', 'inputs'):
-        values = settings.get(kind, {})
-        require(isinstance(values, dict), f'Local {kind} must be an object')
-        result[kind] = {**values, **LOCATIONS.get()[kind]}
-        for name, value in result[kind].items():
-            text(name)
-            text(value)
-    return result
+    try:
+        return project_locations(root, overrides=LOCATIONS.get())
+    except RuntimeInvalid as exc:
+        raise Invalid(str(exc)) from exc
 
 
 def external_path(root, name, item):
     settings = location_settings(root)
     kind = 'repositories' if item['kind'] == 'repository' else 'inputs'
     key = item['repository'] if kind == 'repositories' else name
-    require(key in settings[kind], f'Missing local {kind} mapping: {key}')
+    require(key in settings[kind],
+            f'Missing local {kind} mapping: {key}；请在 {root / MAPPING} 或用户级 {user_mapping_path()} 中登记')
     value = Path(settings[kind][key]).expanduser()
     path = (root / value).resolve()
     require(path != root.resolve(), 'External input cannot refer to this project itself')
