@@ -18,7 +18,7 @@
     "scripts/tw_runtime/frontmatter.py": "5885b6dbf1287f25c599a2c1b450ad1b9c2db904f43a2be012710c3d4ac2e2a2",
     "scripts/tw_runtime/gitutil.py": "256f0e4ffbb652ac01e8bf7df3c7fa3ec1b7c5eb3168eb31564d02a454b4bf7a",
     "scripts/tw_runtime/globs.py": "235cba95c01f3e2cb9406ff5219b495d9a23fab42f2abbbf8e9b4311ebada368",
-    "scripts/tw_runtime/init.py": "25d7ddfc72e620e2b0f941221e0346e5247eed48e576b15114b5437535bed2c2",
+    "scripts/tw_runtime/init.py": "fbfc966b42a67227cc667348b1712d56bed9bba9df9ae0462205f8a8ba1609ee",
     "scripts/tw_runtime/install.py": "9675a6a0ac5a319c67b84ff1ba2926c73d6413c935983d08375d028dd31225c7",
     "scripts/tw_runtime/new.py": "a8062a5e507e6d5f13747b2050983dd48d39a3220c2a28ecdd5b625a6d1ee05c",
     "scripts/tw_runtime/project.py": "f6dd6aae2119a4f686abf597d5adbc3404515f6352e771fe432b48d9e93cd981",

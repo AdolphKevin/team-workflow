@@ -38,6 +38,16 @@ class Init(Case):
         self.tw('init', '--apply', '--guidance')
         self.assertEqual((self.root / 'CLAUDE.md').read_text(), '# 导入通用标准\n@./AGENTS.md\n')
 
+    def test_claude_rules_are_kept_and_the_import_block_does_not_claim_them(self):
+        write(self.root, 'CLAUDE.md', '# Claude 专属规范\n\n提交前运行 make lint。\n')
+        self.tw('init', '--apply', '--guidance')
+        text = (self.root / 'CLAUDE.md').read_text()
+        self.assertTrue(text.startswith('# Claude 专属规范\n\n提交前运行 make lint。\n'))
+        block = text.split('<!-- team-workflow:guidance:claude start -->')[1].split('<!-- team-workflow:guidance:claude end -->')[0]
+        self.assertIn('@AGENTS.md', block)
+        self.assertNotIn('只做引用', block)
+        self.assertNotIn('不另写规则', block)
+
     def test_partial_own_layout_is_completed(self):
         write(self.root, '.tw/.gitignore', 'local/\n')
         write(self.root, '.tw/local/repositories.json', '{}')

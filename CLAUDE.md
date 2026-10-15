@@ -1,4 +1,4 @@
 <!-- team-workflow:guidance:claude start -->
-项目规则统一维护在 AGENTS.md，本文件只做引用，不另写规则。
+共享的项目规则与项目知识入口在 AGENTS.md，由此引入：
 @AGENTS.md
 <!-- team-workflow:guidance:claude end -->
