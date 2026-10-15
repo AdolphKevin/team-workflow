@@ -51,6 +51,50 @@ def source_path(args, root, task_id):
     return (root / path).resolve() if not path.is_absolute() else path.resolve()
 
 
+def platform_identity(value, item):
+    changes = [row for row in value['items'] if row['kind'] == 'change']
+    if not changes:
+        raise ReviewError('平台身份', 1, '缺少 change 条目，无法核对平台身份；请让项目平台脚本包含变更请求描述。')
+    if any(item['author'] == row['author'] for row in changes):
+        raise ReviewError('平台身份', 1, '平台评审作者不能是变更请求作者；请由未参与实施的人提交评审。')
+
+
+def platform_source(root, task_id):
+    from tw_runtime.team import platform_script
+    value = platform_script.task(root, task_id)
+    rows = [row for row in value['items'] if row['kind'] == 'review' and BIND_START in row['body']]
+    if not rows:
+        raise ReviewError('平台评审', 1, '没有含评审绑定区的 review 条目；请将填好的完整 Markdown 作为变更请求评审提交。')
+    item = rows[-1]
+    platform_identity(value, item)
+    _binding(root, task_id, item['body'], current_only=True)
+    return item
+
+
+def source_text(args, root, task_id):
+    if getattr(args, 'from_platform', False):
+        return args.platform_review['body']
+    return source_path(args, root, task_id).read_bytes().decode('utf-8')
+
+
+def published_approval(root, task_id, review):
+    """A combined approval derived from published Markdown is itself shared consent."""
+    if 'platform_author' not in review and 'platform_url' not in review:
+        return None
+    from tw_runtime.team import platform_script
+    value = platform_script.task(root, task_id)
+    item = next((row for row in value['items'] if row['kind'] == 'review'
+                 and row['url'] == review.get('platform_url')), None)
+    if item is None or item['author'] != review.get('platform_author'):
+        raise ReviewError('平台评审', 1, '已提交评审的平台地址或作者无法核对，请重新提交。')
+    platform_identity(value, item)
+    entries = _state(root, task_id)['submitted'].values()
+    entry = next((row for row in entries if read(artifact_valid(root, row['review'])) == review), None)
+    if entry is None or artifact_valid(root, entry['markdown']).read_bytes().decode('utf-8') != item['body']:
+        raise ReviewError('平台评审', 1, '平台评审原文与已提交材料不一致，请重新生成复核稿并提交。')
+    return read(artifact_valid(root, entry['approval'])) if entry.get('approval') else None
+
+
 def _state(root, task_id):
     path = locations(root, task_id)[1]
     if not path.exists():
@@ -281,7 +325,7 @@ def _sections(text, value):
     block, left, right = _extract(text, BIND_START, BIND_END, '绑定')
     expected = BIND_START + '\n```json\n' + json.dumps(value['bindings'], ensure_ascii=False, indent=2) + '\n```\n' + BIND_END
     if block != expected:
-        raise ReviewError('绑定', text[:left].count('\n') + 1, '工具填写的绑定区被改动，不能提交。')
+        raise ReviewError('绑定', text[:left].count('\n') + 1, '工具填写的绑定区被改动，不能提交；请重新生成复核稿。')
     masked = text[:left] + re.sub(r'[^\n]', ' ', block) + text[right:]
     protected = dict(value['generated'])
     protected['risks'] = '\n'.join('- ' + item for item in value['bindings']['risks']) or '- 无风险标签'
@@ -579,7 +623,7 @@ def cached_draft(root, task_id, result):
     return result
 
 
-def _binding(root, task_id, text):
+def _binding(root, task_id, text, *, current_only=False):
     normalized = text.replace('\r\n', '\n').replace('\r', '\n')
     block, left, _ = _extract(normalized, BIND_START, BIND_END, '绑定')
     try:
@@ -588,12 +632,15 @@ def _binding(root, task_id, text):
         draft_id = value.get('draft_id', '')
         if not re.fullmatch('[a-f0-9]{32}', draft_id):
             raise ValueError('缺少草稿编号')
-        ref = _state(root, task_id)['generations'].get(draft_id)
+        state = _state(root, task_id)
+        ref = state['generations'].get(draft_id)
         if ref is None:
             raise ValueError('该草稿不属于本任务')
+        if current_only and ref != state['current']:
+            raise ValueError('平台评审对应的草稿不是当前本地草稿')
         return read(artifact_valid(root, ref))
     except (Invalid, ValueError, TypeError, KeyError) as exc:
-        raise ReviewError('绑定', normalized[:left].count('\n') + 1, '无法核对工具绑定：' + str(exc)) from exc
+        raise ReviewError('绑定', normalized[:left].count('\n') + 1, '无法核对工具绑定：' + str(exc) + '；请重新生成复核稿。') from exc
 
 
 def require_current_runs(root, profile, bindings):
@@ -609,22 +656,25 @@ def require_current_runs(root, profile, bindings):
 
 
 def submit(args, root, profile, task, request):
-    source = source_path(args, root, task['id'])
+    item = getattr(args, 'platform_review', None) if getattr(args, 'from_platform', False) else None
+    source = item['url'] if item else source_path(args, root, task['id'])
     try:
-        raw = source.read_bytes().decode('utf-8')
+        raw = source_text(args, root, task['id'])
     except (OSError, UnicodeError) as exc:
         raise ReviewError('评审文件', 1, '无法读取 Markdown：' + str(exc)) from exc
     expected = getattr(args, 'review_source_ref', None)
     if expected and hashlib.sha256(raw.encode('utf-8')).hexdigest() != expected['sha256']:
         raise ReviewError('评审文件', 1, '读取期间 Markdown 已改变，请停止编辑后用新请求编号提交。')
-    value = _binding(root, task['id'], raw)
+    value = _binding(root, task['id'], raw, current_only=bool(item))
     sections = _sections(raw, value)
     require_rechecks(value, sections)
     fresh, design, status, execution = snapshot(args, root, profile, task, value['bindings']['draft_id'], allow_incomplete=True)
     if not _usable_draft(value, fresh):
-        raise ReviewError('绑定', 1, '任务、方案、批准状态、源码、策略、章节或运行已变化；请保留原草稿后重新生成 review。')
+        raise ReviewError('绑定', 1, '任务、方案、批准状态、源码、策略、章节或运行已变化；请保留原草稿后重新生成复核稿：tw team review --task <身份>。')
     require_current_runs(root, profile, fresh['bindings'])
     review = compile_review(root, value, sections)
+    if item:
+        review.update(platform_author=item['author'], platform_url=item['url'])
     approval_choice = _value(sections, '评审信息', '批准方案与代码', False) if value.get('approval_needed') else ''
     if approval_choice not in ('', '是', '否'):
         raise ReviewError('评审信息', sections['评审信息']['line'], '批准方案与代码只能填写“是”或“否”，也可留空。')
@@ -689,7 +739,7 @@ def exclude_own_approval(args, root, task_id):
     if not state['submitted']:
         return
     try:
-        raw = source_path(args, root, task_id).read_bytes().decode('utf-8')
+        raw = source_text(args, root, task_id)
         value = _binding(root, task_id, raw)
         approved = state['submitted'].get(value['bindings']['draft_id'], {}).get('approval')
         if not approved or (root / approved['path']).parent != directory(root, task_id, args.request_id):

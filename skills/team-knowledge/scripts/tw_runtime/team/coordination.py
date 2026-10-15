@@ -357,7 +357,7 @@ def draft_design(url, design, resolution=None, issue=None):
 
 
 def draft_approval(url, value):
-    obj(value, {'reviewer'}, {'confirmation', 'decision', 'section_ids', 'code_digest', 'run_refs', 'mode', 'deletion_ids', 'resolution'})
+    obj(value, {'reviewer'}, {'confirmation', 'decision', 'section_ids', 'code_digest', 'run_refs', 'mode', 'deletion_ids', 'resolution', 'revision'})
     state = load(url)
     require(state['design'] is not None, 'Missing versioned design; append it before review')
     require(state['design_issue'] == url, 'Review the shared design on its own task issue')
@@ -523,6 +523,7 @@ def _approval(root, profile, state, completed_tasks=()):
     require(state['design'] is not None, 'Missing versioned design')
     validate_task_design(state['task'], state['design'])
     return designs.approval_status(state['design'], state['approvals'], history=state['history'],
+        root=root, profile=profile,
         changed_paths=validation.changed_paths(root, state['task'], profile),
         code_digest=validation.source_digest(root, profile), section_ids=state['task']['section_ids'], completed_tasks=completed_tasks)
 

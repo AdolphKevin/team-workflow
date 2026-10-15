@@ -169,10 +169,13 @@ def inside(root, name, exists=True):
     return path
 
 
-def git(root, *args):
+def git(root, *args, input=None, local_only=False):
     try:
-        p = subprocess.run(['git', '-C', str(root), *args], capture_output=True, timeout=30,
-                           env={**os.environ, 'GIT_OPTIONAL_LOCKS': '0'})
+        environment = {**os.environ, 'GIT_OPTIONAL_LOCKS': '0'}
+        if local_only:
+            environment['GIT_NO_LAZY_FETCH'] = '1'
+        p = subprocess.run(['git', '-C', str(root), *args], capture_output=True, timeout=30, input=input,
+                           env=environment)
         require(p.returncode == 0, 'Cannot read Git state: ' + p.stderr.decode(errors='replace')[:300])
         return p.stdout
     except (OSError, subprocess.TimeoutExpired) as exc:

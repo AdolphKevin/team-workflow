@@ -1,5 +1,6 @@
 # 未发布（0.9.0-dev，合并重构）
 
+- 方案和批准可记在变更请求描述及评审，分节批准与局部重审不变；批准新增可选 `revision`，合并批准核对本地提交源码。新增 `review --from-platform`，`deliver` 在没有已提交评审时自动导入平台评审，保留绑定、逐项复核、问题历史及姓名核查，并核对平台作者。中等、复杂任务先评审草稿变更请求中的方案再实施，作为团队约定。
 - 平台读取改由项目登记的只读脚本完成，删除内置 GitHub 读取；新增四操作契约、原始响应存档及 `tw team platform --check`。任务与仓库身份支持任意主机，持续集成导入保留来源、归属、摘要及二次读取核查。
 - `tw brief`：完整条目的来源改为摘要（首个链接或首项，加总数）；任务路径与条目的守护测试文件相同时按 scope 选中；related 双向扩展一层，并按写入仓的配置解析跨仓别名；“继续阅读”等导航按行截断，不再整节消失，输出不超过预算。JSON 新增 `listed`，表示条目在输出中可见；回放脚本改报 `recall_full`、`recall_visible`。迁移指南的准备步骤补充：守护测试需要的环境先确认能运行。
 - 破坏性变化：team-workflow 与 CS 合并为一个仓库、一个运行时。新增知识入口 `team-knowledge`，命令行为 `tw`；团队命令改为 `tw team <命令>`。项目内只保留 `.tw/` 一个目录：入库的 `config.json`、`overview.md`、`glossary.md`、`rules/`、`decisions/`、`lessons/`，以及被忽略的 `local/`。`.codestable/`、`.team-workflow.json`、`.team-workflow/` 不再使用，已接入项目由代理按迁移指南整理，不提供迁移脚本。

@@ -9,9 +9,15 @@ import knowledge
 import materials
 
 
+def platform_task(root, task_id):
+    from tw_runtime.team import platform_script
+    return platform_script.is_task(root, task_id, required=False)
+
+
 def child_args(args, task_id, command, request_id=None):
     child = copy.copy(args)
     child.command, child.task, child.issue = command, task_id, None
+    child.submit, child.from_platform, child.file = False, command == 'review', None
     for key in ('context', 'design', 'brief', 'review', 'report', 'acceptance', 'out'):
         setattr(child, key, None)
     for key in ('approval', 'design_history', 'run', 'dependency', 'with_task'):
@@ -71,7 +77,7 @@ def validate_retry(root, task, cached):
     if not cached.get('ok'):
         return
     group = materials.load(root, task['id']) or {}
-    expected = {'acceptance': 'acceptance', 'delivery-report': 'delivery_report', 'delivery': 'delivery'}
+    expected = {'review': 'review', 'acceptance': 'acceptance', 'delivery-report': 'delivery_report', 'delivery': 'delivery'}
     for step in cached.get('steps', []):
         role = expected[step['step']]
         old, current = step['result'].get('artifact'), group.get(role)
@@ -119,7 +125,7 @@ def deliver(args, root, profile, task, request):
                  'delivery_complete': bool(result.get('delivery_complete')) if not stopped else False,
                  'closable': bool(result.get('closable')) if not stopped else False,
                  'summary_markdown': result.get('summary_markdown', ''),
-                 'summary': '交付完成。' if not stopped else '交付停在' + {'acceptance': '业务验收', 'delivery-report': '交付报告', 'delivery': '最终核查'}[stopped] + '。'}
+                 'summary': '交付完成。' if not stopped else '交付停在' + {'review': '平台评审', 'acceptance': '业务验收', 'delivery-report': '交付报告', 'delivery': '最终核查'}[stopped] + '。'}
         for key in ('close_note', 'acceptance_scope', 'scope', 'automation_status', 'regression_pending'):
             if key in result:
                 value[key] = result[key]
@@ -130,6 +136,8 @@ def deliver(args, root, profile, task, request):
                     value[key] = result[key]
             if stopped == 'delivery-report':
                 command = 'tw team deliver ' + task_arg + ' --reason <不需要更新知识的理由>'
+            elif stopped == 'review':
+                command = 'tw team review ' + task_arg + ' --from-platform'
             elif stopped == 'acceptance':
                 if 'source' in value['problem'].lower() or '源码' in value['problem']:
                     command = 'tw team run ' + task_arg
@@ -151,6 +159,12 @@ def deliver(args, root, profile, task, request):
         args.reason = read(pending).get('reason')
     elif args.reason is not None:
         write(pending, {'data_version': 1, 'kind': 'pending-delivery-reason', 'task_id': task['id'], 'reason': args.reason})
+    if not group.get('review') and profile.get('platform') and platform_task(root, task['id']):
+        reviewed = execute('review', 'review')
+        append('review', reviewed)
+        if not reviewed.get('ok'):
+            return finish(reviewed, 'review')
+        group = materials.load(root, task['id'])
     accepted = usable_acceptance(args, root, profile, task, group)
     reused = accepted is not None
     accepted = accepted or execute('accept', 'acceptance')

@@ -1,5 +1,7 @@
 """Execution records: reusable content-bound results, separate task acceptance."""
 import os
+import hashlib
+import posixpath
 import platform
 import sys
 import uuid
@@ -18,9 +20,58 @@ def check_root(root, profile, check):
     return external_path(root, repository, entries[0])
 
 
-def source(root, profile, revision_sensitive=False):
+def revision_files(root, profile, revision):
+    """Read committed bytes and attributes without a checkout, platform access or lazy fetch."""
+    try:
+        commit = git(root, 'rev-parse', '--verify', revision + '^{commit}', local_only=True).decode().strip()
+        require(commit.lower() == revision.lower(), 'Expected the commit object itself')
+        tree = git(root, 'ls-tree', '-r', '-z', '--full-tree', commit, local_only=True)
+    except Invalid as exc:
+        raise Invalid('本地没有批准的提交 ' + revision + '；请先补齐本地提交，工具不会访问平台。') from exc
+    entries = {}
+    for row in tree.split(b'\0'):
+        if not row:
+            continue
+        header, name = row.split(b'\t', 1)
+        mode, kind, oid = header.decode().split()
+        require(kind == 'blob', 'Submodules must be verified as separate participating repositories')
+        entries[os.fsdecode(name)] = (mode, oid)
+    oids = sorted({oid for _, oid in entries.values()})
+    raw = git(root, 'cat-file', '--batch', input=''.join(oid + '\n' for oid in oids).encode(), local_only=True)
+    blobs, offset = {}, 0
+    for oid in oids:
+        end = raw.index(b'\n', offset)
+        header = raw[offset:end].split()
+        require(len(header) == 3 and header[1] == b'blob', '本地缺少批准提交的源码对象：' + oid)
+        size = int(header[2])
+        blobs[oid] = raw[end + 1:end + 1 + size]
+        offset = end + 2 + size
+
+    def content(name, seen=()):
+        require(name in entries and name not in seen, '无法核对批准提交中的文件链接：' + name)
+        mode, oid = entries[name]
+        if mode != '120000':
+            return blobs[oid]
+        target = posixpath.normpath(posixpath.join(posixpath.dirname(name), os.fsdecode(blobs[oid])))
+        require(not target.startswith(('../', '/')), '无法核对批准提交中越出仓库的链接：' + name)
+        return content(target, (*seen, name))
+
+    files = {}
+    for name, (mode, oid) in sorted(entries.items()):
+        if reserved(name, profile['inputs']):
+            continue
+        value = {'sha256': hashlib.sha256(content(name)).hexdigest()}
+        value.update({'link': os.fsdecode(blobs[oid])} if mode == '120000' else {'executable': mode == '100755'})
+        files[name] = value
+    return files
+
+
+def source(root, profile, revision_sensitive=False, *, revision=None):
     """Content excludes workflow policy; each check binds its own policy separately."""
     state = snapshot(root, profile)
+    if revision is not None:
+        state['files'] = revision_files(root, profile, revision)
+        state['head'] = revision
     def content(value, primary=False):
         if 'files' not in value:
             return value
@@ -50,8 +101,8 @@ def source(root, profile, revision_sensitive=False):
     return result
 
 
-def source_digest(root, profile):
-    return digest(source(root, profile))
+def source_digest(root, profile, *, revision=None):
+    return digest(source(root, profile, revision=revision))
 
 
 def changed_paths(root, task, profile=None):

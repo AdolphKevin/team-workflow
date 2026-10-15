@@ -7,7 +7,7 @@ from pathlib import Path
 import shlex
 
 from artifacts import directory
-from common import Invalid, artifact, artifact_valid, digest, inside, obj, read, sha, write
+from common import Invalid, artifact, artifact_valid, digest, inside, load_profile, obj, read, sha, write
 
 COMMANDS = {'start', 'run', 'status', 'review', 'approval-draft', 'accept', 'delivery-template', 'deliver',
             'verify', 'handoff', 'progress', 'task-export'}
@@ -206,10 +206,15 @@ def resolve(args, root):
                 raise MaterialGap('design', '所选方案与平台当前方案不同，不能用显式旧材料覆盖', task_id)
         if 'approval' in explicit or supplied_report and 'approvals' in supplied_report:
             selected_approvals = [read(local(root, p)) for p in args.approval]
-            if any(row not in platform['approvals'] for row in selected_approvals) and args.command != 'status':
+            published = None
+            if defaults.get('review') and any(row not in platform['approvals'] for row in selected_approvals):
+                import reviews
+                published = reviews.published_approval(root, task_id, read(checked(root, defaults['review'], 'review', task_id)))
+            if any(row not in platform['approvals'] and row != published for row in selected_approvals) and args.command != 'status':
                 raise MaterialGap('approvals', '所选批准未在平台当前材料中登记', task_id)
             import designs
             status = designs.approval_status(selected_design, selected_approvals,
+                root=root, profile=load_profile(root),
                 history=[read(local(root, p)) for p in args.design_history],
                 section_ids=read(args.task)['section_ids'], changed_paths=[])
             if set(status['stale']) & set(status['required_sections']) and args.command != 'status':

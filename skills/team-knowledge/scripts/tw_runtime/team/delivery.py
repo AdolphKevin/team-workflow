@@ -42,6 +42,7 @@ def design_material(root, profile, task, report, completed_tasks=()):
         except (Invalid, OSError, ValueError, TypeError, KeyError):
             pass  # Missing required execution never supplies an alternate approval binding.
     status = designs.approval_status(design, approvals, history=history,
+                                     root=root, profile=profile,
                                      section_ids=task['section_ids'],
                                      completed_tasks=completed_tasks,
                                      changed_paths=validation.changed_paths(root, task, profile),
@@ -218,7 +219,9 @@ def verify(root, profile, task, report, phase='delivery', _seen=None, live=None)
     review = read(inside(root, report['review']))
     if platform_state is not None:
         require(platform_state['design'] == design, 'Local design differs from the shared plan')
-        require(all(a in platform_state['approvals'] for a in approvals), 'Approval has not been shared on the task')
+        import reviews
+        published = reviews.published_approval(root, task['id'], review)
+        require(all(a in platform_state['approvals'] or a == published for a in approvals), 'Approval has not been shared on the task')
     from contracts import unsourced
     missing = unsourced(task, design)
     require(not missing, 'Acceptance scenario needs confirmed business sources: ' + ', '.join(missing))

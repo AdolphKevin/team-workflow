@@ -139,6 +139,9 @@ def cached_predecessors(args, root, profile):
 
 
 def dispatch(args, root):
+    if args.command == 'review' and args.from_platform:
+        require(not args.file, '--from-platform 不能与本地 --file 混用')
+        args.submit = True
     if args.command == 'schema':
         directory = skill_resource('templates')
         return {'ok': True, 'summary': '统一项目数据格式与字段说明',
@@ -267,6 +270,8 @@ def dispatch(args, root):
     from artifacts import Request
     if args.command == 'review' and args.submit:
         import reviews
+        if args.from_platform:
+            args.platform_review = reviews.platform_source(root, task['id'])
         reviews.exclude_own_approval(args, root, task['id'])
     input_files = {}
     for name in ('task', 'design', 'brief', 'review', 'report', 'progress', 'record', 'acceptance'):
@@ -288,18 +293,28 @@ def dispatch(args, root):
         import reviews
         require(not args.file or args.submit, '--file 仅用于 review --submit')
         inputs['options']['submit'] = args.submit
+        if args.from_platform:
+            inputs['options']['from_platform'] = True
         if args.submit:
-            source = reviews.source_path(args, root, task['id'])
-            from common import sha
-            try:
-                inputs['review_markdown'] = {
-                    'path': source.relative_to(root).as_posix() if source.is_relative_to(root) else str(source),
-                    'sha256': sha(source)}
-            except OSError as exc:
-                raise reviews.ReviewError('评审文件', 1, '无法读取 Markdown：' + str(source)) from exc
+            if args.from_platform:
+                import hashlib
+                item = args.platform_review
+                inputs['review_markdown'] = {'path': item['url'], 'sha256': hashlib.sha256(item['body'].encode('utf-8')).hexdigest()}
+                inputs['platform_review'] = {key: item[key] for key in ('url', 'author', 'created_at', 'updated_at')}
+            else:
+                source = reviews.source_path(args, root, task['id'])
+                from common import sha
+                try:
+                    inputs['review_markdown'] = {
+                        'path': source.relative_to(root).as_posix() if source.is_relative_to(root) else str(source),
+                        'sha256': sha(source)}
+                except OSError as exc:
+                    raise reviews.ReviewError('评审文件', 1, '无法读取 Markdown：' + str(source)) from exc
             args.review_source_ref = inputs['review_markdown']
-    if args.command == 'approval-draft' and any(getattr(args, key) is not None for key in ('reviewer', 'confirmation', 'approval_mode')):
+    if args.command == 'approval-draft' and any(getattr(args, key) is not None for key in ('reviewer', 'confirmation', 'approval_mode', 'revision')):
         inputs['options'].update(reviewer=args.reviewer, confirmation=args.confirmation, mode=args.approval_mode)
+        if args.revision is not None:
+            inputs['options']['revision'] = args.revision
     if start:
         # Auto-selected copies must not change the fingerprint of an identical request retry.
         inputs.update(files=start['explicit'], approvals=[], history=[], dependencies=[],
@@ -421,6 +436,7 @@ def produce(args, root, profile, task, platform, request):
         approvals, history = selection['approvals'], selection['history']
         completed, predecessors = predecessor_checks(args, root, profile, task, design, selection['dependencies'])
         readiness = designs.approval_status(design, approvals, history=history, completed_tasks=completed,
+                    root=root, profile=profile,
                     section_ids=task['section_ids'], changed_paths=validation.changed_paths(root, task, profile),
                     code_digest=validation.source_digest(root, profile), run_refs=[])
         sections = {row['id']: row for row in design['sections']}
@@ -475,7 +491,7 @@ def produce(args, root, profile, task, platform, request):
                 return emit(design, 'design.json')
             supplied = approval_input(args, root)
             require(isinstance(supplied, dict) and 'reviewer' in supplied, 'Approval input must name the reviewer')
-            allowed = {'reviewer', 'confirmation', 'decision', 'section_ids', 'deletion_ids', 'mode'}
+            allowed = {'reviewer', 'confirmation', 'decision', 'section_ids', 'deletion_ids', 'mode', 'revision'}
             require(supplied.keys() <= allowed, 'Unknown approval input fields')
             history = [read(local(root, p)) for p in args.design_history]
             assessments = designs.task_assessments(design, task['section_ids'])
@@ -572,7 +588,7 @@ def produce(args, root, profile, task, platform, request):
 
 
 def approval_input(args, root):
-    flags = any(getattr(args, key) is not None for key in ('reviewer', 'confirmation', 'approval_mode'))
+    flags = any(getattr(args, key) is not None for key in ('reviewer', 'confirmation', 'approval_mode', 'revision'))
     require(not (args.record and flags), '--record 与批准参数二选一')
     if args.record:
         return read(local(root, args.record))
@@ -580,6 +596,8 @@ def approval_input(args, root):
     result = {'reviewer': args.reviewer, 'confirmation': args.confirmation or ''}
     if args.approval_mode:
         result['mode'] = 'design' if args.approval_mode == 'plan' else 'combined'
+    if args.revision is not None:
+        result['revision'] = args.revision
     return result
 
 
@@ -713,6 +731,7 @@ def _status(args, root, profile, task, platform=None):
     design = read(local(root, args.design))
     validate_task_design(task, design)
     value = designs.approval_status(design, [read(local(root, p)) for p in args.approval],
+                root=root, profile=profile,
                 history=[read(local(root, p)) for p in args.design_history], section_ids=task['section_ids'],
                 completed_tasks=cached_predecessors(args, root, profile),
                 changed_paths=validation.changed_paths(root, task, profile), code_digest=validation.source_digest(root, profile),

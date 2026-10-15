@@ -163,10 +163,15 @@ tw team approval-draft --root "$PROJECT" --task "$TASK_ID" --reviewer <姓名> -
 `confirmation` 可省略；简单任务在评审 Markdown 中选择合并批准。已有输入仍可用 `--record <输入文件>`，其 `reviewer` 必填，`confirmation` 可选；批准可以由他人代为记录。
 
 也可使用任务文件，明确传 `--design`、`--run` 等路径。输入可指定 `decision`、`section_ids`、
-`deletion_ids`、`mode`；选择部分章节时需明确覆盖相应上游依据。简单任务默认合并评审，
+`deletion_ids`、`mode`、可选 `revision`；选择部分章节时需明确覆盖相应上游依据。简单任务默认合并评审，
 中等、复杂任务默认方案评审；具体模式和删除选择见[分节约定](designs.md)。合并评审
 绑定当前代码和传入运行材料。没有任何已配置必要检查的纯文档任务可以没有运行记录，
 验收仍须真实评审证据；省略记录不能绕过已配置的检查。草稿不产生批准事实。
+
+`approval-draft --revision <提交号>` 记录批准时变更请求的完整提交号（40 或 64 位十六进制），
+也可在 `--record` 输入中提供 `revision`。合并批准读取本地该提交的源码，计算与
+`code_digest` 相同口径的摘要；不等时拒绝并说明“批准的提交与绑定的源码不一致”。本地
+缺提交时明确报告缺口，不访问平台。方案批准只校验格式、记录在案；未带字段的记录行为不变。
 
 ```bash
 tw team review --root "$PROJECT" --task "$TASK_ID"
@@ -174,7 +179,17 @@ tw team review --root "$PROJECT" --task "$TASK_ID"
 tw team review --root "$PROJECT" --task "$TASK_ID" --submit
 # 也可提交另一处的 Markdown
 tw team review --root "$PROJECT" --task "$TASK_ID" --submit --file <评审.md>
+# 评审人已把填写后的完整 Markdown 作为变更请求评审提交时
+tw team review --root "$PROJECT" --task "$TASK_ID" --from-platform
 ```
+
+`--from-platform` 经项目平台脚本的 `task` 操作，选出含绑定区的最新 `kind: review` 条目，
+将其原文走与 `--submit` 相同的绑定比对、逐项复核、问题历史和转换流程。与 `--file`、
+`--submit` 二选一，不能混用来源。绑定或来源已变时拒绝，需重新生成复核稿。
+导入时要求平台评审作者不同于该任务所有 `change` 条目的作者；缺少变更请求描述时报告
+“无法核对平台身份”。评审 JSON 增加 `platform_author`、`platform_url`，验收仍核对
+Markdown 姓名不能是实施负责人；以后复用也核对平台作者和已存原文。正文与评论中的讨论
+不能替代 `review` 条目。平台上的合并批准选择经原文核对后可作为已共享批准。
 
 任务目录的 `review.md` 是可编辑表，绑定未变的未提交文件只报告路径和填写进度。评审人实际阅读代码、需求与原始结果，填写评审人、知识冲突是否已处理（是/否）、规范与需求及各验收项的结论（通过/不通过）和理由。各轴及验收项可补充证据文件，每行一个项目内路径；工具计算指纹，自动验收的运行、检查、用例引用无需手写。人工观察的观察人、带时区的时间、操作、结果、数据及证据文件全部由人填写。只引用源码不能证明执行已通过。
 
@@ -222,11 +237,11 @@ tw team deliver --root "$PROJECT" --task "$TASK_ID" --reason <不需要更新知
 
 方案中当前任务评估为 simple 且尚缺有效合并批准时，评审信息增加“批准方案与代码”和可选“批准说明”。填“是”后，工具以评审人为批准人，按原合并批准规则绑定当前源码与选中运行、只覆盖本任务必需章节；批准与评审同为请求材料，成功后登记当前批准。填“否”或留空不产生批准，验收仍检查批准是否齐全；实施者的意见可以保存，但不会生成独立合并批准，业务验收仍拒绝自审。已具备事前方案批准的中等、复杂任务不显示这两个字段。源码或选中运行改变后，合并批准失效，预填的批准字段也须明确复核。带批准字段的草稿另绑定完整方案与历史内容，不能用旧稿批准新材料组中的方案评估。
 
-`approval-draft` 可用 `--reviewer <姓名> [--confirmation <说明>] [--mode plan|combined]` 替代 `--record`；两种输入二选一。CLI 的 plan 对应既有记录中的 design 模式；combined 绑定当前源码与运行。`--record` 及原 JSON 格式保留。
+`approval-draft` 可用 `--reviewer <姓名> [--confirmation <说明>] [--mode plan|combined] [--revision <完整提交号>]` 替代 `--record`；两种输入二选一。CLI 的 plan 对应既有记录中的 design 模式；combined 绑定当前源码与运行。`--record` 及原 JSON 格式保留。
 
 `deliver` 顺序调用原来的 `accept`、`delivery-template`、`verify`，各步保留请求和材料并更新 `current.json`。先核对已有验收是否仍绑定当前任务、章节、源码和材料；可用则复用，否则实际重新验收。报告列出相对任务 base 的全部知识变化；没有变化必须提供 `--reason`。要改知识时仍先独立 `accept`，写完知识后 `deliver` 复用该验收。绑定和知识处置均有效的报告也可复用；已有理由不必再输入。
 
-没有已提交评审时会给出 review.md 路径和提交命令；评审不通过时，accept/deliver 汇总规范、需求、验收项及相关阻塞问题和理由，并给出修复后重跑、复核命令。任何一步失败即停止，结果的 `steps`、`stopped_at` 和 `next_action` 给出已完成步骤、原因及下一条命令；最终输出保留 `delivery_complete`、`closable`、`summary_markdown` 及平台任务的 `close_note`。中断后用默认新请求编号或显式新编号继续，已登记且仍有效的验收和报告不重复生成；同一成功请求的同组重试仍幂等。平台核查、独立性、知识完整性及关闭授权不变，不执行发布或关闭。
+没有已提交评审且项目配置了平台时，`deliver` 先执行 `review --from-platform`；导入失败停在 `review` 步骤，已有提交不自动替换。本地项目仍给出 review.md 路径和提交命令。评审不通过时，accept/deliver 汇总规范、需求、验收项及相关阻塞问题和理由，并给出修复后重跑、复核命令。任何一步失败即停止，结果的 `steps`、`stopped_at` 和 `next_action` 给出已完成步骤、原因及下一条命令；最终输出保留 `delivery_complete`、`closable`、`summary_markdown` 及平台任务的 `close_note`。中断后用默认新请求编号或显式新编号继续，已登记且仍有效的验收和报告不重复生成；同一成功请求的同组重试仍幂等。平台核查、独立性、知识完整性及关闭授权不变，不执行发布或关闭。
 
 ```bash
 tw team accept --root "$PROJECT" --task "$TASK_ID" \
@@ -305,7 +320,7 @@ Issue 身份自动触发平台核查，漏传 `--issue` 不能绕过。交付完
 `progress --issue ... --progress ...` 和 `handoff --issue ... --progress ...` 只生成共享
 记录草稿。`handoff --kind design` 交接方案，默认 `--kind implementation` 交接实施。
 平台输入和冲突规则见[任务协作与交接](coordination.md)。沿用已有授权发布，之后重新读取
-平台状态；批准记录必须实际出现在对应任务上，单独本地文件不能冒充共享批准。
+平台状态；批准记录或携带合并批准选择的绑定评审必须实际出现在对应任务上，单独本地文件不能冒充共享批准。
 
 外部仓库输入为 `{"kind":"repository","repository":"host/group/repo","role":"build"}`，
 `role` 还可为 `modified` 或 `joint`；本机目录通过 `--repository host/group/repo=/path` 或

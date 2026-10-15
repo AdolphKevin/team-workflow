@@ -29,7 +29,7 @@ def parser():
                    dependency=[], with_task=[], run=[], review=None, report=None, progress=None, record=None,
                    acceptance=None, phase='delivery', kind='implementation', check=None, path=[], symbol=[],
                    reason=None, grant=None, confirmed_by=None, home=None, input=[], allow_modified_tool=False,
-                   submit=False, file=None, reviewer=None, confirmation=None, approval_mode=None)
+                   submit=False, from_platform=False, file=None, reviewer=None, confirmation=None, approval_mode=None, revision=None)
     sub = p.add_subparsers(dest='command', required=True)
 
     locations = argparse.ArgumentParser(add_help=False)
@@ -90,7 +90,9 @@ def parser():
     command('brief', '保存本任务的项目知识简报', task, inputs, request, query)
     c = command('review', '生成 Markdown 评审或提交填写后的评审', task, inputs, request, approvals, runs, dependencies)
     c.add_argument('--brief', type=Path)
-    c.add_argument('--submit', action='store_true', help='核查 Markdown 并保存正式评审材料')
+    submission = c.add_mutually_exclusive_group()
+    submission.add_argument('--submit', action='store_true', help='核查 Markdown 并保存正式评审材料')
+    submission.add_argument('--from-platform', action='store_true', help='读取变更请求最新的绑定评审并提交')
     c.add_argument('--file', type=Path, help='提交别处的 Markdown；默认使用任务目录中的 review.md')
     c = command('accept', '生成报告并核查业务验收材料', task, inputs, request, report, home)
     c.add_argument('--report', type=Path, help='Use an existing acceptance report instead of generating one')
@@ -135,6 +137,7 @@ def parser():
     c.add_argument('--reviewer', help='批准人的姓名；替代 --record')
     c.add_argument('--confirmation', help='批准说明，可省略')
     c.add_argument('--mode', dest='approval_mode', choices=['plan', 'combined'], help='方案批准或方案与代码合并批准')
+    c.add_argument('--revision', help='批准时变更请求的完整提交号')
     command('design-diff', '核对方案变化及受影响的章节', task, inputs, request, design, history)
     command('schema', '列出团队材料模板与字段说明')
     c = command('cleanup', '预览或应用本机材料清理计划')

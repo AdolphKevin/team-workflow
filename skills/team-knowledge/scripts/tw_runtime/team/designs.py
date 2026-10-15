@@ -314,7 +314,7 @@ def _run_refs(values):
 
 
 def approval_draft(design, reviewer, confirmation='', decision='approved', section_ids=None,
-                   previous=None, code_digest=None, run_refs=None, mode=None, *, history=None, deletion_ids=None):
+                   previous=None, code_digest=None, run_refs=None, mode=None, *, history=None, deletion_ids=None, revision=None):
     """Build a review record naming the approver; the confirmation basis is optional. Never publishes."""
     validate_design(design)
     text(reviewer)
@@ -349,13 +349,23 @@ def approval_draft(design, reviewer, confirmation='', decision='approved', secti
         result.update(code_digest=code_digest, run_refs=_run_refs(run_refs))
     else:
         require(code_digest is None and run_refs is None, 'Code and runs belong to a combined review')
+    if revision is not None:
+        _approval_revision(revision)
+        result['revision'] = revision
     return result
+
+
+def _approval_revision(value):
+    require(isinstance(value, str) and re.fullmatch(r'[0-9a-fA-F]{40}|[0-9a-fA-F]{64}', value) is not None,
+            '批准 revision 必须是 40 或 64 位十六进制完整提交号')
 
 
 def _validate_approval(row):
     obj(row, {'data_version', 'kind', 'fingerprint_version', 'design_id', 'task_id', 'design_revision',
               'assessment_hash', 'reviewer', 'confirmation', 'decision', 'mode', 'sections', 'deletions'},
-        {'code_digest', 'run_refs'})
+        {'code_digest', 'run_refs', 'revision'})
+    if 'revision' in row:
+        _approval_revision(row['revision'])
     require(type(row['data_version']) is int and row['data_version'] == SCHEMA_VERSION
             and row['kind'] == 'approval', 'Expected a data_version 1 approval')
     require(type(row['fingerprint_version']) is int and row['fingerprint_version'] == FINGERPRINT_VERSION,
@@ -404,7 +414,8 @@ def _combined_matches(row, code_digest, run_refs, selected_run_refs=None):
 
 
 def approval_status(design, approvals, previous=None, changed_paths=None, code_digest=None,
-                    run_refs=None, completed_tasks=(), *, history=None, section_ids=None, selected_run_refs=None):
+                    run_refs=None, completed_tasks=(), *, history=None, section_ids=None, selected_run_refs=None,
+                    root=None, profile=None):
     """Evaluate oldest-to-newest reviews; missing history or mapping never implies success."""
     validate_design(design)
     require(isinstance(approvals, list), 'Approvals must be an oldest-to-newest list')
@@ -428,9 +439,17 @@ def approval_status(design, approvals, previous=None, changed_paths=None, code_d
                 [_dependencies(before), _dependencies(after)], {row['id']})
     scope = scope_coverage(design, changed_paths)
     valid, gaps = [], []
+    revisions = {}
     for index, row in enumerate(approvals):
         try:
             _validate_approval(row)
+            if row['mode'] == 'combined' and 'revision' in row:
+                require(root is not None and profile is not None, '核对批准提交缺少本地仓库与项目配置')
+                import validation
+                revision = row['revision']
+                if revision not in revisions:
+                    revisions[revision] = validation.source_digest(root, profile, revision=revision)
+                require(revisions[revision] == row['code_digest'], '批准的提交与绑定的源码不一致')
             require(row['design_id'] == design['id'] and row['task_id'] == design['task_id'],
                     'Approval belongs to another design or task')
             require(row['design_revision'] in snapshots, 'Missing design snapshot for approval revision')
