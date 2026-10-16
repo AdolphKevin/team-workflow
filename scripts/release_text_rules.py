@@ -21,8 +21,9 @@ RULES = (
     {'name': 'negative-chains', 'scope': DOC_ROOTS,
      'forbidden': (r'只有[^。；]{0,100}才',
                    r'没有[^。；]{0,80}前\s*不',
-                   r'(?:未|没有|缺(?!陷|口))[^。；，,]{0,60}时(?:\s*[，,]\s*[^。；]{0,40}|\s*)(?:仍未|未完成|未通过|未执行|不(?:能|得|可|会|应|算)|无法)'),
-     'exceptions': ('缺任一项时标记为未完成并列出所缺项',)},
+                   # 否定条件推出否定结论；可跨硬换行，止于句末、列表项、表格行与标题
+                   r'(?:未|没有|缺(?!陷|口))(?:(?!\n\s*[-|#*]|\n\s*\d+\.)[^。；，,]){0,60}时'
+                   r'(?:(?!\n\s*[-|#*]|\n\s*\d+\.)[^。；]){0,40}?(?:仍未|未完成|未通过|未执行|不(?:能|得|可|会|应|算)|无法)')},
     {'name': 'links', 'scope': ('skills',), 'links': True},
     {'name': 'retest-board', 'scope': DOC_ROOTS,
      'required': (('skills/team-workflow/references/scenarios.md',
@@ -76,8 +77,6 @@ def check(root):
         errors = []
         for path, text in texts.items():
             checked = text
-            for exception in rule.get('exceptions', ()):
-                checked = checked.replace(exception, ' ' * len(exception))
             for pattern in rule.get('forbidden', ()):
                 for m in re.finditer(pattern, checked, re.M):
                     errors.append(issue(root, path, text, m.start(), '按发布规则调整正文：' + rule['name']))

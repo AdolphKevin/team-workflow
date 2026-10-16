@@ -55,10 +55,18 @@ class ReleaseText(unittest.TestCase):
     def test_enumerations_and_preserved_guidance_are_not_negative_chains(self):
         root = self.fixture()
         path = root / 'skills/team-workflow/references/nouns.md'
-        path.write_text('空输入、对象缺失、权限不足、未执行、未验证。\n缺任一项时标记为未完成并列出所缺项。\n- 独立复验人、角色及未参与实现的说明：待填\n- 复验时间、环境、入口：待填\n- 响应及不应发生的副作用：待填\n')
+        path.write_text('空输入、对象缺失、权限不足、未执行、未验证。\n- 未参与实现的说明：待填\n- 响应及不应发生的副作用：待填\n- 独立复验人、角色及未参与实现的说明：待填\n- 复验时间、环境、入口：待填\n- 响应及不应发生的副作用：待填\n')
         for name in ('guidance-global.md', 'guidance-project.md'):
             (root / 'skills/team-workflow/templates' / name).write_text('只有批准才实施；不再处理；未检查时，交付未完成。')
         self.assertTrue(all(not r['errors'] for r in release.skill_document_checks(root)))
+
+    def test_missing_condition_with_incomplete_result_is_a_negative_chain(self):
+        root = self.fixture()
+        path = root / 'skills/team-workflow/references/chain.md'
+        path.write_text('第一行\n缺任一项时标记为未完成并列出所缺项。\n应沉淀的回归尚未\n  完成或未实际运行时，交付仍未完成。\n')
+        errors = next(r['errors'] for r in release.skill_document_checks(root) if r['name'] == 'negative-chains')
+        name = path.relative_to(root).as_posix()
+        self.assertEqual([(e['path'], e['line']) for e in errors], [(name, 2), (name, 3)])
 
     def test_retest_board_rule_covers_project_contract_and_runtime_service_boundary(self):
         root = self.fixture()

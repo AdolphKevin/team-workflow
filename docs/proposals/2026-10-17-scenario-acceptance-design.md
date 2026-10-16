@@ -14,11 +14,11 @@ roles: {"design_owner":"Claude","implementation_owner":"Codex","acceptance_owner
 <!-- tw-section id=scope-global type=global-scope -->
 按已批准方案第 2 节把场景作为验收的基本单位，按第 3 节改写两个技能的指令文本。
 
-- 需求级验收：A1、A2、A3、A4、A5、A6、A7
+- 需求级验收：A1、A2、A3、A4、A5、A6、A7、A8
 
 | 仓库 | 入口 | 操作 | 产生方 | 使用方 | 提交负责方 | 验收 |
 | --- | --- | --- | --- | --- | --- | --- |
-| self | tw team scenarios、start、run、review、accept、deliver | 场景校验、用例导入与覆盖、结果登记、按场景验收与回归状态 | 方案作者、执行者与评审人 | tw 运行时 | team-workflow | A1、A2、A3、A4、A5、A6 |
+| self | tw team scenarios、start、run、review、accept、deliver | 场景校验、用例导入与覆盖、结果登记、按场景验收与回归状态、任务阶段 | 方案作者、执行者与评审人 | tw 运行时 | team-workflow | A1、A2、A3、A4、A5、A6、A8 |
 | self | 两个技能的 Markdown | 阅读与按指引操作 | 维护者 | 使用 tw 的代理与成员 | team-workflow | A7 |
 
 ## 验收 A1：场景文件与方案引用
@@ -84,11 +84,20 @@ roles: {"design_owner":"Claude","implementation_owner":"Codex","acceptance_owner
 - 检查：release
 - 验证：自动
 
+## 验收 A8：任务阶段
+<!-- tw-section id=A8 type=acceptance depends=scope-global -->
+批次 2 的 SOP-08 节点全部场景通过（方案 D9）。
+
+- 场景：docs/sop/tw-scenario-acceptance.yaml#SOP-08
+- 依据：位置 docs/proposals/2026-10-16-scenario-acceptance-and-positive-text.md；版本 2026-10-16 批准版及 D9–D12；确认人 AdolphKevin
+- 检查：unit
+- 验证：自动
+
 ## 任务 T1：运行时
 <!-- tw-section id=T1 type=task depends=scope-global -->
 方案第 6 节段 1a、1b-1、1b-2。
 
-- 验收：A1、A2、A3、A4、A5、A6
+- 验收：A1、A2、A3、A4、A5、A6、A8
 - 范围：skills/team-knowledge/scripts、skills/team-knowledge/MANIFEST.json、tests、.tw/config.json
 - 前置任务：无
 

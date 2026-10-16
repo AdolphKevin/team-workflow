@@ -3,7 +3,7 @@
   "files": {
     "SKILL.md": "a7d295c7743a4067b044ebb164b6c8487aaace1e6a46f540bdabc28a70f55090",
     "agents/openai.yaml": "0f6a25edc3871660d970fba5358234a15f04a4bca4fb3a3a6da35c7a8656a9c9",
-    "references/business-acceptance.md": "7ea8db3fe472a3cc1460ba37f142b4abaa0133eb1b282aa4bfa8961cc4dbe23c",
+    "references/business-acceptance.md": "486c44ea1ebbd605c5dbc6555439d51d2198e083276e0ad25e18c38b0a7e6a7f",
     "references/contracts.md": "cfd5bdea900ec9c0f1b342e84c4ed43e1af351269561f3971a0d551725c81c8d",
     "references/coordination.md": "6dde18212c6b6d35f481b7cbfde80bed948db334ebc106e6477908d4177fbed7",
     "references/designs.md": "a9e349462f8505dfa214d7cf39e23ab3945a9756033fbc6a0a0c3134cb4b39b7",
