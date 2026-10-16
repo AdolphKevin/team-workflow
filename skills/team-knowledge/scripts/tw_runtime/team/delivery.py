@@ -330,11 +330,14 @@ def verify(root, profile, task, report, phase='delivery', _seen=None, live=None)
               **scenario_acceptance.bindings(scenario_state),
               'summary_counts': scenario_state['summary_counts'], 'statistics': scenario_state['statistics'],
               'source_digest': before, 'sections': selected, 'checks': execution['checks'], 'materials': materials,
+              'ci_verified_checks': sorted(key for key, path in execution['selected_runs'].items()
+                                           if read(inside(root, path)).get('kind') == 'imported-execution'),
               'scope': 'business-acceptance' if phase == 'acceptance' else 'team-delivery',
               'acceptance_scope': task['acceptance_scope'], 'report': dict(report), 'issues': review['findings'],
               'observations': {r['id']: r['observations'] for r in review['acceptance']},
               'named_cases': named_cases, 'unspecified_cases': [key for key, cases in named_cases.items() if not cases],
               'business_accepted': True, 'delivery_complete': False, 'closable': False,
+              'unverified_scope': scenario_acceptance.unverified_scope(scenario_state, review['findings']),
               'reused_execution': reused, 'automation_status': regression, 'tool': tool,
               'superseded_execution': execution['superseded'],
               're_evaluated': [{'check': key, **row['evaluation']} for key, row in sorted(execution['results'].items())

@@ -76,6 +76,8 @@ class ScenarioRounds(unittest.TestCase):
     def test_pending_lists_task_scenarios_with_executable_instructions(self):
         self.prepare()
         value = self.pending()
+        self.assertNotIn('scenarios', value)
+        self.assertNotIn('lines', value)
         self.assertEqual(value['summary_counts'], {'passed': 0, 'failed': 0, 'blocked': 0, 'pending': 4})
         self.assertEqual([(row['id'], row['node'], row['reason']) for row in value['pending']],
                          [('S-P', 'S', 'new'), ('S-N', 'S', 'new'), ('T-P', 'T', 'new'), ('T-N', 'T', 'new')])
@@ -92,6 +94,7 @@ class ScenarioRounds(unittest.TestCase):
 
     def test_submit_records_round_copies_evidence_and_counts_first_results(self):
         self.prepare()
+        fingerprint = self.pending()['pending'][0]['fingerprint']
         code, value = self.submit([self.result(key, 'fail' if key == 'T-N' else 'pass')
                                    for key in ('S-P', 'S-N', 'T-P', 'T-N')])
         self.assertEqual(code, 0, value)
@@ -106,7 +109,7 @@ class ScenarioRounds(unittest.TestCase):
         self.assertEqual((record['data_version'], record['kind'], record['task_id'], record['round']),
                          (1, 'scenario-round', self.task['id'], 1))
         self.assertEqual(record['statistics'], value['round_statistics'])
-        self.assertEqual(record['results'][0]['fingerprint'], self.pending()['scenarios'][0]['fingerprint'])
+        self.assertEqual(record['results'][0]['fingerprint'], fingerprint)
         ref = record['results'][0]['evidence'][0]
         from common import sha
         self.assertEqual(ref['sha256'], sha(self.evidence))
@@ -201,6 +204,7 @@ class ScenarioRounds(unittest.TestCase):
         self.assertIn('按列出的场景补齐结果后重新提交', value['next_action'])
         code, value = self.submit([self.result(key, executor=' BOB ') for key in ('S-P', 'S-N', 'T-P', 'T-N')])
         self.assertEqual((code, value['error_code']), (1, 'independence-required'))
+        self.assertIn('实施负责人', value['problem'])
         self.assertEqual(before, self.current_path().read_bytes())
         code, value = self.submit([self.result(key) for key in ('S-P', 'S-P', 'S-N', 'T-P', 'T-N')])
         self.assertEqual((code, value['error_code']), (1, 'scenario-result-invalid'))
@@ -267,6 +271,7 @@ class ScenarioRounds(unittest.TestCase):
         self.assertNotEqual(old['context'], self.current()['context'])
         self.assertEqual(old['scenario_rounds'], self.current()['scenario_rounds'])
         self.assertEqual(self.pending()['summary_counts'], {'passed': 4, 'failed': 0, 'blocked': 0, 'pending': 0})
+        self.assertEqual(self.pending()['pending'], [])
 
     def test_status_displays_scenario_step_and_metrics_lists_rounds(self):
         self.prepare()

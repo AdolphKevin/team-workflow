@@ -41,7 +41,14 @@ class ScenarioAcceptance(unittest.TestCase):
         self.assertIn('按清单执行场景', pending['next_action'])
         self.assertIn('scenarios submit', pending['next_action'])
         self.assertIn('--root ', pending['next_action'])
-        self.assertNotIn('-：', '\n'.join(pending['lines']))
+        from commands import readable
+        self.assertNotIn('-：', readable(pending))
+        self.assertEqual(self.submit(self.all_results())[0], 0)
+        code, ready = self.call('run', '--task', self.task['id'])
+        self.assertEqual(code, 0, ready)
+        text = (self.root / ready['review_file']).read_text()
+        for token in ('S-P', 'S-N', 'T-P', 'T-N', 'passed', '实际结果', '已核对预期结果与副作用', '执行者', 'carol', '轮次：1'):
+            self.assertIn(token, text)
 
     def test_accept_requires_scenarios_and_records_summary_and_rounds(self):
         self.prepare()
@@ -104,6 +111,7 @@ class ScenarioAcceptance(unittest.TestCase):
         code, refused = self.call('accept', '--task', self.task['id'])
         self.assertEqual((code, refused.get('error_code')), (1, 'scenario-coverage-incomplete'))
         self.assertIn('C2', refused['problem'])
+        self.assertNotIn('C1', refused['problem'])
 
 
     def test_blocked_requires_accepted_or_deferred_finding(self):
@@ -111,11 +119,21 @@ class ScenarioAcceptance(unittest.TestCase):
         self.call('run', '--task', self.task['id'])
         rows = self.all_results()
         rows[-1].update(status='blocked', finding='F-env', actual='验收环境尚未开放', evidence=[])
+        rows[0].update(status='skip', finding='F-env', actual='约定与环境开放后一并复验', evidence=[], note='环境开放后复验')
         self.assertEqual(self.submit(rows)[0], 0)
         draft, _ = self.reviewed()
         code, refused = self.call('accept', '--task', self.task['id'])
         self.assertEqual((code, refused.get('error_code')), (1, 'scenario-acceptance-incomplete'))
         self.assertIn('T-N', refused['problem'])
+        self.assertEqual(refused['scenario_states'], {'failed': [], 'pending': [], 'blocked': ['S-P', 'T-N']})
+        self.assertIn('review', refused['next_action'])
+        self.assertIn('--submit', refused['next_action'])
+        self.assertNotIn('scenarios pending', refused['next_action'])
+        code, stopped = self.call('deliver', '--task', self.task['id'], '--reason', '现有知识已覆盖')
+        self.assertEqual(code, 1, stopped)
+        self.assertEqual(stopped['stopped_at'], 'acceptance')
+        self.assertEqual(stopped['scenario_states'], refused['scenario_states'])
+        self.assertEqual(stopped['next_action'], refused['next_action'])
         path = self.root / draft['review_file']
         text = path.read_text()
         for field, value in {'状态': 'deferred', '处置理由': '先交付可运行入口', '处置证据': 'SOP#env',
@@ -125,7 +143,17 @@ class ScenarioAcceptance(unittest.TestCase):
         self.assertEqual(self.call('review', '--task', self.task['id'], '--submit')[0], 0)
         code, accepted = self.call('accept', '--task', self.task['id'])
         self.assertEqual(code, 0, accepted)
-        self.assertEqual(accepted['summary_counts']['blocked'], 1)
+        self.assertEqual(accepted['summary_counts']['blocked'], 2)
+        for command, extra in (('accept', []), ('deliver', ['--reason', '现有知识已覆盖']), ('verify', [])):
+            code, result = self.call(command, '--task', self.task['id'], *extra)
+            self.assertEqual(code, 0, result)
+            self.assertEqual(result['unverified_scope'], [
+                {'scenario': 'S-P', 'status': 'skip', 'finding': 'F-env', 'finding_state': 'deferred'},
+                {'scenario': 'T-N', 'status': 'blocked', 'finding': 'F-env', 'finding_state': 'deferred'}])
+            summary = result['summary_markdown']
+            self.assertIn('**未验证范围**', summary)
+            self.assertIn('S-P：skip；问题 F-env：deferred', summary)
+            self.assertIn('T-N：blocked；问题 F-env：deferred', summary)
 
     def test_regression_is_generated_and_handwritten_automation_is_rejected(self):
         self.prepare()
@@ -155,7 +183,7 @@ class ScenarioAcceptance(unittest.TestCase):
         value['automation'] = {}
         path = self.root / '.tw/local/retired-report.json'
         path.write_text(json.dumps(value))
-        code, refused = self.call('accept', '--task', self.task['id'], '--report', path)
+        code, refused = self.call('verify', '--task', self.task['id'], '--report', path)
         self.assertEqual(code, 1, refused)
         self.assertIn('回归状态写在场景文件各场景的 regression', refused['problem'])
 
@@ -234,8 +262,17 @@ class ScenarioAcceptance(unittest.TestCase):
         code, refused = self.call('accept', '--task', self.task['id'])
         self.assertEqual((code, refused.get('error_code')), (1, 'scenario-acceptance-incomplete'))
         self.assertIn('S-P：failed', refused['problem'])
+        self.assertEqual(refused['scenario_states'], {'failed': ['S-P'], 'pending': [], 'blocked': []})
         self.assertIn('scenarios pending', refused['next_action'])
         self.assertIn('--root ', refused['next_action'])
+        self.assertFalse(self.current().get('acceptance'))
+        code, stopped = self.call('deliver', '--task', self.task['id'], '--reason', '现有知识已覆盖')
+        self.assertEqual(code, 1, stopped)
+        self.assertEqual(stopped['stopped_at'], 'acceptance')
+        self.assertEqual(stopped['scenario_states'], {'failed': ['S-P'], 'pending': [], 'blocked': []})
+        self.assertIn('S-P：failed', stopped['problem'])
+        self.assertIn('scenarios pending', stopped['next_action'])
+        self.assertFalse(self.current().get('acceptance'))
     def test_accept_names_new_pending_scenario_before_an_expired_review(self):
         self.prepare()
         self.call('run', '--task', self.task['id'])

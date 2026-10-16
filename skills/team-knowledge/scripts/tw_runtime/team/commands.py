@@ -44,6 +44,8 @@ def readable_fields(value, indent=''):
 def readable(result):
     lines = [result.get('summary') or result.get('status') or ('命令已完成；验收状态见下方' if result.get('ok', True) else '尚未完成')]
     for key in ('problem', 'next_action'):
+        if key == 'next_action' and result.get('step_lines'):
+            continue
         if result.get(key) and str(result[key]) not in lines:
             lines.append(('下一步：' if key == 'next_action' else '') + str(result[key]))
     if result.get('error_code') == Code.TOOL_DEFECT:
@@ -88,6 +90,9 @@ def readable(result):
     if result.get('close_note'):
         lines += ['--- 收尾说明草稿（原样发布到 Issue）---', result['close_note']['markdown']]
     lines += [line for line in result.get('step_lines', []) if line != result.get('summary')] + result.get('lines', [])
+    if 'pending_count' in result and 'pending' in result:
+        from scenario_rounds import pending_lines
+        lines += pending_lines(result['pending'], result['summary_counts'])
     for row in result.get('authorizations_needed', []):
         if row['question'] not in result.get('next_action', ''):
             lines.append(row['question'])
@@ -463,49 +468,46 @@ def missing_task_block(args, exc):
                            f'[--reviewer <name>]  (issue {exc.issue_url})'}
 
 
-def produce(args, root, profile, task, platform, request):
-    def pending_report(value, design, status, history):
-        import designs
-        pending = designs.pending_sections(design, status, history)
-        value['pending_sections'] = pending
-        if approval_recovery(args, value, status):
-            return value
-        if pending:
-            if platform:
-                selector = '--issue ' + shlex.quote(platform['design_issue'])
-                if platform['design_issue'] != task['id']:
-                    selector += ' --sections ' + shlex.quote(','.join(dict.fromkeys(row['id'] for row in pending)))
-            else:
-                design_path = args.start_selection.get('design_path') or args.design
-                if design_path is None or Path(design_path).suffix != '.md':
-                    design_path = request.publish_text('approval-design.md', designs.render(design))['path']
-                selector = '--task ' + shlex.quote(task['id']) + ' --design ' + shlex.quote(str(design_path))
+def pending_report(args, root, task, platform, value, design, status, history):
+    import designs
+    pending = designs.pending_sections(design, status, history)
+    value['pending_sections'] = pending
+    if approval_recovery(args, value, status):
+        return value
+    if pending:
+        if platform:
+            selector = '--issue ' + shlex.quote(platform['design_issue'])
+            if platform['design_issue'] != task['id']:
+                selector += ' --sections ' + shlex.quote(','.join(dict.fromkeys(row['id'] for row in pending)))
+        else:
+            selector = '--task ' + shlex.quote(task['id'])
+            design_path = args.design
+            if args.context:
+                design_path = read(local(root, args.context)).get('preparation_inputs', {}).get('design_path') or design_path
+            if design_path and Path(design_path).suffix == '.md' and (root / design_path).is_file():
+                selector += ' --design ' + shlex.quote(str(design_path))
                 selector += ''.join(' --design-history ' + shlex.quote(str(path)) for path in args.design_history
                                     if Path(path).suffix == '.md')
-            value['next_action'] = ('tw team approval-draft --root ' + shlex.quote(str(root)) + ' ' + selector
-                                    + ' --reviewer "<评审人>"')
-        return value
+        value['next_action'] = ('tw team approval-draft --root ' + shlex.quote(str(root)) + ' ' + selector
+                                + ' --reviewer "<评审人>"')
+    return value
 
-    def step_report(value, progress):
-        import checklist
-        if value.get('pending_sections'):
-            progress.update(next_step={'id': 'approval', 'label': APPROVAL_RECOVERY_LABELS.get(value.get('error_code'), '取得待确认章节的批准'),
-                                       'next_command': value['next_action']}, finished=False)
-        value.update(steps=progress['steps'], next_step=progress['next_step'], step_lines=checklist.render(progress))
 
-    def verification_report(value, design):
-        from contracts import execution_environment
-        gaps = execution_environment(profile, task, design)
-        value['verification_gaps'] = gaps
-        if gaps and not (args.command == 'start' and value.get('pending_sections')):
-            value['next_action'] = gaps[0] + ('；' + value['next_action'] if value.get('next_action') else '')
-        return value
+def verification_report(args, profile, task, value, design):
+    from contracts import execution_environment
+    gaps = execution_environment(profile, task, design)
+    value['verification_gaps'] = gaps
+    if gaps and not value.get('pending_sections'):
+        value['next_action'] = gaps[0] + ('；' + value['next_action'] if value.get('next_action') else '')
+    return value
 
+
+def produce(args, root, profile, task, platform, request):
     def emit(value, name):
         return {'ok': value.get('ok', True), 'artifact': request.publish(name, value, args.out),
                 **{k: value[k] for k in ('summary', 'gaps', 'problem', 'next_action', 'implementation_ready',
                                        'business_accepted', 'delivery_complete', 'regression_pending', 'automation_status', 'closable', 'acceptance_scope', 'scope', 'validation_active', 'verification_gaps',
-                                       'summary_counts', 'statistics', 'scenario_rounds', 'scenario_files', 'summary_markdown', 'close_note', 're_evaluated', 'tool', 'environment_checked', 'pending_acceptance', 'pending_sections', 'authorizations_needed') if k in value}}
+                                       'ci_verified_checks', 'unverified_scope', 'summary_counts', 'statistics', 'scenario_rounds', 'scenario_files', 'summary_markdown', 'close_note', 're_evaluated', 'tool', 'environment_checked', 'pending_acceptance', 'pending_sections', 'authorizations_needed') if k in value}}
     if args.command == 'deliver':
         import delivery_sequence
         return delivery_sequence.deliver(args, root, profile, task, request)
@@ -545,20 +547,8 @@ def produce(args, root, profile, task, platform, request):
                      task=selection['previous']['task'], design=selection['previous']['design'])
         value.setdefault('implementation_ready', value.get('ready_to_implement', False))
         value.setdefault('gaps', [])
-        import checklist
-        progress = checklist.steps(root, task, validation.source_digest(root, profile), value['context']['path'],
-                                   profile=profile, current=(read(request.directory / 'request.json'), value),
-                                   **step_materials(resumed_inputs))
-        value.update(steps=progress['steps'], next_step=progress['next_step'], step_lines=checklist.render(progress))
-        if value.get('ok') and not running:
-            value['next_action'] = progress['next_step']['next_command'] if progress['next_step'] else value['step_lines'][-1]
-            if progress['finished']:
-                value['summary'] = '已交付；关闭需要授权，工具不执行关闭'
         value['warnings'] = platform.get('warnings', []) if platform else []
-        if 'sections' in value:
-            pending_report(value, selection['design'], value, selection['history'])
-        verification_report(value, selection['design'])
-        step_report(value, progress)
+        verification_report(args, profile, task, value, selection['design'])
         return {**value, 'artifact': request.publish('start.json', value, args.out)}
     if args.command == 'task-export':
         return {**emit(task, 'task.json'), 'summary': '仅导出任务；实施和交付条件尚未核对。', 'implementation_ready': False, 'business_accepted': False}
@@ -602,18 +592,15 @@ def produce(args, root, profile, task, platform, request):
                                   + ('Implement within the approved scope.' if readiness['implementation_ready'] and not running
                                      else 'Obtain confirmation for the named plan sections.'),
                    'knowledge_claim': 'captured for reading; not evidence that knowledge was used'}
-        pending_report(context, design, readiness, history)
-        verification_report(context, design)
+        if not readiness['implementation_ready']:
+            pending_report(args, root, task, platform, context, design, readiness, history)
+        verification_report(args, profile, task, context, design)
         result = {**emit(context, 'context.json'), **{k: context[k] for k in ('task', 'design', 'brief')},
                   'continued': False, 'task_id': task['id'], 'warnings': context['warnings'],
                   'task_directory': request.directory.parent.parent.relative_to(root).as_posix()}
         result['context'] = result['artifact']
         if selection['previous_ref']:
             result['superseded_context'] = selection['previous_ref']
-        import checklist
-        progress = checklist.steps(root, task, validation.source_digest(root, profile), result['context']['path'],
-                                   profile=profile, current=(read(request.directory / 'request.json'), result), **step_materials(args))
-        step_report(result, progress)
         return result
     if args.command == 'brief':
         return emit(knowledge.brief(root, task, relative_paths(root, args.path), args.symbol), 'brief.json')
@@ -624,7 +611,7 @@ def produce(args, root, profile, task, platform, request):
             design = design_files.read(local(root, args.design or args.record))
             coordination.validate_task_design(task, design)
             if args.command == 'design-draft':
-                return verification_report({**emit(design, 'design.json'),
+                return verification_report(args, profile, task, {**emit(design, 'design.json'),
                     'checks_markdown': design_files.check_table(design, profile['checks'])}, design)
             supplied = approval_input(args, root)
             require(isinstance(supplied, dict) and 'reviewer' in supplied, 'Approval input must name the reviewer', error_code=Code.APPROVAL_INCOMPLETE)
@@ -638,9 +625,9 @@ def produce(args, root, profile, task, platform, request):
             supplied = designs.approval_selection(design, [read(local(root, p)) for p in args.approval],
                 task['section_ids'], history, {**supplied, 'mode': mode, **binding}, root=root, profile=profile)
             if supplied is None:
-                return verification_report({'ok': True, 'summary': '没有需要批准的章节'}, design)
+                return verification_report(args, profile, task, {'ok': True, 'summary': '没有需要批准的章节'}, design)
             result = designs.approval_draft(design, history=history, **supplied)
-            return verification_report({**emit(result, 'approval.json'),
+            return verification_report(args, profile, task, {**emit(result, 'approval.json'),
                 'summary': '批准草稿：' + coordination.approval_sentence(result, design)}, design)
         require(args.issue == task['id'], 'Shared draft requires its canonical --issue')
         resolution = ({'history_digest': platform['history_digest'], 'reason': args.reconcile}
@@ -669,7 +656,7 @@ def produce(args, root, profile, task, platform, request):
         if args.command in ('design-draft', 'approval-draft'):
             design = (design_files.read(local(root, args.record or args.design))
                       if args.command == 'design-draft' else platform['design'])
-            verification_report(result, design)
+            verification_report(args, profile, task, result, design)
         if args.command == 'approval-draft' and 'record' not in result:
             return result
         return {**emit(result, args.command + '.json'), **{key: result[key] for key in
@@ -815,17 +802,18 @@ def task_steps(args, root, profile, task):
     from common import rules_digest
     context = read(local(root, args.context)) if args.context else None
     value = checklist.steps(root, task, validation.source_digest(root, profile), args.context,
-                            str(args.task) if args.task else None, profile=profile, **step_materials(args))
+                            str(args.task) if args.task else None, profile=profile, current=getattr(args, 'current_request', None), **step_materials(args))
     if context:
         value['authorizations'] = context.get('authorizations', [])
         value['rules_changed'] = context.get('rules_digest') not in (None, rules_digest())
     return value
 
 
-def current_status(root, task_id):
+def current_status(root, task_id, current=None):
     """按任务身份走状态入口的同一套材料读取与流程计算。"""
     from workflow import parser
     args = parser().parse_args(['status', '--root', str(root), '--task', task_id])
+    args.current_request = current
     return dispatch(args, root)
 
 
@@ -906,6 +894,18 @@ def status(args, root, profile, task, platform=None):
                                (getattr(args, 'material_selection', None) or {}).get('effective'))
     if (progress.get('next_step') or {}).get('id') == 'scenarios':
         value.update(next_step=progress['next_step'], next_action=progress['next_step']['next_command'])
+    plan_approval = value.get('review_mode') in ('mixed', 'design-first')
+    if args.design and plan_approval and not value.get('implementation_ready', True):
+        design = design_files.read(local(root, args.design))
+        history = [design_files.read(local(root, p)) for p in args.design_history]
+        pending_report(args, root, task, platform, value, design, value, history)
+        if value.get('pending_sections'):
+            progress['next_step'] = {'id': 'approval', 'label': APPROVAL_RECOVERY_LABELS.get(value.get('error_code'), '取得待确认章节的批准'),
+                                     'next_command': value['next_action']}
+            value['next_step'] = progress['next_step']
+    if args.design:
+        value.setdefault('pending_sections', [])
+        verification_report(args, profile, task, value, design_files.read(local(root, args.design)))
     value['step_lines'] = checklist.render(progress)
     if progress.get('rules_changed'):
         value['step_lines'].append('注意：开始任务后团队流程规则已更新；按当前规则核对已完成的步骤。')

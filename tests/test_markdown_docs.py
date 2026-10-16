@@ -1,11 +1,49 @@
 """P6: the shipped authoring guide and all entry points name the current source format."""
 from pathlib import Path
+import importlib.util
+import tempfile
 import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
 class MarkdownDocumentationCases(unittest.TestCase):
+    def test_release_rejects_skill_link_outside_shipped_skills(self):
+        spec = importlib.util.spec_from_file_location('release_docs', ROOT / 'scripts/check_release.py')
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / 'skills/demo/SKILL.md'
+            source.parent.mkdir(parents=True)
+            target = root / 'docs/design.md'
+            target.parent.mkdir()
+            target.write_text('方案')
+            source.write_text('[方案](../../docs/design.md)')
+            with self.assertRaisesRegex(AssertionError, 'skills/'):
+                module.markdown_links(root, source, source.read_text())
+            target = root / 'skills/other/SKILL.md'
+            target.parent.mkdir()
+            target.write_text('技能')
+            module.markdown_links(root, source, '[技能](../other/SKILL.md)')
+
+    def test_installed_guides_explain_regression_timing_and_disposition(self):
+        base = ROOT / 'skills/team-workflow'
+        designs = (base / 'references/designs.md').read_text()
+        self.assertNotIn('../../../docs/', designs)
+        self.assertIn('`complexity` 取 `simple`、`medium`、`complex`', designs)
+        scenarios = (base / 'references/scenarios.md').read_text()
+        self.assertIn('写回 `regression` 会使检查运行过期', scenarios)
+        self.assertIn('生成评审稿之前', scenarios)
+        self.assertIn('CalcTests::test_add', scenarios)
+        for name in ('references/business-acceptance.md', 'templates/business-delivery.md'):
+            self.assertIn('`deliver` 通过后填写', (base / name).read_text())
+        contracts = (base / 'references/contracts.md').read_text()
+        self.assertIn('没有冲突时填“是”', contracts)
+        for field in ('处置理由', '处置证据', '确认人', '确认依据', '跟进任务', '范围调整'):
+            self.assertIn('- ' + field + '：', contracts)
+        self.assertIn('每行一项', contracts)
+
     def test_current_verification_and_reconciliation_are_documented(self):
         base = ROOT / 'skills/team-workflow'
         template = (base / 'templates/design.md').read_text()

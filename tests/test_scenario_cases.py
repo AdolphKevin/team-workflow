@@ -23,27 +23,31 @@ class CaseImportCases(unittest.TestCase):
     def test_import_preserves_fields_and_later_import_wins(self):
         self.prepared()
         first = [{'id': 'C1', 'title': '中文用例', 'extra': {'steps': [1, '甲'], 'flag': True}},
-                 {'id': 'C2', 'title': '第二条', 'priority': 'P0'}]
+                 {'id': 'C2', 'title': '第二条', 'priority': 'P0'}, {'id': 'C3', 'title': '第三条'}]
         code, result = self.import_cases(first)
         self.assertEqual(code, 0, result)
-        self.assertEqual((result['imported'], result['total'], result['added'], result['updated']), (2, 2, ['C1', 'C2'], []))
+        self.assertEqual((result['imported'], result['total'], result['added'], result['updated']), (3, 3, ['C1', 'C2', 'C3'], []))
+        self.assertEqual(json.loads((self.root / 'cases.json').read_text())['test_cases'], first)
         ref = self.current()['case_imports'][0]
         self.assertEqual(read(self.root / ref['path'])['test_cases'], first)
-        changed = [{'id': 'C1', 'title': '修订', 'extra': ['原样']}, {'id': 'C3', 'title': '新增'}]
+        changed = [{'id': 'C1', 'title': '修订', 'extra': ['原样']}, {'id': 'C4', 'title': '新增'}]
         code, result = self.import_cases(changed)
         self.assertEqual(code, 0, result)
-        self.assertEqual((result['total'], result['added'], result['updated']), (3, ['C3'], ['C1']))
+        self.assertEqual((result['total'], result['added'], result['updated']), (4, ['C4'], ['C1']))
+        self.assertEqual(json.loads((self.root / 'cases.json').read_text())['test_cases'], changed)
         import scenarios
-        self.assertEqual(list(scenarios.imported_cases(self.root, self.current()).values()), [changed[0], first[1], changed[1]])
+        self.assertEqual(list(scenarios.imported_cases(self.root, self.current()).values()), [changed[0], first[1], first[2], changed[1]])
 
     def test_invalid_cases_report_lines_and_keep_current_materials(self):
         self.prepared()
         before = self.current_path().read_bytes()
+        snapshots = sorted((self.root / '.tw/local/tasks').rglob('*'))
         for rows in ([{'id': 'C1', 'title': ''}], [{'id': 'C1', 'title': '甲'}, {'id': 'C1', 'title': '乙'}], [{}]):
             code, result = self.import_cases(rows)
             self.assertEqual((code, result['error_code']), (1, 'case-list-invalid'))
             self.assertTrue(all(row['line'] > 0 for row in result['errors']))
             self.assertEqual(before, self.current_path().read_bytes())
+            self.assertEqual(snapshots, sorted((self.root / '.tw/local/tasks').rglob('*')))
 
     def test_coverage_reports_missing_conflict_and_new_cases(self):
         self.prepared()
@@ -55,6 +59,8 @@ class CaseImportCases(unittest.TestCase):
         pairs = {'covered': [], 'conflict': [{'case': 'C1', 'scenarios': ['SYNTH-01-P01'], 'note': '预期有分歧'}], 'disposed': []}
         code, result = check(pairs)
         self.assertEqual((code, result['error_code']), (1, 'scenario-coverage-incomplete'))
+        self.assertNotIn('第 1 行', result['problem'])
+        self.assertTrue(all('line' not in row for row in result['errors']))
         self.assertEqual(result['cases'], [{'case': 'C1', 'category': 'conflict'}, {'case': 'C2', 'category': 'unclassified'}, {'case': 'C3', 'category': 'unclassified'}])
         self.assertNotIn('case_coverage', self.current())
         pairs['covered'] = [{**pairs['conflict'][0], 'note': ''}]
@@ -68,13 +74,17 @@ class CaseImportCases(unittest.TestCase):
         self.assertEqual(result['cases'], [{'case': 'C4', 'category': 'unclassified'}, {'case': 'C5', 'category': 'unclassified'}])
         bad = copy.deepcopy(pairs)
         bad['covered'][0]['scenarios'] = ['missing']
-        self.assertEqual(check(bad)[1]['error_code'], 'scenario-coverage-incomplete')
+        malformed = check(bad)[1]
+        self.assertEqual(malformed['error_code'], 'scenario-coverage-incomplete')
+        self.assertTrue(any(row.get('line', 0) > 0 for row in malformed['errors']))
         bad = copy.deepcopy(pairs)
         bad['disposed'][0]['confirmed_by'] = ''
         self.assertEqual(check(bad)[0], 1)
         bad = copy.deepcopy(pairs)
         bad['disposed'].append(copy.deepcopy(bad['disposed'][0]))
-        self.assertEqual(check(bad)[0], 1)
+        duplicate = check(bad)[1]
+        self.assertTrue(all('line' not in row for row in duplicate['errors']))
+        self.assertIn('duplicate', duplicate['problem'])
         bad = copy.deepcopy(pairs)
         bad['covered'].append({'case': 'unknown', 'scenarios': ['SYNTH-01-P01'], 'note': ''})
         self.assertEqual(check(bad)[0], 1)

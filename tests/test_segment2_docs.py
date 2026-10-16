@@ -35,7 +35,8 @@ class Segment2Docs(unittest.TestCase):
         self.assertIn('- 场景证据：场景轮次中每条场景的实际结果与证据文件', standard)
         self.assertIn('由独立执行者经声明的验收入口留下', standard)
         self.assertIn('验收使用的平台评审保留实际作者与原文', standard)
-        self.assertIn('应沉淀的场景尚未自动化', standard)
+        self.assertIn('应沉淀场景的自动回归及其实际运行通过的证据', standard)
+        self.assertIn('缺任一项时标记为未完成并列出所缺项', standard)
         self.assertIn('沉淀后把检查与用例写回场景的 `regression`', standard)
         self.assertNotIn('人工观察记录', standard)
         for name in ('business-acceptance.md', 'onboarding.md', 'platform.md'):

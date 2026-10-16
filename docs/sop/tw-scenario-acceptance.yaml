@@ -26,6 +26,7 @@ sops:
     scenarios:
 
       - id: SOP-01-P01
+        regression: {"check": "unit", "cases": ["test_scenarios.ScenarioCases::test_check_fingerprints_track_only_declared_content"]}
         polarity: positive
         title: 合格的场景文件通过校验并给出每条场景的内容指纹
         actor: 方案作者
@@ -39,6 +40,7 @@ sops:
         evidence_hints: ["命令原文与完整输出", "运行前后的文件清单"]
 
       - id: SOP-01-N01
+        regression: {"check": "unit", "cases": ["test_scenarios.ScenarioCases::test_missing_negative_and_exemption"]}
         polarity: negative
         negative_type: incomplete-input
         title: 节点缺少反向场景时报出节点与行号
@@ -53,6 +55,7 @@ sops:
         evidence_hints: ["两次命令的完整输出"]
 
       - id: SOP-01-N02
+        regression: {"check": "unit", "cases": ["test_scenarios.ScenarioCases::test_undeclared_entry_names_scenario_value_and_source_line"]}
         polarity: negative
         negative_type: invalid-input
         title: 场景引用未声明的验收入口时拒绝
@@ -67,6 +70,7 @@ sops:
         evidence_hints: ["完整输出"]
 
       - id: SOP-01-N03
+        regression: {"check": "unit", "cases": ["test_scenario_batch2.Batch2Regressions::test_start_reports_inline_scenario_or_manual_verification_line_without_new_context"]}
         polarity: negative
         negative_type: invalid-input
         title: 验收节内联旧场景标签时按行拒绝
@@ -81,6 +85,7 @@ sops:
         evidence_hints: ["完整输出", "运行前后的 .tw/local 文件清单"]
 
       - id: SOP-01-P02
+        regression: {"check": "unit", "cases": ["test_scenario_designs.ScenarioDesignCases::test_reference_binding_roundtrip_and_content_change"]}
         polarity: positive
         title: 修改场景内容使引用它的验收节被视为内容已改
         actor: 方案作者
@@ -103,6 +108,7 @@ sops:
     scenarios:
 
       - id: SOP-02-P01
+        regression: {"check": "unit", "cases": ["test_scenario_cases.CaseImportCases::test_import_preserves_fields_and_later_import_wins"]}
         polarity: positive
         title: 导入的用例按并集累积
         actor: 验收代理
@@ -116,6 +122,7 @@ sops:
         evidence_hints: ["两次输出", "导入快照"]
 
       - id: SOP-02-N01
+        regression: {"check": "unit", "cases": ["test_scenario_cases.CaseImportCases::test_invalid_cases_report_lines_and_keep_current_materials"]}
         polarity: negative
         negative_type: incomplete-input
         title: 用例缺少标题时报行号且材料不变
@@ -130,6 +137,7 @@ sops:
         evidence_hints: ["输出", "导入前后的 current.json"]
 
       - id: SOP-02-P02
+        regression: {"check": "unit", "cases": ["test_scenario_cases.CaseImportCases::test_coverage_reports_missing_conflict_and_new_cases"]}
         polarity: positive
         title: 每条用例都归类后覆盖核对通过
         actor: 验收代理
@@ -143,6 +151,7 @@ sops:
         evidence_hints: ["配对文件", "输出"]
 
       - id: SOP-02-N02
+        regression: {"check": "unit", "cases": ["test_scenario_cases.CaseImportCases::test_coverage_reports_missing_conflict_and_new_cases"]}
         polarity: negative
         negative_type: incomplete-input
         title: 缺归类或存在分歧时覆盖核对拒绝并逐条列出
@@ -166,6 +175,7 @@ sops:
     scenarios:
 
       - id: SOP-03-P01
+        regression: {"check": "unit", "cases": ["test_scenario_rounds.ScenarioRounds::test_pending_lists_task_scenarios_with_executable_instructions", "test_scenario_rounds.ScenarioRounds::test_submit_records_round_copies_evidence_and_counts_first_results"]}
         polarity: positive
         title: 首次清单列出全部场景，提交后给出一次通过率
         actor: 独立执行者
@@ -179,6 +189,7 @@ sops:
         evidence_hints: ["两次输出", "轮次记录与复制的证据"]
 
       - id: SOP-03-N01
+        regression: {"check": "unit", "cases": ["test_scenario_rounds.ScenarioRounds::test_submit_requires_each_pending_result_and_an_independent_executor"]}
         polarity: negative
         negative_type: permission
         title: 实施负责人提交结果被拒绝
@@ -193,6 +204,7 @@ sops:
         evidence_hints: ["输出", "提交前后的 current.json"]
 
       - id: SOP-03-N02
+        regression: {"check": "unit", "cases": ["test_scenario_rounds.ScenarioRounds::test_submit_requires_each_pending_result_and_an_independent_executor"]}
         polarity: negative
         negative_type: incomplete-input
         title: 漏交清单中的场景被拒绝并列出编号
@@ -207,6 +219,7 @@ sops:
         evidence_hints: ["输出"]
 
       - id: SOP-03-N03
+        regression: {"check": "unit", "cases": ["test_scenario_rounds.ScenarioRounds::test_result_contract_collects_line_errors_and_leaves_materials_unchanged"]}
         polarity: negative
         negative_type: invalid-input
         title: 结果格式错误时逐行报告
@@ -229,6 +242,7 @@ sops:
     scenarios:
 
       - id: SOP-04-P01
+        regression: {"check": "unit", "cases": ["test_scenario_rounds.ScenarioRounds::test_scenario_material_changes_only_its_status_and_stales_runs"]}
         polarity: positive
         title: 只改一条场景时清单只列它
         actor: 独立执行者
@@ -242,6 +256,7 @@ sops:
         evidence_hints: ["输出"]
 
       - id: SOP-04-P02
+        regression: {"check": "unit", "cases": ["test_scenario_batch2.Batch2Regressions::test_added_scenario_is_the_only_new_pending_entry"]}
         polarity: positive
         title: 追加遗漏场景后只执行新增的那条
         actor: 独立执行者
@@ -255,6 +270,7 @@ sops:
         evidence_hints: ["输出"]
 
       - id: SOP-04-P03
+        regression: {"check": "unit", "cases": ["test_scenario_batch2.Batch2Regressions::test_product_change_keeps_only_one_automated_scenario_passed"]}
         polarity: positive
         title: 产品源码变化后由沉淀的回归保持通过
         actor: 独立执行者
@@ -268,6 +284,7 @@ sops:
         evidence_hints: ["三次输出"]
 
       - id: SOP-04-N01
+        regression: {"check": "unit", "cases": ["test_scenario_rounds.ScenarioRounds::test_new_context_keeps_rounds_and_product_passes"]}
         polarity: negative
         negative_type: stale-input
         title: 重新开工建立新上下文后已通过的场景保持通过
@@ -291,6 +308,7 @@ sops:
     scenarios:
 
       - id: SOP-05-P01
+        regression: {"check": "unit", "cases": ["test_scenario_acceptance.ScenarioAcceptance::test_run_waits_for_scenarios_and_pending_points_to_submit_with_root"]}
         polarity: positive
         title: 场景全部通过后 run 准备含场景结果的评审稿
         actor: 实施负责人
@@ -304,6 +322,7 @@ sops:
         evidence_hints: ["两次输出", "review.md"]
 
       - id: SOP-05-P02
+        regression: {"check": "unit", "cases": ["test_four_command_delivery.FourCommandDelivery::test_local_delivery_summary_states_ci_is_unverified"]}
         polarity: positive
         title: 简单任务按场景完成交付并报告一次通过率
         actor: 评审人
@@ -317,6 +336,7 @@ sops:
         evidence_hints: ["deliver 输出与摘要"]
 
       - id: SOP-05-N01
+        regression: {"check": "unit", "cases": ["test_scenario_acceptance.ScenarioAcceptance::test_failed_scenario_rejects_a_passed_review_and_names_its_state"]}
         polarity: negative
         negative_type: invalid-input
         title: 失败的场景阻止业务验收并点名
@@ -331,6 +351,7 @@ sops:
         evidence_hints: ["输出"]
 
       - id: SOP-05-P03
+        regression: {"check": "unit", "cases": ["test_scenario_rework.ScenarioFindingIdentity::test_prefilled_identity_uses_acceptance_owner_and_all_referencing_acceptances"]}
         polarity: positive
         title: 受阻场景的问题预填进评审稿，延期处置后验收通过
         actor: 评审人
@@ -344,6 +365,7 @@ sops:
         evidence_hints: ["review.md 的问题小节", "deliver 输出"]
 
       - id: SOP-05-N02
+        regression: {"check": "unit", "cases": ["test_scenario_acceptance.ScenarioAcceptance::test_blocked_requires_accepted_or_deferred_finding"]}
         polarity: negative
         negative_type: incomplete-input
         title: 受阻场景的问题仍为 open 时验收拒绝
@@ -358,6 +380,7 @@ sops:
         evidence_hints: ["输出"]
 
       - id: SOP-05-N03
+        regression: {"check": "unit", "cases": ["test_scenario_batch2.Batch2Regressions::test_start_reports_inline_scenario_or_manual_verification_line_without_new_context"]}
         polarity: negative
         negative_type: invalid-input
         title: 验收节写“验证：人工”时按行拒绝
@@ -381,6 +404,7 @@ sops:
     scenarios:
 
       - id: SOP-06-N01
+        regression: {"check": "unit", "cases": ["test_scenario_acceptance.ScenarioAcceptance::test_complex_accept_requires_cases_then_rechecks_current_union"]}
         polarity: negative
         negative_type: incomplete-input
         title: 复杂任务没有导入测试用例时验收拒绝
@@ -395,6 +419,7 @@ sops:
         evidence_hints: ["输出"]
 
       - id: SOP-06-N02
+        regression: {"check": "unit", "cases": ["test_scenario_acceptance.ScenarioAcceptance::test_complex_accept_requires_cases_then_rechecks_current_union"]}
         polarity: negative
         negative_type: stale-input
         title: 导入新用例后验收重新核对覆盖
@@ -409,6 +434,7 @@ sops:
         evidence_hints: ["输出"]
 
       - id: SOP-06-P01
+        regression: {"check": "unit", "cases": ["test_scenario_batch2.Batch2Regressions::test_delivery_lists_three_pending_regressions_and_one_automated"]}
         polarity: positive
         title: 回归未沉淀时交付摘要写明整体交付未完成
         actor: 评审人
@@ -422,6 +448,7 @@ sops:
         evidence_hints: ["deliver 输出与摘要"]
 
       - id: SOP-06-N03
+        regression: {"check": "unit", "cases": ["test_scenario_acceptance.ScenarioAcceptance::test_regression_is_generated_and_handwritten_automation_is_rejected"]}
         polarity: negative
         negative_type: tampered-input
         title: 交付报告手工写入 automation 时拒绝
@@ -445,6 +472,7 @@ sops:
     scenarios:
 
       - id: SOP-07-P01
+        regression: {"manual": "概念唯一定义与链接可达性需要通读文档确认；已有文档测试只核对部分链接与字段", "owner": "AdolphKevin", "trigger": "修改技能文档时"}
         polarity: positive
         title: 收尾条件、批准路径与工具职责各有唯一定义
         actor: 阅读技能的代理
@@ -458,6 +486,7 @@ sops:
         evidence_hints: ["检索命令与命中位置", "链接路径"]
 
       - id: SOP-07-N01
+        regression: {"manual": "肯定式句子需要跨行语义判断；文字检索提供候选而非语义结论", "owner": "AdolphKevin", "trigger": "修改技能文档时"}
         polarity: negative
         negative_type: stale-input
         title: 文本中没有版本对比句与双重否定
@@ -472,6 +501,7 @@ sops:
         evidence_hints: ["检索输出"]
 
       - id: SOP-07-P02
+        regression: {"manual": "看板职责的完整性需要通读说明并核对命令范围；已有测试只断言契约关键词", "owner": "AdolphKevin", "trigger": "修改技能文档时"}
         polarity: positive
         title: 场景指南把看板写成项目代理搭建的工具
         actor: 阅读技能的代理

@@ -43,7 +43,7 @@
 `commit.exists` 与 `reference.reachable` 是布尔值；提交号必须与请求逐字相同。
 `commit.author` 使用 git 作者的 `姓名 <邮箱>`，`time` 是作者时间；提交不存在时两者为 null。
 引用 `kind` 为 `commit/file/task/change/comment`；可选提交号也必须完整。
-提交缺失或引用不可达时核查失败。`file-url` 按参数缓存；未声明时链接转纯文本路径，见[方案展示](designs.md#发布与隐藏记录)。例如 GitHub 可拼出 `blob/<提交>/<路径>#片段`。
+核查需要本地可读取的提交与引用，具体缺口随核查结果列出。`file-url` 按参数缓存；未声明时链接转纯文本路径，见[方案展示](designs.md#发布与隐藏记录)。例如 GitHub 可拼出 `blob/<提交>/<路径>#片段`。
 
 ## 持续集成来源
 

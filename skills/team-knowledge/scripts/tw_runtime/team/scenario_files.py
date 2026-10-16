@@ -17,8 +17,8 @@ CONTENT_FIELDS = NONEMPTY_CONTENT_FIELDS + ('forbidden_effects',)
 class FileProblems(Invalid):
     def __init__(self, errors, code=Code.SCENARIO_FILE):
         self.errors = errors
-        super().__init__('；'.join(f'第 {row["line"]} 行：{row["problem"]}' for row in errors),
-                         error_code=code, line=errors[0]['line'])
+        super().__init__('；'.join((f'第 {row["line"]} 行：' if row.get('line') else '') + row['problem'] for row in errors),
+                         error_code=code, line=errors[0].get('line'))
 
     def result(self):
         return {'ok': False, 'error_code': self.error_code, 'problem': str(self), 'errors': self.errors}
@@ -126,7 +126,7 @@ def validate(document, profile):
                 if not isinstance(row.get('negative_type'), str) or row['negative_type'] not in NEGATIVE_TYPES:
                     v.add(p + ('negative_type',), 'negative_type 填已定义的反向类型')
             if not isinstance(row.get('verify'), str) or row['verify'] not in profile.get('acceptance_entries', {}):
-                v.add(p + ('verify',), 'verify 引用 acceptance_entries 已声明的入口：' + str(row.get('verify')))
+                v.add(p + ('verify',), '场景 ' + str(row.get('id')) + ' 的 verify 填写 acceptance_entries 中声明的入口名，当前为 ' + str(row.get('verify')))
             for key in CONTENT_FIELDS + ('refs', 'evidence_hints', 'tags'):
                 if key in required or key in row:
                     v.texts(row.get(key), p + (key,), nonempty=key in NONEMPTY_CONTENT_FIELDS)

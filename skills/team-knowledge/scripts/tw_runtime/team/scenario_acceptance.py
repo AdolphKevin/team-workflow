@@ -1,5 +1,5 @@
 """场景验收、评审绑定和回归状态共用的交付规则。"""
-from common import require
+from common import Invalid, require
 from error_codes import Code
 import design_files
 import materials
@@ -51,8 +51,11 @@ def check(root, profile, task, design, review, group, value):
     check_cases(root, profile, task, design, group)
     from contracts import independent
     incomplete = []
+    states = {key: [] for key in ('failed', 'pending', 'blocked')}
     findings = {row['id']: row for row in review.get('findings', [])}
     for row in value['scenarios']:
+        if row['state'] in states:
+            states[row['state']].append(row['id'])
         result = row.get('result')
         if result:
             independent(design, result['executor'], '场景执行者')
@@ -62,7 +65,10 @@ def check(root, profile, task, design, review, group, value):
             finding = findings.get(result['finding'], {})
             if finding.get('state') not in ('accepted', 'deferred'):
                 incomplete.append(row['id'] + '：blocked（问题 ' + result['finding'] + ' 需要 accepted 或 deferred 处置）')
-    require(not incomplete, '场景验收尚待完成：' + '；'.join(incomplete), error_code=Code.SCENARIO_ACCEPTANCE)
+    if incomplete:
+        error = Invalid('场景验收尚待完成：' + '；'.join(incomplete), error_code=Code.SCENARIO_ACCEPTANCE)
+        error.scenario_states = states
+        raise error
 
 
 def regression(root, profile, task, group, value, findings):
@@ -80,6 +86,13 @@ def regression(root, profile, task, group, value, findings):
             category = 'automated'
         status[category].append({'id': row['id'], **declared})
     return status
+
+
+def unverified_scope(value, findings):
+    states = {row['id']: row['state'] for row in findings}
+    return [{'scenario': row['id'], 'status': row['result']['status'],
+             'finding': row['result']['finding'], 'finding_state': states[row['result']['finding']]}
+            for row in value['scenarios'] if row['state'] == 'blocked']
 
 
 def findings(value, existing, design, task):
@@ -100,7 +113,7 @@ def findings(value, existing, design, task):
                 added[key] = {'id': key, 'summary': summary, 'owner': design['roles']['acceptance_owner'],
                               'affects': [], 'blocks': ['acceptance'], 'state': 'open', 'resolution': {}}
             else:
-                added[key]['summary'] += '；' + summary
+                added[key]['summary'] = added[key]['summary'].rstrip('。；; ') + '；' + summary
             added[key]['affects'] = sorted(set(added[key]['affects']) | affected.get(row['id'], set()))
     return list(added.values())
 

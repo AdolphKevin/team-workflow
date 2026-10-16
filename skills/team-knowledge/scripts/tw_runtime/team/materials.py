@@ -362,6 +362,7 @@ def record_status(args, root, result):
         return result
     from cleanup import guard
     from commands import local
+
     with guard(root):
         target = path(root, selection['task_id'])
         if sha(target) != selection['token']:
@@ -384,6 +385,17 @@ def finish(args, root, task, result, request):
         return request.finish(result)
     from cleanup import guard
     from commands import local
+    def finish_start():
+        if args.command == 'start':
+            from commands import current_status
+            progress = current_status(root, task['id'], (read(request.directory / 'request.json'), result))
+            for key in ('steps', 'next_step', 'step_lines', 'pending_sections'):
+                if key in progress:
+                    result[key] = progress[key]
+            if result.get('ok') and not result.get('validation_active'):
+                result['next_action'] = progress['next_action']
+        return request.finish(result)
+
     with guard(root):
         target = path(root, task['id'])
         latest, token = load_snapshot(root, task['id'])
@@ -391,7 +403,7 @@ def finish(args, root, task, result, request):
             if token != selection['token']:
                 raise MaterialGap('current', '另一个 start 同时改变了材料组，本次未写入；换请求编号重试', task['id'])
             if result['continued'] and latest:
-                return request.finish(result)
+                return finish_start()
             updated = initial(root, task['id'], result['context'], args.start_selection['platform'], previous=latest)
         elif latest:
             if latest['context'] != selection['value']['context']:
@@ -436,7 +448,7 @@ def finish(args, root, task, result, request):
                 editor_before = read(editor_path)
                 reviews.mark_submitted(root, task['id'], result)
             write(target, updated)
-            return request.finish(result)
+            return finish_start()
         except BaseException:
             if editor_before is not None:
                 write(editor_path, editor_before)

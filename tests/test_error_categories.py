@@ -22,6 +22,20 @@ from test_designs import example
 
 
 class ErrorCategories(unittest.TestCase):
+    def test_scenario_repair_uses_states_with_arbitrary_problem_text(self):
+        from workflow import parser
+        import repairs
+        args = parser().parse_args(['deliver', '--root', '/tmp', '--task', 'T'])
+        for problem in ('甲', 'failed pending blocked review'):
+            for states, command in (({'failed': ['S1'], 'pending': [], 'blocked': ['S2']}, 'scenarios pending'),
+                                    ({'failed': [], 'pending': ['S1'], 'blocked': ['S2']}, 'scenarios pending'),
+                                    ({'failed': [], 'pending': [], 'blocked': ['S2']}, 'review')):
+                result = repairs.annotate(args, {'ok': False, 'error_code': 'scenario-acceptance-incomplete',
+                                                'problem': problem, 'scenario_states': states})
+                self.assertIn('tw team ' + command, result['next_action'])
+                if command == 'review':
+                    self.assertIn('--submit', result['next_action'])
+
     def test_generic_object_errors_are_independent_of_field_words(self):
         for fields in ({'approval_notes'}, {'reporter'}, {'arbitrary'}):
             with self.subTest(fields=fields):

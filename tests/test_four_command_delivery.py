@@ -111,6 +111,51 @@ class FourCommandDelivery(unittest.TestCase):
         self.assertIn('--submit', result['next_action'])
         self.assertIsNone(self.current()['review'])
 
+    def assert_start_matches_status(self, complexity, next_id):
+        self.configure(complexity)
+        code, started = self.command('start', '--task', '.tw/local/task.json', '--design', '.tw/local/design.md')
+        self.assertEqual(code, 0, started)
+        code, status = self.command('status', '--task', self.task['id'])
+        self.assertEqual(code, 0, status)
+        self.assertEqual(started['next_step'], status['next_step'])
+        self.assertEqual(started['steps'], status['steps'])
+        self.assertIn('场景验收', [row['label'] for row in started['steps']])
+        self.assertEqual(started['next_step']['id'], next_id)
+        self.assertEqual(started['next_action'], status['next_action'])
+        self.assertIn('--task ' + self.task['id'], started['next_action'])
+        code, continued = self.command('start', '--task', self.task['id'])
+        self.assertEqual(code, 0, continued)
+        code, latest = self.command('status', '--task', self.task['id'])
+        self.assertEqual(code, 0, latest)
+        self.assertEqual(continued['steps'], latest['steps'])
+        self.assertEqual(continued['next_step'], latest['next_step'])
+        self.assertEqual(continued['next_action'], latest['next_action'])
+
+    def test_simple_start_and_status_share_steps_and_next_command(self):
+        self.assert_start_matches_status('simple', 'run')
+
+    def test_medium_start_and_status_share_steps_and_next_command(self):
+        self.assert_start_matches_status('medium', 'approval')
+
+    def test_local_delivery_summary_states_ci_is_unverified(self):
+        self.reviewed()
+        code, result = self.command('deliver', '--task', self.task['id'], '--reason', '现有知识已覆盖')
+        self.assertEqual(code, 0, result)
+        self.assertEqual(result['ci_verified_checks'], [])
+        self.assertIn('检查只在本机运行，CI 未验证', result['summary_markdown'])
+        self.assertTrue(result['business_accepted'])
+        self.assertTrue(result['delivery_complete'])
+        self.assertIn('场景汇总：', result['summary_markdown'])
+        self.assertIn('一次通过率：', result['summary_markdown'])
+
+    def test_start_text_has_one_next_step(self):
+        self.configure()
+        result = subprocess.run([sys.executable, str(TW), '--root', str(self.root), 'team', 'start',
+            '--task', '.tw/local/task.json', '--design', '.tw/local/design.md', '--format', 'text'],
+            capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stdout)
+        self.assertEqual(result.stdout.count('下一步：'), 1, result.stdout)
+
     def test_failed_run_does_not_create_review(self):
         self.start(passed=False)
         code, result = self.command('run', '--task', self.task['id'])

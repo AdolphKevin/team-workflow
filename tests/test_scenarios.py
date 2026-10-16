@@ -44,9 +44,11 @@ class ScenarioCases(unittest.TestCase):
     def test_check_fingerprints_track_only_declared_content(self):
         value = scenario_file()
         path = self.save(value)
+        before = {p.relative_to(self.root): p.read_bytes() for p in self.root.rglob('*') if p.is_file()}
         code, first = self.call('scenarios', 'check', path)
         self.assertEqual(code, 0, first)
         self.assertEqual(set(first['fingerprints']), {'S-P', 'S-N'})
+        self.assertEqual(before, {p.relative_to(self.root): p.read_bytes() for p in self.root.rglob('*') if p.is_file()})
         value['sops'][0]['scenarios'][0]['title'] = '新标题'
         _, same = self.call('scenarios', 'check', self.save(value))
         self.assertEqual(first['fingerprints'], same['fingerprints'])
@@ -58,11 +60,25 @@ class ScenarioCases(unittest.TestCase):
     def test_missing_negative_and_exemption(self):
         value = scenario_file()
         value['sops'][0]['scenarios'].pop()
-        code, result = self.call('scenarios', 'check', self.save(value))
+        path = self.save(value)
+        before = path.read_bytes()
+        code, result = self.call('scenarios', 'check', path)
         self.assertEqual((code, result['error_code']), (1, 'scenario-file-invalid'))
         self.assertIn('S', result['problem'])
+        self.assertTrue(all(row['line'] > 0 for row in result['errors']))
+        self.assertEqual(path.read_bytes(), before)
         value['sops'][0]['negative_exempt'] = '本节点由另一组反向场景覆盖'
         self.assertEqual(self.call('scenarios', 'check', self.save(value))[0], 0)
+
+    def test_undeclared_entry_names_scenario_value_and_source_line(self):
+        value = scenario_file()
+        value['sops'][0]['scenarios'][0]['verify'] = 'web'
+        path = self.save(value)
+        code, result = self.call('scenarios', 'check', path)
+        self.assertEqual((code, result['error_code']), (1, 'scenario-file-invalid'))
+        error = next(row for row in result['errors'] if 'verify' in row['problem'])
+        self.assertEqual(error['problem'], '场景 S-P 的 verify 填写 acceptance_entries 中声明的入口名，当前为 web')
+        self.assertEqual(error['line'], next(i for i, line in enumerate(path.read_text().splitlines(), 1) if '"verify": "web"' in line))
 
     def test_all_errors_include_lines_and_strict_fields(self):
         value = scenario_file()

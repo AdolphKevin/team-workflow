@@ -57,7 +57,7 @@ class TaskProgress(unittest.TestCase):
         self.assertIn('shopify-partner', context['login_policy']['user_signs_in'])
         self.assertEqual(context['authorizations_needed'][0]['accounts'], ['e2e-owner'])
         self.assertIn('真实账号仍由你本人', context['authorizations_needed'][0]['question'])
-        self.assertTrue(context['next_action'].startswith('tw team approval-draft '))
+        self.assertTrue(prepared['next_action'].startswith('tw team run '))
         code, refused = self.cli('start', '--task', self.name('task'), '--design', self.name('design'), '--grant', 'synthetic-login')
         self.assertEqual(code, 1)
         self.assertIn('--confirmed-by', refused['problem'])

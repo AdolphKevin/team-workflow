@@ -79,8 +79,11 @@ CODE_ACTIONS = {
 }
 
 
-def action(args, existing=None, error_code=None, checks=None):
+def action(args, existing=None, error_code=None, checks=None, scenario_states=None):
     """依次采用代码对应的修复、来源下一步、命令默认下一步。"""
+    if error_code == Code.SCENARIO_ACCEPTANCE and scenario_states and scenario_states.get('blocked') and not any(
+            scenario_states.get(key) for key in ('failed', 'pending')):
+        return '在评审的问题小节填写处置后，' + review_submission(args)
     if error_code in CODE_ACTIONS:
         return CODE_ACTIONS[error_code](args, checks)
     if args.command not in COMMANDS:
@@ -163,7 +166,7 @@ def annotate(args, result):
         if source is not None or result.get('error_code') == Code.TOOL_DEFECT or args.command == 'run' and result.get('checks'):
             result.setdefault('source_next_action', source)
         result['next_action'] = action(args, source,
-                                       result.get('error_code'), result.get('checks'))
+                                       result.get('error_code'), result.get('checks'), result.get('scenario_states'))
     return result
 
 

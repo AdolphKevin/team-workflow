@@ -6,7 +6,7 @@
 
 方案分为范围、接口、数据、验收和实施任务。任务关联验收与修改范围，完整业务验收列在全局范围；前置任务提供业务验收记录。
 
-任务的 `scope` 是仓库相对路径前缀：路径本身及下级均在范围内，`.` 表示整个仓库。与任务 `paths` 共用规范化：折叠 `./` 段、重复斜杠和结尾 `/`；绝对路径、`..`、反斜杠、NUL 和通配符报错。比较时规范化，保留入库原文；简报的目录与仓库根规则见[方案 R2](../../../docs/proposals/2026-10-14-unified-redesign.md#r2-brief-选择算法)。
+任务的 `scope` 是仓库相对路径前缀：路径本身及下级均在范围内，`.` 表示整个仓库。与任务 `paths` 共用规范化：折叠 `./` 段、重复斜杠和结尾 `/`；绝对路径、`..`、反斜杠、NUL 和通配符报错。比较时规范化，保留入库原文；简报把 `.`、已存在的目录和以 `/` 结尾的路径按目录读取；`.` 表示整个仓库，只按任务文字、标签和符号选条目。
 
 父方案和子任务分别评估复杂度、风险、工作量、依据、未决事项与所需能力，任务节评估覆盖方案评估。任务按评估结果归类，缺少评估时报告缺口。批准路径为：
 
@@ -51,7 +51,7 @@
 | `design` | `id` | 稳定方案编号，字符串 |
 | `task` | `task_id` | 所属任务编号或规范地址，字符串 |
 | `revision` | `revision` | 正整数，每次发布加一 |
-| `assessment` | `assessment` | `complexity`、`risks`、`effort`、`drivers`、`uncertainties`、`required_skills` |
+| `assessment` | `assessment` | `complexity` 取 `simple`、`medium`、`complex`；另含 `risks`、`effort`、`drivers`、`uncertainties`、`required_skills` |
 | `roles` | `roles` | `design_owner`、`implementation_owner`、`acceptance_owner` |
 | 自动补齐 | `data_version`、`kind` | 固定为 `1`、`design` |
 

@@ -160,7 +160,7 @@ def check_coverage(document, cases, identifiers):
         if len(assigned) != 1 or assigned[0] == 'conflict':
             category = 'unclassified' if not assigned else assigned[0] if len(assigned) == 1 else 'duplicate'
             incomplete.append({'case': key, 'category': category})
-            v.add((), '用例 ' + key + '：' + category)
+            v.errors.append({'problem': '用例 ' + key + '：' + category})
     if v.errors:
         result = scenario_files.FileProblems(v.errors, Code.SCENARIO_COVERAGE).result()
         result['cases'] = incomplete

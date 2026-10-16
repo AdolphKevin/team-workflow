@@ -18,6 +18,19 @@ def sha(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def markdown_links(root, path, text):
+    """技能文档的相对引用随发行物一起分发。"""
+    from urllib.parse import unquote
+    for link in re.findall(r'\]\(([^)]+)\)', re.sub(r'```.*?```', '', text, flags=re.DOTALL)):
+        link = link.strip().removeprefix('<').removesuffix('>')
+        if re.match(r'[a-zA-Z][a-zA-Z0-9+.-]*:', link) or link.startswith(('#', '//')):
+            continue
+        target = (path.parent / unquote(link.split('#')[0])).resolve()
+        if path.is_relative_to(root / 'skills'):
+            assert target.is_relative_to((root / 'skills').resolve()), f'skill link must stay in skills/: {path.relative_to(root)} -> {link}'
+        assert target.is_file(), f'broken file link: {path.relative_to(root)} -> {link}'
+
+
 def check(root=ROOT):
     manifest = json.loads((root / 'plugin.json').read_text())
     version = (root / 'VERSION').read_text().strip()
@@ -87,11 +100,7 @@ def check(root=ROOT):
                         r'-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----'):
             assert not re.search(pattern, text), f'private material in {path.relative_to(root)}'
         if path.suffix == '.md':
-            for link in re.findall(r'\]\(([^)]+)\)', re.sub(r'```.*?```', '', text, flags=re.DOTALL)):
-                if '://' in link or link.startswith(('#', '<')):
-                    continue
-                target = link.split('#')[0]
-                assert (path.parent / target).is_file(), f'broken file link: {path.relative_to(root)} -> {link}'
+            markdown_links(root, path, text)
     assert not (root / 'skills/cs').exists(), 'Legacy CS runtime must not be shipped'
     assert not (root / 'skills/team-workflow/scripts').exists(), 'Team runtime must live in tw_runtime/team'
     assert (root / 'skills/team-knowledge/scripts/tw_runtime/team/workflow.py').is_file()

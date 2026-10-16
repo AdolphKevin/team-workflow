@@ -58,7 +58,7 @@ class Code:
 
 def fields(exc):
     return {'error_code': getattr(exc, 'error_code', Code.INVALID),
-            **{key: getattr(exc, key) for key in ('section', 'line', 'key')
+            **{key: getattr(exc, key) for key in ('section', 'line', 'key', 'scenario_states')
                if getattr(exc, key, None) is not None}}
 
 

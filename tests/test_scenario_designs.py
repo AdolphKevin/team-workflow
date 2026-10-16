@@ -42,6 +42,10 @@ class ScenarioDesignCases(unittest.TestCase):
         self.save(changed)
         after = design_files.read(design_path)
         self.assertNotEqual(designs.fingerprints(before)['sections']['A1'], designs.fingerprints(after)['sections']['A1'])
+        changed['sops'][0]['scenarios'][0]['expected'] = ['确认后的新预期']
+        self.save(changed)
+        content_changed = design_files.read(design_path)
+        self.assertNotEqual(designs.fingerprints(after)['sections']['A1'], designs.fingerprints(content_changed)['sections']['A1'])
         frozen, _ = design_files.source(self.root, ref)
         self.assertEqual(frozen, before)
         self.assertNotEqual(revision, commit)

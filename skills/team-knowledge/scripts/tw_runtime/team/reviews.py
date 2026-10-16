@@ -356,7 +356,7 @@ def render(value):
         return [_field('复核', '待复核')] if section in value.get('rechecks', []) else []
 
     lines = ['# 任务评审', '', '只填写下方评审字段；工具绑定、运行结果和风险列表保持原样。',
-             '结论填写“通过”或“不通过”；证据文件可留空，补充时每行一个项目内路径。', '',
+             '结论填写“通过”或“不通过”；证据文件可留空，补充时每行一个项目内路径。知识冲突已处理在没有冲突时填“是”。', '',
              BIND_START, records.comment(binding), BIND_END, '']
     if value.get('changes'):
         lines += ['## 变化', _protected('changes', value['generated']['changes']), '',

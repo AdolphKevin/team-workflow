@@ -109,7 +109,7 @@ def _ancestors(graph):
 
 def validate_assessment(assessment):
     obj(assessment, {'complexity', 'risks', 'effort', 'drivers', 'uncertainties', 'required_skills'})
-    require(assessment['complexity'] in ('simple', 'medium', 'complex'), 'Invalid design complexity')
+    require(assessment['complexity'] in ('simple', 'medium', 'complex'), '复杂度 complexity 取 simple、medium、complex')
     text(assessment['effort'])
     for key in ('risks', 'drivers', 'uncertainties', 'required_skills'):
         strings(assessment[key])

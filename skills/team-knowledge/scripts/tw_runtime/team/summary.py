@@ -21,7 +21,7 @@ def render(result, task, profile=None):
     lines = [f'**任务**：{task.get("goal", task["id"])}（{task["id"]}）', '']
     lines.append('**验证了哪些业务场景**')
     named_cases = result.get('named_cases', {})
-    lines += _lines([f'{row["id"]}：{row["expectation"]}'
+    lines += _lines([f'{row["id"]}：' + row['expectation'].rstrip('。；; ')
                      + ('；用例 ' + '、'.join(named_cases[row['id']]) if named_cases.get(row['id']) else
                         '；未指明用例，证据为整项检查通过' if row['id'] in result.get('unspecified_cases', []) else '')
                      for row in task.get('acceptance', [])], '没有登记验收场景')
@@ -39,7 +39,8 @@ def render(result, task, profile=None):
     environment = result.get('environment_checked')
     if environment:
         lines.append(f'- 运行环境：{"本次实际核对" if environment == "now" else "沿用业务验收当时记录的环境"}')
-    open_items = []
+    ci_checks = result.get('ci_verified_checks', [])
+    open_items = ['导入的 CI 检查：' + '、'.join(ci_checks)] if ci_checks else ['检查只在本机运行，CI 未验证']
     if result.get('regression_pending'):
         open_items.append('整体交付未完成：以下场景尚未沉淀回归')
         open_items += [row['id'] for row in result['automation_status']['pending']]
@@ -48,6 +49,10 @@ def render(result, task, profile=None):
     if result.get('tool', {}).get('override'):
         open_items.append('本次使用了被修改过的工具安装（已显式允许并记录）')
     lines += ['', '**还没做或需要注意的**'] + _lines(open_items, '没有')
+    if result.get('unverified_scope'):
+        lines += ['', '**未验证范围**'] + [
+            '- ' + row['scenario'] + '：' + row['status'] + '；问题 ' + row['finding'] + '：' + row['finding_state']
+            for row in result['unverified_scope']]
     knowledge = result.get('knowledge_disposition')
     if knowledge:
         lines += ['', f'**知识处置**：{knowledge}']

@@ -143,8 +143,7 @@ def pending_action(root, task_id):
     return repairs.task_command(root, task_id, 'scenarios pending')
 
 
-def pending_result(root, task_id, value):
-    rows = [row for row in value['scenarios'] if row['state'] in ('pending', 'failed')]
+def pending_lines(rows, counts):
     lines = []
     for row in rows:
         lines += [row['id'] + ' · ' + row['node'] + ' · ' + row['title'] + '（' + row['reason'] + '）',
@@ -154,10 +153,15 @@ def pending_result(root, task_id, value):
         for key, label in (('initial_state', '初始状态'), ('steps', '步骤'), ('expected', '预期结果'),
                            ('forbidden_effects', '核对副作用')):
             lines += [label + ('：' if row[key] else '：无')] + ['  ' + str(i) + '. ' + text for i, text in enumerate(row[key], 1)]
-    counts = value['summary_counts']
     lines.append('当前汇总：' + '，'.join(key + ' ' + str(counts[key]) for key in counts))
+    return lines
+
+
+def pending_result(root, task_id, value):
+    rows = [row for row in value['scenarios'] if row['state'] in ('pending', 'failed')]
     from commands import current_status
-    return {'ok': True, 'task_id': task_id, **value, 'pending': rows, 'pending_count': len(rows), 'lines': lines,
+    return {'ok': True, 'task_id': task_id, **{key: item for key, item in value.items() if key != 'scenarios'},
+            'pending': rows, 'pending_count': len(rows),
             'summary': f'本任务有 {len(rows)} 条待执行场景。',
             'next_action': ('按清单执行场景，然后提交结果：' + repairs.task_command(
                 root, task_id, 'scenarios submit', '--results <文件>')) if rows else current_status(root, task_id)['next_action']}

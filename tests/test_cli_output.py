@@ -13,6 +13,13 @@ import commands
 
 
 class CLIOutput(Case):
+    def test_summary_joins_expectation_and_case_with_one_separator(self):
+        import summary
+        value = summary.render({'named_cases': {'A1': ['CalcTests::test_add']}},
+            {'id': 'T', 'acceptance': [{'id': 'A1', 'expectation': '结果正确。'}]})
+        self.assertIn('A1：结果正确；用例 CalcTests::test_add', value)
+        self.assertNotIn('。；', value)
+
     def test_team_results_use_selected_format(self):
         cases = [
             ('success', {'ok': True, 'summary': '检查完成',
