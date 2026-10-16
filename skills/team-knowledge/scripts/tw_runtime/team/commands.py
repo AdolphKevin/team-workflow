@@ -268,7 +268,7 @@ def dispatch(args, root):
     if args.command == 'metrics':
         import metrics
         from artifacts import directory
-        task_ids = [read(local(root, args.task))['id']] if args.task else [args.issue] if args.issue else sorted(
+        task_ids = [(read(local(root, args.task))['id'] if (root / args.task).is_file() else str(args.task))] if args.task else [args.issue] if args.issue else sorted(
             {read(p).get('task_id') for p in (root / '.tw/local/tasks').glob('*/requests/*/request.json')} - {None})
         rows = [metrics.task_metrics(root, task_id, args.since) for task_id in task_ids]
         return {'ok': True, 'kind': 'workflow-metrics', 'read_only': True, 'metrics': rows,
@@ -894,6 +894,9 @@ def status(args, root, profile, task, platform=None):
         value.pop('missing', None)
         value.pop('stale', None)
     approval_recovery(args, value, value)
+    import scenario_rounds
+    scenario_rounds.status_step(root, profile, task['id'], progress,
+                               (getattr(args, 'material_selection', None) or {}).get('effective'))
     value['step_lines'] = checklist.render(progress)
     if progress.get('rules_changed'):
         value['step_lines'].append('注意：开始任务后团队流程规则已更新；按当前规则核对已完成的步骤。')

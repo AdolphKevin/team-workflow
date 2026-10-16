@@ -164,8 +164,11 @@ class ReviewFeedbackStatus(unittest.TestCase):
         for key in ('business_accepted', 'delivery_complete', 'closable', 'regression_pending', 'delivery'):
             self.assertNotIn(key, status)
         self.assertEqual(status['verified_records'], {})
-        for row in status['steps'][3:]:
-            self.assertIn('tw team deliver', row['next_command'])
+        by_id = {row['id']: row for row in status['steps']}
+        # 保留原来的三个交付步骤断言；场景展示插入后按步骤身份核对。
+        for key in ('acceptance', 'knowledge', 'delivery'):
+            self.assertIn('tw team deliver', by_id[key]['next_command'])
+        self.assertIn('tw team scenarios pending', by_id['scenarios']['next_command'])
         code, accepted = self.command('accept', '--task', self.task['id'])
         self.assertEqual(code, 0, accepted)
         code, status = self.command('status', '--task', self.task['id'])
@@ -226,8 +229,11 @@ class ReviewFeedbackStatus(unittest.TestCase):
         code, status = self.command('status', '--task', self.task['id'])
         self.assertEqual(code, 0, status)
         self.assertEqual(status['verified_records'], {})
-        for row in status['steps'][1:]:
-            self.assertEqual(row['state'], 'stale', row)
+        by_id = {row['id']: row for row in status['steps']}
+        for key in ('run', 'review', 'acceptance', 'knowledge', 'delivery'):
+            self.assertEqual(by_id[key]['state'], 'stale', by_id[key])
+        # 场景状态使用自己的产品与内容指纹，本夹具尚有两条待执行场景。
+        self.assertEqual(by_id['scenarios']['summary_counts']['pending'], 2)
 
     def test_explicit_new_design_expires_material_dependent_steps(self):
         self.reviewed()

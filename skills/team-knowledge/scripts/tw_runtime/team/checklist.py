@@ -186,6 +186,12 @@ def render(value):
              'not-recorded': '（工具没有记录，可能已在工具外完成）'}
     lines = [f'{i}. {marks[row["state"]]} {row["label"]}' + (f'（{row["stale_reason"]}）' if row.get('stale_reason') else words[row['state']]) + ('（使用了被修改的工具安装）' if row.get('note') else '')
              for i, row in enumerate(value['steps'], 1)]
+    for index, row in reversed(list(enumerate(value['steps']))):
+        if row['id'] == 'scenarios':
+            counts, rate = row['summary_counts'], row['first_pass']
+            lines.insert(index + 1, '   当前汇总：' + '，'.join(key + ' ' + str(counts[key]) for key in counts)
+                         + f'；一次通过率 {rate["numerator"]}/{rate["denominator"]}')
+            lines.insert(index + 2, '   下一步：' + row['next_command'])
     if value['next_step']:
         lines += ['', '下一步：' + value['next_step']['label'], value['next_step']['next_command']]
     else:

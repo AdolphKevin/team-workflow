@@ -49,6 +49,8 @@ def repeat_command(args):
 
 
 CODE_ACTIONS = {
+    Code.SCENARIO_RESULT: lambda args, checks: '修正结果文件中列出的行，再运行 tw team scenarios submit --task <身份> --results <文件>。',
+    Code.SCENARIO_RESULTS_INCOMPLETE: lambda args, checks: '按列出的场景补齐结果后重新提交：tw team scenarios submit --task <身份> --results <文件>。',
     Code.SCENARIO_FILE: lambda args, checks: '修正场景文件中列出的问题后重跑 tw team scenarios check <文件>。',
     Code.CASE_LIST: lambda args, checks: '修正用例文件中列出的问题后重跑 tw team scenarios import-cases --task <身份> <文件>。',
     Code.SCENARIO_COVERAGE: lambda args, checks: '按列出的用例补齐配对或场景后重跑 tw team scenarios coverage --task <身份> --pairs <配对文件>。',

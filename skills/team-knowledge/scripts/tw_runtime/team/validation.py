@@ -106,6 +106,23 @@ def source_digest(root, profile, *, revision=None):
     return digest(source(root, profile, revision=revision))
 
 
+def acceptance_materials(root, design):
+    """本任务方案原文及验收节引用的场景，供范围核对与产品指纹共同采用。"""
+    from design_files import declares
+    names = {os.fsdecode(name) for name in git(root, 'ls-files', '--cached', '--others', '--exclude-standard', '-z').split(b'\0') if name}
+    paths = {name for name in names if name.endswith('.md') and declares(root / name, design)}
+    paths.update(ref['path'] for section in design['sections'] if section['type'] == 'acceptance'
+                 for ref in section['data']['scenarios'])
+    return paths
+
+
+def product_digest(root, profile, design):
+    state = source(root, profile)
+    materials = acceptance_materials(root, design)
+    state['files'] = {name: value for name, value in state['files'].items() if name not in materials}
+    return digest(state)
+
+
 def effective_base(root, base):
     """Where the task last met the remote default branch, like a pull request's diff; else the recorded base.
 
@@ -132,8 +149,7 @@ def changed_paths(root, task, profile=None, design=None):
         names.update(os.fsdecode(n) for n in git(root, *args).split(b'\0') if n)
     inputs = (profile or {}).get('inputs', [])
     if design is not None:
-        from design_files import declares
-        names = {n for n in names if not (n.endswith('.md') and declares(os.path.join(root, n), design))}
+        names -= acceptance_materials(root, design)
     return sorted(n for n in names if not reserved(n, inputs) and
                   (n != '.tw/config.json' or explicit_input(n, inputs)))
 
@@ -278,7 +294,7 @@ def _run_batch(root, profile, tasks, selected=None, directory=None, portable=Fal
     return path, record
 
 
-def verify_runs(root, profile, task, paths, live=True):
+def verify_runs(root, profile, task, paths, live=True, *, checks=None):
     """Select one current, passing result for every required check.
 
     A stale row no longer invalidates its whole batch: other rows stay usable and a focused
@@ -286,6 +302,9 @@ def verify_runs(root, profile, task, paths, live=True):
     with the current required cases, so a registration fix needs no re-run.
     """
     required = set(task_valid(task, profile, root))
+    if checks is not None:
+        required = set(checks)
+        require(required <= profile['checks'].keys(), '检查已登记：' + '、'.join(sorted(required)))
     candidates = {key: [] for key in required}
     records, bindings = [], {}
 

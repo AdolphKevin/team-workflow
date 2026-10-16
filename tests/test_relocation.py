@@ -1,5 +1,7 @@
 """Execution evidence remains current when an unchanged checkout changes location."""
 from copy import deepcopy
+from datetime import datetime, timezone
+import json
 from pathlib import Path
 import shutil
 import tempfile
@@ -113,6 +115,16 @@ class RelocationCases(unittest.TestCase):
 
     def test_completed_delivery_and_preparation_continue_after_copy(self):
         accepted = self.accepted()
+        # 全部步骤完成的夹具也完成新增的场景展示步骤，保留搬迁后的逐项断言。
+        scenarios = read(self.root / 'tests/fixtures/scenarios.json')
+        evidence = Path(accepted['artifact']['path']).relative_to('.tw/local').as_posix()
+        results = self.root / '.tw/local/relocation-scenarios.jsonl'
+        results.write_text(''.join(json.dumps({'scenario': row['id'], 'status': 'pass',
+            'actual': '独立夹具已核对场景结果', 'executor': 'carol',
+            'executed_at': datetime.now(timezone.utc).isoformat(), 'evidence': [evidence]}) + '\n'
+            for node in scenarios['sops'] for row in node['scenarios']))
+        code, submitted = self.command('scenarios', 'submit', '--task', self.task['id'], '--results', str(results))
+        self.assertEqual(code, 0, submitted)
         code, delivered = self.command('deliver', '--task', self.task['id'], '--reason', 'No reusable knowledge changed.')
         self.assertEqual(code, 0, delivered)
         before = self.current()

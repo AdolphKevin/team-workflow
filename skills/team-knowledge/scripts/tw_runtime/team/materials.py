@@ -15,7 +15,7 @@ COMMANDS = {'start', 'run', 'status', 'review', 'approval-draft', 'accept', 'del
             'verify', 'handoff', 'progress', 'task-export'}
 SINGLE = ('context', 'task', 'design', 'brief', 'review', 'acceptance', 'delivery_report', 'delivery')
 OPTIONAL = ('review_markdown', 'review_source')
-OPTIONAL_ARRAY = ('case_imports',)
+OPTIONAL_ARRAY = ('case_imports', 'scenario_rounds')
 OPTIONAL_SCENARIOS = ('case_coverage',)
 ARRAY = ('design_history', 'approvals', 'runs')
 OPTIONS = {'context': 'context', 'design': 'design', 'brief': 'brief', 'design_history': 'design_history',
@@ -145,7 +145,7 @@ def resolve(args, root):
             if field in supplied_report:
                 replaced.add(key)
     switched = bool(explicit.get('context') and artifact(root, local(root, args.context)) != value['context'])
-    defaults = initial(root, task_id, artifact(root, local(root, args.context))) if switched else value
+    defaults = initial(root, task_id, artifact(root, local(root, args.context)), previous=value) if switched else value
     snapshot.update(effective=defaults, context_switched=switched)
     snapshot['stale_roles'] = []
     validate(root, defaults, replaced)
@@ -250,7 +250,7 @@ def fingerprint(args, root):
     return result
 
 
-def initial(root, task_id, context_ref, platform=None):
+def initial(root, task_id, context_ref, platform=None, *, previous=None):
     context = read(checked(root, context_ref, 'context', task_id))
     value = {'data_version': 1, 'kind': 'current-materials', 'task_id': task_id, 'selected_runs': None,
              'review_markdown': None,
@@ -259,6 +259,8 @@ def initial(root, task_id, context_ref, platform=None):
     value.update(context=context_ref, **{key: context[key] for key in ('task', 'design', 'brief', 'approvals', 'design_history')})
     if platform:
         value['platform'] = platform_signature(platform)
+    if previous:
+        value.update({key: previous[key] for key in OPTIONAL_ARRAY + OPTIONAL_SCENARIOS if key in previous})
     return value
 
 
@@ -382,9 +384,7 @@ def finish(args, root, task, result, request):
                 raise MaterialGap('current', '另一个 start 同时改变了材料组，本次未写入；换请求编号重试', task['id'])
             if result['continued'] and latest:
                 return request.finish(result)
-            updated = initial(root, task['id'], result['context'], args.start_selection['platform'])
-            if latest:
-                updated.update({key: latest[key] for key in OPTIONAL_ARRAY + OPTIONAL_SCENARIOS if key in latest})
+            updated = initial(root, task['id'], result['context'], args.start_selection['platform'], previous=latest)
         elif latest:
             if latest['context'] != selection['value']['context']:
                 raise MaterialGap('context', '另一个 start 已取代本次上下文，请重新 start', task['id'])

@@ -83,7 +83,8 @@ def import_cases(root, task_id, path):
             'artifact': ref, 'summary': '用例快照已登记，累积集合已更新。'}
 
 
-def task_scenarios(root, group):
+def task_entries(root, group, profile):
+    """按本任务验收节引用的节点读取完整场景，平台材料沿用方案提交。"""
     import design_files
     design = design_files.read(materials.checked(root, group['design'], 'design', group['task_id']))
     # 平台方案已由其不可变原文解析，场景读取沿用同一提交。
@@ -92,21 +93,35 @@ def task_scenarios(root, group):
         platform = coordination.load(group['task_id'], root=root)
         design = platform['design']
         reference = platform['design_source']
+        reader = design_files.scenario_reader(root)
         if reference:
             checkout = design_files._checkout(root, reference['repository'])
             reader = design_files.scenario_reader(checkout, reference['commit'])
     else:
         reader = design_files.scenario_reader(root)
-    identifiers = set()
+    task = read(materials.checked(root, group['task'], 'task', group['task_id']))
+    acceptance = {row['id'] for row in task['acceptance']}
+    entries = {}
     for section in design['sections']:
-        if section['type'] != 'acceptance':
+        if section['type'] != 'acceptance' or section['id'] not in acceptance:
             continue
         for ref in section['data']['scenarios']:
             value, _ = reader(ref['path'])
             for node in value['sops']:
                 if node['id'] in ref['nodes']:
-                    identifiers.update(row['id'] for row in node['scenarios'])
-    return identifiers
+                    for row in node['scenarios']:
+                        entry = {**row, 'node': node['id'], 'file': ref['path'],
+                                 'fingerprint': scenario_files.fingerprint(row),
+                                 'acceptance_entry': profile.get('acceptance_entries', {}).get(row['verify'])}
+                        require(row['id'] not in entries or entries[row['id']] == entry,
+                                '场景编号在本任务中唯一：' + row['id'], error_code=Code.SCENARIO_FILE)
+                        entries[row['id']] = entry
+    return design, task, entries
+
+
+def task_scenarios(root, group):
+    from common import load_profile
+    return set(task_entries(root, group, load_profile(root))[2])
 
 
 def coverage(root, task_id, path):
@@ -168,6 +183,12 @@ def dispatch(args, root, profile):
             return scenario_files.check(root / args.file, profile)
         if args.scenario_action == 'import-cases':
             return import_cases(root, str(args.task), root / args.file)
+        if args.scenario_action == 'pending':
+            import scenario_rounds
+            return scenario_rounds.pending(root, str(args.task), profile)
+        if args.scenario_action == 'submit':
+            import scenario_rounds
+            return scenario_rounds.submit(root, str(args.task), profile, root / args.results)
         return coverage(root, str(args.task), root / args.pairs)
     except scenario_files.FileProblems as exc:
         return exc.result()
