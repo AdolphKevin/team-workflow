@@ -7,7 +7,7 @@ import test_workflow as fixtures
 from unittest.mock import patch
 
 import test_delivery
-from common import Invalid, artifact
+from common import Invalid, artifact, read
 import coordination
 import delivery
 from tw_runtime.team import platform_script as platform_read
@@ -91,6 +91,22 @@ class CloseNote(unittest.TestCase):
         self.assertTrue(again['delivery_complete'])
         self.assertTrue(again['closable'])
         self.assertNotIn('close_note', again)
+
+    def test_superseded_failed_run_does_not_block_the_close_note(self):
+        # Real case (Issue #5): unit failed before a fix and later passed; acceptance used the passing run,
+        # but drafting the close note re-inspected every listed run and refused the superseded failure.
+        app = self.root / 'app.py'
+        original = app.read_text()
+        app.write_text('def add(a, b):\n    return a-b\n')
+        failed, _ = validation.run_batch(self.root, self.profile, [self.task])
+        app.write_text(original)
+        self.report['runs'] = [failed.relative_to(self.root).as_posix()] + self.runs
+        self.accept_and_record_knowledge()
+        superseded = read(self.root / self.name('acceptance'))['superseded_execution']
+        self.assertIn(failed.relative_to(self.root).as_posix(), [row['path'] for row in superseded])
+        result = delivery.verify(self.root, self.profile, self.task, self.report)
+        self.assertTrue(result['delivery_complete'], result)
+        self.assertEqual(result['close_note']['record']['handoff_kind'], 'close')
 
     def test_close_note_without_authorization_completes_delivery_but_not_closing(self):
         self.accept_and_record_knowledge()

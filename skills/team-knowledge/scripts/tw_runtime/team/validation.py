@@ -404,9 +404,19 @@ def inspect_record(root, profile, record, seen=None):
                 and isinstance(record.get('report'), dict), 'Acceptance lacks original verification inputs')
         for ref in record['materials']:
             artifact_valid(root, ref)
+        # Re-inspect only the results the acceptance actually used; superseded runs were replaced by later ones.
+        superseded = {(row.get('path'), row.get('check')) for row in record.get('superseded_execution', [])}
         checked = set()
         for name in record['report']['runs']:
-            checked.update(inspect_record(root, profile, read(inside(root, name)), seen))
+            run = read(inside(root, name))
+            if run.get('kind') == 'execution':
+                rows = [row for row in run.get('results', []) if (name, row.get('id')) not in superseded]
+                if not rows:
+                    continue
+                run = {**run, 'results': rows}
+            elif (name, (run.get('result') or {}).get('id')) in superseded:
+                continue
+            checked.update(inspect_record(root, profile, run, seen))
         return checked
     require(record.get('kind') in {'execution', 'imported-execution'}, 'Expected original execution')
     rows = record.get('results') if record['kind'] == 'execution' else [record.get('result')]
