@@ -73,6 +73,8 @@ def design_problem(status):
         parts.append('pending decisions: ' + ', '.join(str(v) for v in status['required_pending_decisions']))
     if not status.get('history_complete', True):
         parts.append('design history is incomplete; pass earlier revisions with --design-history')
+    if status.get('combined_complete') is False:
+        parts.append('当前任务的合并批准尚待补齐')
     return '; '.join(parts) or 'design review is incomplete'
 
 
@@ -254,7 +256,7 @@ def verify(root, profile, task, report, phase='delivery', _seen=None, live=None)
         published = reviews.published_approval(root, task['id'], review)
         require(all(a in platform_state['approvals'] or a == published for a in approvals), '批准记录尚待在平台任务上共享',
                 error_code=Code.APPROVAL_NOT_SHARED,
-                next_action=reviews.publication_action(root, task['id'],
+                next_action=reviews.submission_action(root, task['id'],
                     reviews.case_repair(root, task['id'], artifact(root, inside(root, report['review'])))['review_file']))
     from contracts import unsourced
     missing = unsourced(task, design)
@@ -274,7 +276,8 @@ def verify(root, profile, task, report, phase='delivery', _seen=None, live=None)
         from contracts import independent
         independent(design, review['reviewer'], 'Reviewer')
     require(status.get('local_review_valid') is True, 'Design coverage/history needs review: ' + design_problem(status),
-            error_code=status.get('error_code') or (Code.APPROVAL_INCOMPLETE if status.get('missing') or status.get('stale') else Code.INVALID))
+            error_code=status.get('error_code') or (Code.APPROVAL_INCOMPLETE if status.get('missing') or status.get('stale')
+                or status.get('combined_complete') is False else Code.INVALID))
     require(status.get('acceptance_ready') is True, '方案的验收条件尚待补齐：' + design_problem(status),
             error_code=Code.DESIGN_INPUT,
             next_action='补齐方案中的职责、待定事项与前置任务材料后重新开工：tw team start --task '

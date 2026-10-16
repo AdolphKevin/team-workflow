@@ -187,7 +187,12 @@ class PlatformReview(unittest.TestCase):
         self.assertEqual(refused['error_code'], 'invalid-or-incomplete-input', refused)
         self.assertIn('登记记录', refused['problem'])
         self.assertIn(submitted['artifact']['path'], refused['problem'])
-        self.assertEqual(refused['next_action'], 'tw team review --task ' + self.url + ' ' + flags[0])
+        if platform:
+            self.assertEqual(refused['next_action'], 'tw team review --task ' + self.url + ' --from-platform')
+        else:
+            self.assertIn('变更请求评审', refused['next_action'])
+            self.assertIn('--from-platform', refused['next_action'])
+            self.assertIn('tw team deliver', refused['next_action'])
 
     def test_missing_local_submission_time_reports_registration_input_error(self):
         self.missing_submission_time(platform=False)

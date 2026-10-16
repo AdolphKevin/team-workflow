@@ -24,6 +24,7 @@ class ErrorRouting(unittest.TestCase):
             ('review', 'review-binding-stale', 'run', 'review'),
             ('review', 'review-file-unreadable', 'run', 'review'),
             ('review', 'review-run-incomplete', 'run', 'review'),
+            ('review', 'review-incomplete', 'review', '--submit'),
             ('accept', 'independence-required', 'review', '--submit'),
             ('run', 'validation-active', 'status', '--format text'),
             ('run', 'request-conflict', 'run', '--task task-1'),
@@ -37,6 +38,8 @@ class ErrorRouting(unittest.TestCase):
                 with self.subTest(command=command, code=code, message=message):
                     exc = Invalid(message)
                     exc.error_code = code
+                    if code == 'review-incomplete':
+                        exc.next_action = '旧的评审提交指引'
                     output = io.StringIO()
                     with patch.object(commands, 'dispatch', side_effect=exc), contextlib.redirect_stdout(output):
                         status = workflow.main([command, '--root', '/tmp/routing', '--task', 'task-1'])
@@ -46,10 +49,12 @@ class ErrorRouting(unittest.TestCase):
                     self.assertEqual(result['error_code'], code)
                     self.assertIn('tw team ' + first, result['next_action'])
                     self.assertIn(second, result['next_action'])
+                    if code == 'review-incomplete':
+                        self.assertNotIn('旧的评审提交指引', result['next_action'])
             self.assertEqual(observed[0], observed[1])
 
     def test_source_action_has_priority_over_command_default(self):
-        for code in ('invalid-or-incomplete-input', 'review-incomplete', 'review-not-submitted',
+        for code in ('invalid-or-incomplete-input', 'review-not-submitted',
                      'review-not-passed', 'tool-modified', 'import-incomplete',
                      'task-input-invalid', 'design-input-invalid', 'design-markdown-invalid', 'approval-not-shared',
                      'review-materials-incomplete', 'source-stale', 'run-binding-stale'):
@@ -214,8 +219,11 @@ class StructuredDelivery(unittest.TestCase):
                         'ok': False, 'error_code': code, 'problem': message}):
                     result = delivery_sequence.deliver(args, self.root, self.profile, self.task, request)
                 self.assertEqual(result['stopped_at'], 'acceptance')
-                self.assertEqual(result['next_action'], 'tw team ' + expected + ' --task ' + self.task['id']
-                                 + (' --submit' if expected == 'review' else ''))
+                if expected == 'review':
+                    self.assertIn('tw team review --task ' + self.task['id'] + ' --submit', result['next_action'])
+                    self.assertNotIn('tw team run', result['next_action'])
+                else:
+                    self.assertEqual(result['next_action'], 'tw team run --task ' + self.task['id'])
 
 
 if __name__ == '__main__':

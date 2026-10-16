@@ -119,7 +119,10 @@ def steps(root, task, source_digest, context=None, task_arg=None, profile=None, 
             if row['state'] == 'done' and source_stale(root, _artifact_value(root, response), source_digest, profile):
                 row['state'] = 'stale'
             if row['state'] == 'failed' and response.get('next_action'):
-                row['repair'] = response['next_action']
+                from repairs import recorded_action
+                claim = selected[row['id']][0]
+                command_name = 'start' if claim['command'] == 'prepare' else claim['command']
+                row['repair'] = recorded_action(root, task['id'], command_name, claim, response, material_group)
     for i, row in enumerate(result):
         later = [latest_done.get(other['id'], '') for other in result[i + 1:]]
         if row['state'] == 'failed' and later and max(later) > (rows_started(rows, STEPS[i][2]) or ''):
@@ -159,7 +162,7 @@ def steps(root, task, source_digest, context=None, task_arg=None, profile=None, 
         for key in ('acceptance', 'knowledge', 'delivery'):
             commands[key] = 'tw team deliver ' + selected + ' --reason <不需要更新知识的理由>'
     if reviews.locations(root, task['id'])[0].is_file() and (not review_state or review_state['draft_current']):
-        commands['review'] += ' --submit'
+        commands['review'] = reviews.submission_action(root, task['id'])
     last_done = max((i for i, row in enumerate(result) if row['state'] == 'done'), default=-1)
     for i, row in enumerate(result):
         row['next_command'] = row.pop('repair', None) if row['state'] == 'failed' else None

@@ -851,7 +851,8 @@ def status(args, root, profile, task, platform=None):
             from delivery import ReviewBlocked
             repair = ReviewBlocked(task, facts['review_failures']).next_action  # deliver would only fail again
         for row in progress['steps'][3:]:
-            row['next_command'] = repair or 'tw team deliver ' + selected + ' --reason <不需要更新知识的理由>'
+            if repair or row['state'] != 'failed':
+                row['next_command'] = repair or 'tw team deliver ' + selected + ' --reason <不需要更新知识的理由>'
     urgent = [row for row in progress['steps'] if row['state'] in ('stale', 'running-or-interrupted', 'failed')]
     progress['next_step'] = urgent[0] if urgent else next((row for row in progress['steps'] if row['state'] == 'pending'), None)
     progress['finished'] = progress['next_step'] is None

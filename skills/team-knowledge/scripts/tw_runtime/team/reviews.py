@@ -28,20 +28,17 @@ class ReviewError(Invalid):
 
     def __init__(self, section, line, reason, *, error_code=None):
         super().__init__(f'第 {line} 行（{section}）：{reason}', section=section, line=line, error_code=error_code)
-        self.next_action = '按位置修正 Markdown，再运行 tw team review --task <身份> --submit。'
 
 
 class ReviewNotSubmitted(Invalid):
     error_code = Code.REVIEW_NOT_SUBMITTED
 
-    def __init__(self, root, task, missing_run=False, *, platform=False):
+    def __init__(self, root, task, missing_run=False):
         path = locations(root, task['id'])[0]
         self.review_file = path.relative_to(root).as_posix()
         selected = '--task ' + shlex.quote(task['id'])
         self.next_action = (('先生成草稿：tw team run ' + selected + '；' if missing_run or not path.exists() else '')
-                            + '填写后提交：tw team review ' + selected + ' --submit')
-        if platform:
-            self.next_action = publication_action(root, task['id'], self.review_file)
+                            + submission_action(root, task['id'], self.review_file))
         super().__init__('尚未提交评审，评审文件：' + self.review_file
                          + ('；本任务尚缺运行记录。' if missing_run else ''))
 
@@ -51,14 +48,22 @@ def locations(root, task_id):
     return base / 'review.md', base / 'reviews' / 'editor.json'
 
 
-def publication_action(root, task_id, review_file=None, *, recheck=False):
-    """平台评审统一指向实际 Markdown、发布动作与继续交付。"""
+def submission_action(root, task_id, review_file=None, *, recheck=False, register=False):
+    """任务的评审提交方式在此选择，所有下一步共用。"""
+    from tw_runtime.team import platform_script
     path = review_file or locations(root, task_id)[0].relative_to(root).as_posix()
     options = '--task ' + shlex.quote(task_id) + ' --root ' + shlex.quote(str(root))
     prepare = ('先核对当前运行并生成复核稿：tw team run ' + options
                + '；tw team review ' + options + '；') if recheck else ''
-    return (prepare + '逐项核对并填写 ' + shlex.quote(str(path))
-            + '，作为变更请求评审发布，再运行：tw team deliver ' + options)
+    if platform_script.is_task(root, task_id, required=False):
+        imported = 'tw team review ' + options + ' --from-platform；' if register else ''
+        return (prepare + '逐项核对并填写 ' + shlex.quote(str(path))
+                + '，作为变更请求评审发布，再运行：' + imported + 'tw team deliver ' + options)
+    if recheck:
+        return prepare.rstrip('；')
+    file_option = ' --file ' + shlex.quote(str(path)) if review_file else ''
+    return (prepare + '填写后提交：tw team review --task ' + shlex.quote(task_id)
+            + ' --submit' + file_option + ' --root ' + shlex.quote(str(root)))
 
 
 def source_path(args, root, task_id):
@@ -76,7 +81,7 @@ def latest_platform_source(root, task_id):
 def platform_source(root, task_id):
     item = latest_platform_source(root, task_id)
     if item is None:
-        raise ReviewNotSubmitted(root, {'id': task_id}, platform=True)
+        raise ReviewNotSubmitted(root, {'id': task_id})
     _binding(root, task_id, item['body'], current_only=True)
     return item
 
@@ -108,8 +113,8 @@ def platform_is_newer(root, task_id, review_ref):
                                  and (response.get('finished_at') or claim.get('started_at'))), None)
         if not submitted_at:
             error = Invalid('评审登记记录缺少提交时间：' + review_ref['path'] + '；请重新登记该评审。')
-            option = '--from-platform' if review.get('platform_url') else '--submit'
-            error.next_action = 'tw team review --task ' + shlex.quote(task_id) + ' ' + option
+            error.next_action = ('tw team review --task ' + shlex.quote(task_id) + ' --from-platform'
+                                 if review.get('platform_url') else submission_action(root, task_id, register=True))
             raise error
     return platform_script.timestamp(item['updated_at']) > platform_script.timestamp(submitted_at)
 
@@ -135,10 +140,8 @@ def case_repair(root, task_id, review_ref=None):
     path = Path(original) if original else locations(root, task_id)[0]
     path = (root / path).resolve() if not path.is_absolute() else path
     name = path.relative_to(root).as_posix() if path.is_relative_to(root) else str(path)
-    command = ('tw team review --task ' + shlex.quote(task_id) + ' --submit --file ' + shlex.quote(name)
-               + ' --root ' + shlex.quote(str(root)))
     return {'review_file': name,
-            'next_action': f'修正评审 Markdown {name} 中的“用例”字段后重新提交：' + command}
+            'next_action': f'修正评审 Markdown {name} 中的“用例”字段后，' + submission_action(root, task_id, name)}
 
 
 def published_approval(root, task_id, review):
@@ -610,7 +613,7 @@ def _existing(root, task_id, target, state, current, fresh):
               'recheck': bool((current or {}).get('changes')), 'review_current': False,
               'progress': progress(raw, current) if current else {'completed': 0, 'total': 1},
               'summary': '已有评审草稿，未覆盖；请填写并提交。',
-              'next_action': 'tw team review --task ' + shlex.quote(task_id) + ' --submit'}
+              'next_action': submission_action(root, task_id, target.relative_to(root).as_posix())}
     if not fresh:
         result['next_action'] = '草稿绑定已变化，原文件未覆盖；先将 review.md 移到别处，再运行 tw team review --task <身份>。'
     if (current or {}).get('changes'):
@@ -694,7 +697,7 @@ def generate(args, root, profile, task, request):
               'binding': ref, 'recheck': bool(candidate.get('changes')), 'review_current': False,
               'progress': progress(raw, candidate),
               'summary': '复核稿已生成；预填内容均须逐项确认。' if candidate.get('changes') else '评审草稿已生成；请填写结论和理由，再提交。',
-              'next_action': 'tw team review --task ' + shlex.quote(task['id']) + ' --submit'}
+              'next_action': submission_action(root, task['id'], target.relative_to(root).as_posix())}
     if archived:
         result['archived_draft'] = archived
     if candidate.get('changes'):

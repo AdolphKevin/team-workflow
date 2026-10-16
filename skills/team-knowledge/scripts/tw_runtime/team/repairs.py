@@ -20,6 +20,13 @@ def command(args, name, extra=''):
             + ' --root ' + shlex.quote(str(args.root.resolve())))
 
 
+def review_submission(args, *, recheck=False):
+    import reviews
+    selection = getattr(args, 'material_selection', None) or {}
+    identity = selection.get('task_id') or args.issue or args.task
+    return reviews.submission_action(args.root.resolve(), str(identity), getattr(args, 'file', None), recheck=recheck)
+
+
 def rerun_command(args, checks):
     names = [row['id'] for row in checks or [] if row.get('status') != 'passed']
     return command(args, 'run', ' '.join('--check ' + shlex.quote(name) for name in names))
@@ -95,14 +102,13 @@ def action(args, existing=None, error_code=None, checks=None):
                     + '；在新副本中补齐 confirmed_by 和 reference，再执行：'
                     + command(args, 'verify', '--report ' + shlex.quote(str(target))))
     if args.command == 'review' and error_code in (Code.REVIEW_BINDING_STALE, Code.REVIEW_FILE_UNREADABLE, Code.REVIEW_RUN_INCOMPLETE):
-        if getattr(args, 'from_platform', False):
-            import reviews
-            return reviews.publication_action(args.root.resolve(), str(identity), recheck=True)
-        return '先核对当前运行并生成复核稿：' + command(args, 'run') + '；' + command(args, 'review')
+        return review_submission(args, recheck=True)
+    if error_code == Code.REVIEW_INCOMPLETE and identity:
+        return '按所列位置修正 Markdown 后，' + review_submission(args)
     if args.command == 'run' and checks:
         return (old + '；' if old else '') + '修复后重跑：' + rerun_command(args, checks)
     if error_code == Code.INDEPENDENCE:
-        return '请由未参与实施的人实际评审或观察，填写后提交：' + command(args, 'review', '--submit')
+        return '请由未参与实施的人实际评审或观察，' + review_submission(args)
     if error_code == Code.VALIDATION_ACTIVE:
         return '等待已有检查结束后核对：' + command(args, 'status', '--format text')
     if error_code == Code.REQUEST_ACTIVE:
@@ -110,11 +116,12 @@ def action(args, existing=None, error_code=None, checks=None):
     if error_code == Code.TOOL_DEFECT:
         return (old + '；' if old else '') + '保留请求目录并核对安装：tw team project'
     if error_code in (Code.REQUEST_CONFLICT, Code.REQUEST_INPUT, Code.REQUEST_INTERRUPTED) and args.command != 'start' and identity:
-        extra = '--submit' if args.command == 'review' and args.submit else ''
-        return '保留原请求，省略 --request-id 使用新编号重试：' + command(args, args.command, extra)
+        if args.command == 'review' and args.submit:
+            return '保留原请求，按任务的评审提交方式继续：' + review_submission(args)
+        return '保留原请求，省略 --request-id 使用新编号重试：' + command(args, args.command)
     if args.command in ('accept', 'deliver', 'verify'):
         if error_code == Code.APPROVAL_INCOMPLETE:
-            return ('补齐批准后重试；简单任务填写评审中的批准字段：' + command(args, 'review', '--submit')
+            return ('补齐批准后重试；简单任务填写评审中的批准字段：' + review_submission(args)
                     + '；中等以上任务先取得方案批准：' + command(args, 'approval-draft', '--reviewer <姓名> --mode plan'))
         if error_code == Code.REPORT_INCOMPLETE:
             return '用当前材料重新交付：' + command(args, 'deliver', '--reason <不需要更新知识的理由>')
@@ -125,7 +132,7 @@ def action(args, existing=None, error_code=None, checks=None):
     if args.command == 'start' or not identity:
         return '补齐任务和方案后开工：' + command(args, 'start', '--design <方案文件>')
     if args.command == 'review':
-        return '按所列小节修正后提交：' + command(args, 'review', '--submit' if args.submit else '')
+        return ('按所列小节修正后，' + review_submission(args) if args.submit else command(args, 'review'))
     if args.command in ('accept', 'deliver', 'verify'):
         if args.command == 'verify':
             return '用当前材料重新交付：' + command(args, 'deliver', '--reason <不需要更新知识的理由>')
@@ -148,3 +155,19 @@ def annotate(args, result):
 def failure(args, exc, **extra):
     return annotate(args, {'ok': False, 'status': 'incomplete', 'problem': str(exc), **fields(exc),
                            'next_action': getattr(exc, 'next_action', None), **extra})
+
+
+def recorded_action(root, task_id, command_name, claim, response, group=None):
+    """进行中状态按已存代码重算修复指引，原请求记录继续保留。"""
+    from workflow import parser
+    args = parser().parse_args([command_name, '--root', str(root), '--task', task_id])
+    args.submit = bool(claim.get('submit'))
+    args.phase = claim.get('phase') or args.phase
+    args.actual_request_id = response.get('request_id')
+    args.material_selection = {'task_id': task_id, 'value': group}
+    if group and group.get('delivery_report'):
+        args.report = Path(group['delivery_report']['path'])
+    source = response.get('review_file')
+    if source and not source.startswith(('http://', 'https://')):
+        args.file = Path(source)
+    return annotate(args, dict(response)).get('next_action')

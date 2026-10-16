@@ -141,7 +141,7 @@ def deliver(args, root, profile, task, request):
                 if result.get('error_code') in (Code.SOURCE_STALE, Code.RUN_BINDING_STALE):
                     command = 'tw team run ' + task_arg
                 else:
-                    command = 'tw team review ' + task_arg + ' --submit'
+                    command = reviews.submission_action(root, task['id'])
             else:
                 command = 'tw team verify ' + task_arg
             if result.get('next_action') and not result.get('ok'):
