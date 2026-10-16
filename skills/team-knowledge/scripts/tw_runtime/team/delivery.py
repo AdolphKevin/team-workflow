@@ -355,7 +355,7 @@ def verify(root, profile, task, report, phase='delivery', _seen=None, live=None)
                                                 'knowledge_disposition': summary.disposition(completed)}, task, profile)}
             if report.get('close_authorization'):
                 close['close_authorization'] = report['close_authorization']
-            current, note = coordination.closing(root, profile, task['id'], completed_tasks, close)
+            current, note = coordination.closing(root, profile, task['id'], completed_tasks, close, review['findings'])
             publication_verified = note is None
             from contracts import reconcile, unresolved
             reconcile(review['findings'], current.get('questions', []))

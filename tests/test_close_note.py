@@ -108,6 +108,20 @@ class CloseNote(unittest.TestCase):
         self.assertTrue(result['delivery_complete'], result)
         self.assertEqual(result['close_note']['record']['handoff_kind'], 'close')
 
+    def test_review_findings_are_carried_into_the_close_note(self):
+        # Real case (Issue #5): the review recorded resolved issues Q1–Q3; delivery required the close note
+        # to keep them, but the note was drafted only from platform records and refused "Known issue disappeared".
+        review = read(self.root / self.name('review'))
+        review['findings'] = [{'id': 'Q1', 'summary': 'Dependency identity format differed from the checkout',
+                               'owner': 'bob', 'affects': ['A1'], 'blocks': ['acceptance'], 'state': 'resolved',
+                               'resolution': {'reason': 'Configuration corrected and rechecked',
+                                              'evidence': ['app.py']}}]
+        self.write('review', review)
+        self.accept_and_record_knowledge()
+        result = delivery.verify(self.root, self.profile, self.task, self.report)
+        self.assertTrue(result['delivery_complete'], result)
+        self.assertEqual([row['id'] for row in result['close_note']['record']['questions']], ['Q1'])
+
     def test_close_note_without_authorization_completes_delivery_but_not_closing(self):
         self.accept_and_record_knowledge()
         result = delivery.verify(self.root, self.profile, self.task, self.report)

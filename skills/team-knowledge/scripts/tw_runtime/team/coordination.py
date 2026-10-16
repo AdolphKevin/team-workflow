@@ -507,8 +507,10 @@ def closable_alone(state, profile):
     return reasons
 
 
-def closing(root, profile, url, completed_tasks, close):
-    """The record that hands over or closes delivered work: a posted handoff, or a drafted close note."""
+def closing(root, profile, url, completed_tasks, close, questions=()):
+    """The record that hands over or closes delivered work: a posted handoff, or a drafted close note.
+
+    questions: the review's findings, which the close note must carry with their dispositions."""
     continuation = resume(root, profile, url, completed_tasks)
     current = continuation.get('current')
     if current and current['handoff_kind'] in ('implementation', 'close') and not current['remaining']:
@@ -525,7 +527,7 @@ def closing(root, profile, url, completed_tasks, close):
     note = draft(root, profile, url, {
         'creator': implementer, 'owner': continuation['owners'][0], 'done': ['Business acceptance and knowledge disposition recorded'],
         'verified': [close['acceptance']], 'remaining': [],
-        'next': 'Close the issue once the named close authorization is recorded.',
+        'next': 'Close the issue once the named close authorization is recorded.', 'questions': list(questions),
         'included_progress': [{'id': item['id'], 'digest': item['digest']} for item in continuation['progress']]},
         kind='close', completed_tasks=completed_tasks, close=close)
     require(note['ok'], 'Close note incomplete: ' + '; '.join(note['gaps']))
