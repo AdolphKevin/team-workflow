@@ -1,0 +1,485 @@
+# 批次 2：场景化黑盒验收与指令文本的肯定式改写
+# 格式见 docs/proposals/2026-10-16-scenario-acceptance-and-positive-text.md 第 2.1 节。
+# 预期结果只依据已批准方案（含 2.3 的产品指纹补充）与 D1–D8，不依据当前实现的输出。
+# 版本 1（2026-10-17）：AdolphKevin 2026-10-17 确认。
+
+metadata:
+  requirement: "场景化黑盒验收：场景文件、用例导入与覆盖、增量黑盒执行、按场景验收与回归状态；指令文本每个概念一处定义"
+  batch: "tw-scenario-acceptance"
+  version: 1
+  owner: "AdolphKevin"
+  sources:
+    - ref: "docs/proposals/2026-10-16-scenario-acceptance-and-positive-text.md 第 2、3 节与 D1–D8"
+      version: "2026-10-16 批准版及 2.3 补充"
+      confirmed_by: "AdolphKevin"
+  tags: ["tw", "场景验收", "批次 2"]
+
+sops:
+
+  - id: SOP-01
+    title: 场景文件与方案引用
+    actor: "方案作者"
+    entry: "tw team scenarios check、tw team start"
+    must:
+      - "场景写在场景文件，方案验收节只引用节点"
+      - "每个节点同时有正向与反向场景，或写明反向豁免理由"
+    scenarios:
+
+      - id: SOP-01-P01
+        polarity: positive
+        title: 合格的场景文件通过校验并给出每条场景的内容指纹
+        actor: 方案作者
+        priority: P0
+        refs: ["2.1", "E-A1"]
+        verify: cli
+        initial_state: ["按安装文档装好两个技能的临时项目，已声明 cli 入口", "一份含两个节点、每个节点各有正反向场景的场景文件"]
+        steps: ["运行 tw team scenarios check <场景文件>"]
+        expected: ["退出码为 0", "输出逐条场景的内容指纹"]
+        forbidden_effects: ["项目目录中出现新文件"]
+        evidence_hints: ["命令原文与完整输出", "运行前后的文件清单"]
+
+      - id: SOP-01-N01
+        polarity: negative
+        negative_type: incomplete-input
+        title: 节点缺少反向场景时报出节点与行号
+        actor: 方案作者
+        priority: P0
+        refs: ["2.1", "E-A1"]
+        verify: cli
+        initial_state: ["同 SOP-01-P01，删掉某节点唯一的反向场景"]
+        steps: ["运行 tw team scenarios check <场景文件>", "给该节点加上 negative_exempt 理由后再运行一次"]
+        expected: ["第一次退出码非 0，错误代码为 scenario-file-invalid，点名该节点并给出行号", "第二次通过"]
+        forbidden_effects: ["校验修改场景文件"]
+        evidence_hints: ["两次命令的完整输出"]
+
+      - id: SOP-01-N02
+        polarity: negative
+        negative_type: invalid-input
+        title: 场景引用未声明的验收入口时拒绝
+        actor: 方案作者
+        priority: P1
+        refs: ["2.5", "E-A1"]
+        verify: cli
+        initial_state: ["同 SOP-01-P01，把一条场景的 verify 改为未在 acceptance_entries 声明的名字"]
+        steps: ["运行 tw team scenarios check <场景文件>"]
+        expected: ["退出码非 0，指出该场景的 verify 与行号"]
+        forbidden_effects: []
+        evidence_hints: ["完整输出"]
+
+      - id: SOP-01-N03
+        polarity: negative
+        negative_type: invalid-input
+        title: 验收节内联旧场景标签时按行拒绝
+        actor: 方案作者
+        priority: P0
+        refs: ["2.1", "D4"]
+        verify: cli
+        initial_state: ["同 SOP-01-P01，方案验收节除场景引用外另写一行“- 角色：成员”"]
+        steps: ["用该方案运行 tw team start"]
+        expected: ["退出码非 0，指出该行行号，提示场景写在场景文件、验收节用“- 场景：<路径>#<节点>”"]
+        forbidden_effects: ["建立准备上下文"]
+        evidence_hints: ["完整输出", "运行前后的 .tw/local 文件清单"]
+
+      - id: SOP-01-P02
+        polarity: positive
+        title: 修改场景内容使引用它的验收节被视为内容已改
+        actor: 方案作者
+        priority: P1
+        refs: ["2.1"]
+        verify: cli
+        initial_state: ["已用引用场景文件的方案完成 start"]
+        steps: ["修改被引用节点中一条场景的 expected", "运行 tw team status --task <身份>"]
+        expected: ["该验收节的内容指纹与修改前不同"]
+        forbidden_effects: []
+        evidence_hints: ["修改前后 status 的章节指纹"]
+
+  - id: SOP-02
+    title: 测试用例导入与覆盖
+    actor: "验收代理"
+    entry: "tw team scenarios import-cases、tw team scenarios coverage"
+    must:
+      - "历次导入的用例并集都要被覆盖或处置"
+      - "覆盖由代理判断，工具只核对结构"
+    scenarios:
+
+      - id: SOP-02-P01
+        polarity: positive
+        title: 导入的用例按并集累积
+        actor: 验收代理
+        priority: P0
+        refs: ["2.2", "D2", "E-A2"]
+        verify: cli
+        initial_state: ["已 start 的任务", "一份合成用例文件，顶层 test_cases，含 3 条用例且带额外字段"]
+        steps: ["运行 import-cases 导入该文件", "再导入一份含 1 条新用例、1 条同编号改写用例的文件"]
+        expected: ["第一次导入 3 条，并集 3 条", "第二次并集 4 条，列出新增与更新的编号", "额外字段原样保留在导入快照中"]
+        forbidden_effects: ["导入文件被修改"]
+        evidence_hints: ["两次输出", "导入快照"]
+
+      - id: SOP-02-N01
+        polarity: negative
+        negative_type: incomplete-input
+        title: 用例缺少标题时报行号且材料不变
+        actor: 验收代理
+        priority: P1
+        refs: ["2.2", "E-A2"]
+        verify: cli
+        initial_state: ["同 SOP-02-P01"]
+        steps: ["导入一份某条用例 title 为空的文件"]
+        expected: ["退出码非 0，指出该行", "当前材料中的导入记录与导入前相同"]
+        forbidden_effects: ["登记新的导入快照"]
+        evidence_hints: ["输出", "导入前后的 current.json"]
+
+      - id: SOP-02-P02
+        polarity: positive
+        title: 每条用例都归类后覆盖核对通过
+        actor: 验收代理
+        priority: P0
+        refs: ["2.2", "E-A3"]
+        verify: cli
+        initial_state: ["SOP-02-P01 之后的 4 条用例", "方案引用的场景中有对应场景"]
+        steps: ["写配对文件：3 条 covered，1 条 disposed（含原因与确认人）", "运行 coverage --pairs <配对文件>"]
+        expected: ["退出码为 0，配对登记到当前材料"]
+        forbidden_effects: []
+        evidence_hints: ["配对文件", "输出"]
+
+      - id: SOP-02-N02
+        polarity: negative
+        negative_type: incomplete-input
+        title: 缺归类或存在分歧时覆盖核对拒绝并逐条列出
+        actor: 验收代理
+        priority: P0
+        refs: ["2.2", "E-A3"]
+        verify: cli
+        initial_state: ["同 SOP-02-P02"]
+        steps: ["配对文件漏掉 1 条用例，另有 1 条放进 conflict", "运行 coverage"]
+        expected: ["退出码非 0，错误代码为 scenario-coverage-incomplete", "逐条列出漏掉与分歧的用例编号及类别"]
+        forbidden_effects: ["登记该配对文件"]
+        evidence_hints: ["输出"]
+
+  - id: SOP-03
+    title: 待执行清单与结果登记
+    actor: "独立执行者"
+    entry: "tw team scenarios pending、tw team scenarios submit"
+    must:
+      - "执行者独立于实施负责人"
+      - "清单中的每条场景都有结果"
+    scenarios:
+
+      - id: SOP-03-P01
+        polarity: positive
+        title: 首次清单列出全部场景，提交后给出一次通过率
+        actor: 独立执行者
+        priority: P0
+        refs: ["2.3", "E-A4", "E-A12"]
+        verify: cli
+        initial_state: ["已 start、已 run 的任务，方案引用 4 条场景", "结果文件与证据放在仓库外"]
+        steps: ["运行 scenarios pending", "提交 3 条 pass、1 条 fail 的结果，每条带证据"]
+        expected: ["清单列出 4 条，原因均为新增", "提交后一次通过率为 3/4，清单只剩失败的那条"]
+        forbidden_effects: ["项目目录中出现新文件"]
+        evidence_hints: ["两次输出", "轮次记录与复制的证据"]
+
+      - id: SOP-03-N01
+        polarity: negative
+        negative_type: permission
+        title: 实施负责人提交结果被拒绝
+        actor: 实施负责人
+        priority: P0
+        refs: ["2.3", "E-A4"]
+        verify: cli
+        initial_state: ["同 SOP-03-P01 之前"]
+        steps: ["以方案 roles.implementation_owner 的姓名作为 executor 提交结果"]
+        expected: ["退出码非 0，指出执行者需要独立于实施负责人"]
+        forbidden_effects: ["登记轮次"]
+        evidence_hints: ["输出", "提交前后的 current.json"]
+
+      - id: SOP-03-N02
+        polarity: negative
+        negative_type: incomplete-input
+        title: 漏交清单中的场景被拒绝并列出编号
+        actor: 独立执行者
+        priority: P0
+        refs: ["2.3", "E-A4"]
+        verify: cli
+        initial_state: ["清单中有 2 条场景"]
+        steps: ["只提交其中 1 条的结果"]
+        expected: ["退出码非 0，列出缺少结果的场景编号"]
+        forbidden_effects: ["登记轮次"]
+        evidence_hints: ["输出"]
+
+      - id: SOP-03-N03
+        polarity: negative
+        negative_type: invalid-input
+        title: 结果格式错误时逐行报告
+        actor: 独立执行者
+        priority: P1
+        refs: ["2.3"]
+        verify: cli
+        initial_state: ["清单中有 2 条场景"]
+        steps: ["提交的结果文件中一行缺 executed_at 的时区，另一行 pass 结果没有证据"]
+        expected: ["退出码非 0，两个问题各带行号"]
+        forbidden_effects: ["登记轮次"]
+        evidence_hints: ["输出"]
+
+  - id: SOP-04
+    title: 增量验收
+    actor: "独立执行者"
+    entry: "tw team scenarios pending、tw team run、tw team start"
+    must:
+      - "只有新增、改动、上次失败或产品源码已变且回归未覆盖的场景需要黑盒执行"
+    scenarios:
+
+      - id: SOP-04-P01
+        polarity: positive
+        title: 只改一条场景时清单只列它
+        actor: 独立执行者
+        priority: P0
+        refs: ["2.3", "D2", "E-A12"]
+        verify: cli
+        initial_state: ["4 条场景都已通过"]
+        steps: ["修改其中一条场景的 expected", "运行 scenarios pending"]
+        expected: ["清单只列这一条，原因为内容变化", "其余 3 条保持通过"]
+        forbidden_effects: []
+        evidence_hints: ["输出"]
+
+      - id: SOP-04-P02
+        polarity: positive
+        title: 追加遗漏场景后只执行新增的那条
+        actor: 独立执行者
+        priority: P0
+        refs: ["2.3", "D2"]
+        verify: cli
+        initial_state: ["4 条场景都已通过"]
+        steps: ["向被引用的节点追加一条新场景", "运行 scenarios pending"]
+        expected: ["清单只列新增的场景，原因为新增"]
+        forbidden_effects: []
+        evidence_hints: ["输出"]
+
+      - id: SOP-04-P03
+        polarity: positive
+        title: 产品源码变化后由沉淀的回归保持通过
+        actor: 独立执行者
+        priority: P0
+        refs: ["2.3", "D3"]
+        verify: cli
+        initial_state: ["4 条场景都已通过，其中一条的 regression 指向登记的检查与用例"]
+        steps: ["修改一处产品源码", "运行 scenarios pending", "运行 tw team run 后再运行 scenarios pending"]
+        expected: ["第一次清单列出 4 条", "重跑检查后，带回归的那条恢复通过，清单只剩其余 3 条"]
+        forbidden_effects: []
+        evidence_hints: ["三次输出"]
+
+      - id: SOP-04-N01
+        polarity: negative
+        negative_type: stale-input
+        title: 重新开工建立新上下文后已通过的场景保持通过
+        actor: 实施负责人
+        priority: P1
+        refs: ["2.3"]
+        verify: cli
+        initial_state: ["4 条场景都已通过，产品源码未变"]
+        steps: ["以新的批准或改写的任务重新 start，建立新上下文", "运行 scenarios pending"]
+        expected: ["清单为空，4 条保持通过"]
+        forbidden_effects: ["轮次记录被清空"]
+        evidence_hints: ["start 与 pending 的输出"]
+
+  - id: SOP-05
+    title: 按场景验收与评审
+    actor: "评审人"
+    entry: "tw team run、tw team review、tw team deliver"
+    must:
+      - "场景验收完成后才准备评审稿"
+      - "失败或待执行的场景阻止业务验收"
+    scenarios:
+
+      - id: SOP-05-P01
+        polarity: positive
+        title: 场景全部通过后 run 准备含场景结果的评审稿
+        actor: 实施负责人
+        priority: P0
+        refs: ["2.4", "E-A6"]
+        verify: cli
+        initial_state: ["必需检查可通过，场景尚未执行"]
+        steps: ["运行 tw team run", "执行并提交全部场景为 pass", "再运行 tw team run"]
+        expected: ["第一次的下一步指向场景清单，未生成评审稿", "第二次生成评审稿，逐个验收项列出场景编号、状态、实际结果、执行者与轮次"]
+        forbidden_effects: []
+        evidence_hints: ["两次输出", "review.md"]
+
+      - id: SOP-05-P02
+        polarity: positive
+        title: 简单任务按场景完成交付并报告一次通过率
+        actor: 评审人
+        priority: P0
+        refs: ["2.4", "D1", "E-A5"]
+        verify: cli
+        initial_state: ["SOP-05-P01 之后的评审稿"]
+        steps: ["独立评审人填写并提交评审", "运行 tw team deliver --reason <理由>"]
+        expected: ["业务验收通过，交付记录齐全", "摘要列出场景汇总与一次通过率"]
+        forbidden_effects: []
+        evidence_hints: ["deliver 输出与摘要"]
+
+      - id: SOP-05-N01
+        polarity: negative
+        negative_type: invalid-input
+        title: 失败的场景阻止业务验收并点名
+        actor: 评审人
+        priority: P0
+        refs: ["2.4", "E-A5"]
+        verify: cli
+        initial_state: ["一条场景最近结果为 fail，评审已提交"]
+        steps: ["运行 tw team deliver"]
+        expected: ["停在业务验收，点名该场景及其状态，下一步指向场景清单"]
+        forbidden_effects: ["生成通过的业务验收记录"]
+        evidence_hints: ["输出"]
+
+      - id: SOP-05-P03
+        polarity: positive
+        title: 受阻场景的问题预填进评审稿，延期处置后验收通过
+        actor: 评审人
+        priority: P1
+        refs: ["2.4", "E-A6"]
+        verify: cli
+        initial_state: ["一条场景以 blocked 提交，结果带 finding 问题编号"]
+        steps: ["生成评审稿", "评审人只填写该问题的状态与处置，设为 deferred 并写确认人、跟进任务和范围调整", "提交评审并运行 deliver"]
+        expected: ["评审稿中预填同编号问题，负责人为验收负责人，影响范围为引用该场景的验收项", "业务验收通过"]
+        forbidden_effects: []
+        evidence_hints: ["review.md 的问题小节", "deliver 输出"]
+
+      - id: SOP-05-N02
+        polarity: negative
+        negative_type: incomplete-input
+        title: 受阻场景的问题仍为 open 时验收拒绝
+        actor: 评审人
+        priority: P1
+        refs: ["2.4"]
+        verify: cli
+        initial_state: ["同 SOP-05-P03，问题保持 open"]
+        steps: ["提交评审并运行 deliver"]
+        expected: ["停在业务验收，指出该受阻场景的问题需要 accepted 或 deferred 处置"]
+        forbidden_effects: ["生成通过的业务验收记录"]
+        evidence_hints: ["输出"]
+
+      - id: SOP-05-N03
+        polarity: negative
+        negative_type: invalid-input
+        title: 验收节写“验证：人工”时按行拒绝
+        actor: 方案作者
+        priority: P1
+        refs: ["D5"]
+        verify: cli
+        initial_state: ["方案验收节的验证行写“- 验证：人工”"]
+        steps: ["用该方案运行 tw team start"]
+        expected: ["退出码非 0，指出该行，提示人工执行按场景逐条记录并用 scenarios submit 登记"]
+        forbidden_effects: ["建立准备上下文"]
+        evidence_hints: ["输出"]
+
+  - id: SOP-06
+    title: 复杂任务与回归状态
+    actor: "评审人"
+    entry: "tw team accept、tw team deliver、tw team verify"
+    must:
+      - "复杂任务必须覆盖测试同事的用例"
+      - "回归未沉淀时整体交付未完成"
+    scenarios:
+
+      - id: SOP-06-N01
+        polarity: negative
+        negative_type: incomplete-input
+        title: 复杂任务没有导入测试用例时验收拒绝
+        actor: 评审人
+        priority: P0
+        refs: ["D1", "E-A5"]
+        verify: cli
+        initial_state: ["方案评估为 complex，场景全部通过，评审已提交，未导入任何用例"]
+        steps: ["运行 tw team accept"]
+        expected: ["退出码非 0，提示导入测试同事的用例集"]
+        forbidden_effects: ["生成通过的业务验收记录"]
+        evidence_hints: ["输出"]
+
+      - id: SOP-06-N02
+        polarity: negative
+        negative_type: stale-input
+        title: 导入新用例后验收重新核对覆盖
+        actor: 评审人
+        priority: P0
+        refs: ["D2", "E-A3"]
+        verify: cli
+        initial_state: ["复杂任务已导入用例并登记完整配对"]
+        steps: ["再导入 1 条新用例", "运行 tw team accept"]
+        expected: ["退出码非 0，错误代码为 scenario-coverage-incomplete，只列新导入的用例"]
+        forbidden_effects: ["生成通过的业务验收记录"]
+        evidence_hints: ["输出"]
+
+      - id: SOP-06-P01
+        polarity: positive
+        title: 回归未沉淀时交付摘要写明整体交付未完成
+        actor: 评审人
+        priority: P0
+        refs: ["D3", "E-A8"]
+        verify: cli
+        initial_state: ["简单任务，4 条场景通过，其中 1 条 regression 指向通过的检查，3 条未写 regression"]
+        steps: ["运行 tw team deliver"]
+        expected: ["交付记录齐全", "regression_pending 为真，逐条列出 3 条未沉淀的场景编号", "摘要写明整体交付未完成", "已沉淀的那条列为 automated"]
+        forbidden_effects: []
+        evidence_hints: ["deliver 输出与摘要"]
+
+      - id: SOP-06-N03
+        polarity: negative
+        negative_type: tampered-input
+        title: 交付报告手工写入 automation 时拒绝
+        actor: 实施负责人
+        priority: P1
+        refs: ["D3"]
+        verify: cli
+        initial_state: ["SOP-06-P01 之后，复制交付报告为新文件并手工加入 automation 字段"]
+        steps: ["运行 tw team verify --report <新报告>"]
+        expected: ["退出码非 0，提示回归状态写在场景文件各场景的 regression"]
+        forbidden_effects: []
+        evidence_hints: ["输出"]
+
+  - id: SOP-07
+    title: 指令文本与职责划分
+    actor: "阅读技能的代理"
+    entry: "skills/team-workflow、skills/team-knowledge 的 Markdown"
+    must:
+      - "每个概念只在一处定义，其他位置链接过去"
+      - "tw 只提供格式、契约与指南，看板由项目代理搭建"
+    scenarios:
+
+      - id: SOP-07-P01
+        polarity: positive
+        title: 收尾条件、批准路径与工具职责各有唯一定义
+        actor: 阅读技能的代理
+        priority: P0
+        refs: ["3.1", "E-B1"]
+        verify: doc
+        initial_state: ["本批次候选的两个技能目录"]
+        steps: ["在全部 Markdown 中检索收尾说明的适用条件、两条批准路径和工具职责的正文", "从 SKILL.md 出发沿链接找到它们"]
+        expected: ["每个概念的正文只出现在一个文件", "SKILL.md 经链接可以到达这三处定义"]
+        forbidden_effects: []
+        evidence_hints: ["检索命令与命中位置", "链接路径"]
+
+      - id: SOP-07-N01
+        polarity: negative
+        negative_type: stale-input
+        title: 文本中没有版本对比句与双重否定
+        actor: 阅读技能的代理
+        priority: P1
+        refs: ["3.2", "3.3", "E-B2", "E-B3"]
+        verify: doc
+        initial_state: ["同 SOP-07-P01"]
+        steps: ["检索“兼容旧”“第 N 版”“行为不变”“原行为”“不再”", "逐句检查否定接否定与“只有……才……”"]
+        expected: ["版本对比句为 0", "双重否定为 0；指引模板中用户批准的约束句按方案 3.4 保留并单列"]
+        forbidden_effects: []
+        evidence_hints: ["检索输出"]
+
+      - id: SOP-07-P02
+        polarity: positive
+        title: 场景指南把看板写成项目代理搭建的工具
+        actor: 阅读技能的代理
+        priority: P1
+        refs: ["D6", "2.5"]
+        verify: doc
+        initial_state: ["同 SOP-07-P01"]
+        steps: ["阅读 references/scenarios.md 的复测看板一节", "检索技能目录与运行时中是否有看板服务或执行表命令"]
+        expected: ["该节写明看板读取什么、让人填写什么、输出什么，由项目代理按项目搭建", "技能与运行时只有结果契约、submit 与统计"]
+        forbidden_effects: []
+        evidence_hints: ["引用段落", "检索输出"]
