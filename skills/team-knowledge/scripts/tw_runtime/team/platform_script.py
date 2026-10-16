@@ -156,6 +156,9 @@ def validate(operation, value, arguments):
         require(value['kind'] in ('commit', 'file', 'task', 'change', 'comment'), '未知 reference.kind')
         if 'revision' in value:
             revision(value['revision'])
+    elif operation == 'file-url':
+        obj(value, {'url'})
+        task_url(value['url'])
     elif operation == 'ci-result':
         obj(value, {'provenance', 'archive'})
         provenance(value['provenance'])
@@ -248,6 +251,11 @@ def reference(root, url):
     return value
 
 
+def file_url(root, repository_id, commit_id, path):
+    return call(root, 'file-url', '--repo', repository(repository_id), '--revision', revision(commit_id),
+                '--path', text(path))['url']
+
+
 def ci_result(root, locator, output):
     output = Path(output).resolve()
     arguments = ('--locator', json.dumps(locator, ensure_ascii=False, separators=(',', ':'), allow_nan=False), '--output', str(output))
@@ -261,7 +269,7 @@ def check(root, identity, commit_id=None, reference_url=None, locator=None):
     from tw_runtime import gitutil
     declared = configuration(root)['operations']
     rows = []
-    for operation in ('task', 'commit', 'reference', 'ci-result'):
+    for operation in ('task', 'commit', 'reference', 'ci-result', 'file-url'):
         if operation not in declared:
             continue
         started = time.monotonic()
@@ -279,10 +287,12 @@ def check(root, identity, commit_id=None, reference_url=None, locator=None):
                         '平台提交的作者或时间与本地 git 不符')
             elif operation == 'reference':
                 reference(root, reference_url or identity)
-            else:
+            elif operation == 'ci-result':
                 require(locator is not None, 'ci-result 核对需要 --locator <JSON>，工具不会猜测平台定位信息')
                 from portable import provider
                 provider(root, json.loads(locator, parse_constant=_constant, object_pairs_hook=_object))
+            else:
+                file_url(root, gitutil.remote_identity(root), gitutil.head(root), '.tw/config.json')
             row['ok'] = True
         except (Invalid, OSError, ValueError, TypeError, KeyError) as exc:
             row['problem'] = str(exc)

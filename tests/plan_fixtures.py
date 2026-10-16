@@ -83,4 +83,26 @@ def draft_design(root, url, value, **kwargs):
 
 def task_body(task, parent=None, prose=''):
     import issue_draft
-    return issue_draft.body({'body': prose}, task, parent)
+    return issue_draft.body({'body': prose}, written_task(task), parent)
+
+
+def written_task(task):
+    return {**copy.deepcopy(task), 'acceptance': [{'id': row['id']} for row in task['acceptance']]}
+
+
+def task_design(task):
+    """Provide the selected original for explicit execution fixtures without a prepared context."""
+    sections = [{'id': 'scope-global', 'type': 'global-scope', 'title': 'Arithmetic',
+                 'body': task['goal'], 'data': {}, 'depends_on': []}]
+    sections += [{'id': row['id'], 'type': 'acceptance', 'title': 'Result', 'body': row['expectation'],
+                  'data': {'checks': row['checks']}, 'depends_on': []} for row in task['acceptance']]
+    sections += [{'id': key, 'type': 'task', 'title': 'Implement', 'body': 'Implement arithmetic',
+                  'data': {'acceptance': [row['id'] for row in task['acceptance']],
+                           'scope': task.get('paths') or ['.'], 'blocked_by': []}, 'depends_on': []}
+                 for key in task['section_ids']]
+    return plan({'data_version': 1, 'kind': 'design', 'id': task['design_id'], 'revision': 1,
+                 'task_id': task.get('parent') or task['id'],
+                 'assessment': {'complexity': 'medium', 'risks': task['risks'], 'effort': 'One hour',
+                                'drivers': ['Arithmetic'], 'uncertainties': [], 'required_skills': []},
+                 'roles': {'design_owner': 'alice', 'implementation_owner': 'bob', 'acceptance_owner': 'carol'},
+                 'sections': sections, 'issues': []})

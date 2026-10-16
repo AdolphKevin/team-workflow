@@ -71,7 +71,7 @@ tw team guidance --root "$PROJECT" [--scope project|global|all] [--file AGENTS.m
 
 任务使用 `data_version: 1`，包含 `id`、真实存在的完整基准提交 `base`、`goal`、
 `non_goals`、`kind`（`code` 或 `docs`）、`risks`、`acceptance`，以及关联的 `design_id`
-和非空任务节数组 `section_ids`，以及 `acceptance_scope`（主需求 `requirement`，子任务 `task`）。子任务的 `parent` 指向方案所属主需求。验收项为 `{id, expectation, checks}`；本地任务文件可只写 `{"id":"A1"}`，由 `start` 按本次方案同编号验收节的 `body` 和 `data.checks` 补全，完整任务保存进上下文并参与指纹。显式文字或检查清单不一致仍拒绝；平台任务块须写全。`paths`、
+和非空任务节数组 `section_ids`，以及 `acceptance_scope`（主需求 `requirement`，子任务 `task`）。子任务的 `parent` 指向方案所属主需求。本地文件和平台任务块的验收均为 `[{"id":"A1"}]`；带正文或检查清单时拒绝：“验收项只写编号，内容以方案为准”。读取后统一按所选方案展开 `expectation` 和 `checks`，子任务用父方案。完整副本留在上下文；需求摘要与 `requirements_signature` 只按编号。改为编号后旧批准失效。`paths`、
 `symbols` 和跨仓 `scopes` 提供知识读取范围；实际子任务可保留 `parent`。
 
 支持的风险为 `authorization`、`persistence`、`concurrency`、`messaging`、
@@ -95,8 +95,7 @@ tw team status --root "$PROJECT" --task "$TASK_ID" --format text
 
 `start` 首次建立准备上下文，返回 `continued: false`；任务内容、方案、批准、历史、前序依赖或授权变化时建立新上下文，`superseded_context` 指向被取代的记录。输入相同返回 `continued: true`，核对接续条件，只在自己的请求目录保存本次简报和 `start.json`。省略方案或批准时沿用原准备材料；同一任务的本机授权继续有效。平台任务首次可用 `--issue`，之后也可用 `--task <完整 Issue 地址>`。
 
-两种结果都含任务身份、任务目录、当前上下文 `context.path`、实施条件、缺口和 `next_step`。后续用 `--task "$TASK_ID"` 自动补齐材料；也可显式指定 `--context <上下文路径>`。必须实际阅读简报；保存文件
-不证明知识已经使用。新批准在 `start` 后传 `--approval` 会建立新上下文；实施后的代码批准也可传给 `review`、`accept` 和 `delivery-template`，保留原开工简报。历史变化传 `--design-history`。
+两种结果均含身份、任务目录、`context.path`、实施条件、缺口和 `next_step`；`pending_sections` 按文档顺序列编号、标题和原因，含所需章节、依赖与待确认删除。`next_action` 给批准命令；子任务指向持有方案和批准的父任务。后续用身份或 `--context` 补齐材料。实际阅读简报；保存不证明已使用。新批准用 `start --approval` 建新上下文；实施后也可传给 `review`、`accept`、`delivery-template`，保留开工简报。历史用 `--design-history`。
 `status` 从当前材料组或显式 `--context`、`--report` 读取已有批准，不接受 `--approval`。
 
 ### 当前材料组
@@ -162,11 +161,9 @@ tw team approval-draft --root "$PROJECT" --task "$TASK_ID" --reviewer <姓名> -
 
 `confirmation` 可省略；简单任务在评审 Markdown 中选择合并批准。已有输入仍可用 `--record <输入文件>`，其 `reviewer` 必填，`confirmation` 可选；批准可以由他人代为记录。
 
-也可使用任务文件，明确传 `--design`、`--run` 等路径。输入可指定 `decision`、`section_ids`、
-`deletion_ids`、`mode`、可选 `revision`；选择部分章节时需明确覆盖相应上游依据。简单任务默认合并评审，
-中等、复杂任务默认方案评审；具体模式和删除选择见[分节约定](designs.md)。合并评审
-绑定当前代码和传入运行材料。没有任何已配置必要检查的纯文档任务可以没有运行记录，
-验收仍须真实评审证据；省略记录不能绕过已配置的检查。草稿不产生批准事实。
+任务文件可显式传 `--design`、`--run`；记录可指定 `decision`、`section_ids`、`deletion_ids`、`mode`、`revision`。
+简单任务默认合并评审，中等以上默认方案评审。默认范围、`--sections` 和空结果见[分节约定](designs.md)。
+合并评审绑定当前代码与运行；无必要检查的文档任务可无运行，验收仍须真实证据。草稿不产生批准事实。
 
 `approval-draft --revision <提交号>` 记录批准时变更请求的完整提交号（40 或 64 位十六进制），
 也可在 `--record` 输入中提供 `revision`。合并批准读取本地该提交的源码，计算与
@@ -236,7 +233,7 @@ tw team deliver --root "$PROJECT" --task "$TASK_ID" --reason <不需要更新知
 
 方案中当前任务评估为 simple 且尚缺有效合并批准时，评审信息增加“批准方案与代码”和可选“批准说明”。填“是”后，工具以评审人为批准人，按原合并批准规则绑定当前源码与选中运行、只覆盖本任务必需章节；批准与评审同为请求材料，成功后登记当前批准。填“否”或留空不产生批准，验收仍检查批准是否齐全；实施者的意见可以保存，但不会生成独立合并批准，业务验收仍拒绝自审。已具备事前方案批准的中等、复杂任务不显示这两个字段。源码或选中运行改变后，合并批准失效，预填的批准字段也须明确复核。带批准字段的草稿另绑定完整方案与历史内容，不能用旧稿批准新材料组中的方案评估。
 
-`approval-draft` 可用 `--reviewer <姓名> [--confirmation <说明>] [--mode plan|combined] [--revision <完整提交号>]` 替代 `--record`；两种输入二选一。CLI 的 plan 对应既有记录中的 design 模式；combined 绑定当前源码与运行。批准输入的 `--record` JSON 保留；方案输入只读 Markdown。
+`approval-draft` 的姓名、说明、模式和提交号参数替代 `--record`，两种输入二选一；`--sections` 可覆盖记录的 `section_ids`。CLI 的 plan 对应记录的 design 模式。批准输入仍为 JSON；方案只读 Markdown。
 
 `deliver` 顺序调用原来的 `accept`、`delivery-template`、`verify`，各步保留请求和材料并更新 `current.json`。先核对已有验收是否仍绑定当前任务、章节、源码和材料；可用则复用，否则实际重新验收。报告列出相对任务 base 的全部知识变化；没有变化必须提供 `--reason`。要改知识时仍先独立 `accept`，写完知识后 `deliver` 复用该验收。绑定和知识处置均有效的报告也可复用；已有理由不必再输入。
 

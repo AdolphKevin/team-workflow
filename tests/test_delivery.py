@@ -73,7 +73,7 @@ class DeliveryCases(unittest.TestCase):
         if isinstance(value, dict) and value.get('kind') == 'design':
             plans.write_design(self.root / self.name(name), value)
         else:
-            write(self.root / self.name(name), value)
+            write(self.root / self.name(name), plans.written_task(value) if name == 'task' else value)
 
     def evidence_targets(self):
         other = self.root / '.tw/local/other-repository'
@@ -508,7 +508,7 @@ class DeliveryCases(unittest.TestCase):
             append(accepted)
             self.write('approval', accepted['record']['approval'])
             withdrawal = coordination.draft_approval(parent, {'reviewer': 'carol', 'confirmation': 'A contract requirement needs correction',
-                'decision': 'changes-requested'})
+                'decision': 'changes-requested', 'section_ids': 'all'})
             watching = True
             with self.assertRaisesRegex(Invalid, 'Platform requirements, approvals'):
                 delivery.verify(self.root, self.profile, self.task, self.report, 'acceptance')

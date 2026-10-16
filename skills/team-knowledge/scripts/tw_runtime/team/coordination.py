@@ -92,6 +92,8 @@ def task_source(issue):
     require(value['data_version'] == 1 and value['task'].get('data_version') == 1,
             'Expected task-platform data_version 1')
     require(value['task'].get('id') == issue['html_url'], 'Task ID must be its canonical issue URL')
+    import task_inputs
+    task_inputs.validate_written(value['task'])
     require(value['task'].get('parent') == value['parent'], 'Inner and shared task parent differ')
     if value['parent']:
         platform_read.task_url(value['parent'])
@@ -101,7 +103,8 @@ def task_source(issue):
 
 
 def requirements_signature(source):
-    task = source['task']
+    import task_inputs
+    task = task_inputs.written(source['task'])
     global_fields = {key: value for key, value in task.items()
                      if key not in ('acceptance', 'section_ids', 'paths', 'symbols', 'scopes')}
     return {'global': digest({'task': global_fields, 'parent': source['parent'], 'prose': source['body_digest']}),
@@ -157,11 +160,7 @@ def validate_task_design(task, design):
             'Task acceptance does not cover its selected design tasks')
     for row in task['acceptance']:
         section = sections.get(row['id'], {})
-        require(section.get('type') == 'acceptance'
-                and row['expectation'].replace('\r\n', '\n').replace('\r', '\n') == section['body'].replace('\r\n', '\n').replace('\r', '\n')
-                and set(row['checks']) == set(section['data']['checks']),
-                'Task acceptance differs from design section: ' + row['id']
-                + '；本地任务的验收项可以只写编号，由 tw team start 按本次方案生成 expectation 和 checks。')
+        require(section.get('type') == 'acceptance', 'Missing acceptance section: ' + row['id'])
     return selected
 
 
@@ -194,6 +193,14 @@ def _pointer(entry):
 
 def _hash(value):
     require(isinstance(value, str) and re.fullmatch(r'[0-9a-f]{64}', value), 'Expected SHA-256 fingerprint')
+
+
+def _history_change_reason(seen, comment):
+    created = comment.get('created_at')
+    changed = [item['url'] for item in seen if created and item.get('updated_at')
+               and platform_read.timestamp(item['updated_at']) > platform_read.timestamp(created)]
+    cause = '更早的历史在此记录发布后被编辑：' + '、'.join(changed) if changed else '更早的评论可能已被删除或插入'
+    return cause + '；请核对历史后重新生成记录并立即发布。'
 
 
 def _read(issue, root=None):
@@ -249,7 +256,8 @@ def _read(issue, root=None):
                         'Platform record version or task differs')
                 _hash(row['requirements'])
                 require(row['history_digest'] == digest(seen),
-                        'Preceding history changed or concurrent record was appended; reconcile explicitly')
+                        'Preceding history changed or concurrent record was appended; reconcile explicitly'
+                        + '；' + _history_change_reason(seen, comment))
                 require(not (comment.get('created_at') and comment.get('updated_at'))
                         or platform_read.timestamp(comment['created_at']) == platform_read.timestamp(comment['updated_at']),
                         'An edited platform record cannot serve as immutable history; append a reconciliation')
@@ -305,9 +313,12 @@ def load(url, issue=None, root=None):
         gaps += design_gaps
     if latest and latest['record']['requirements'] != design_state['requirements']:
         design_gaps.append('Requirements changed after the current design; append a reviewed revision')
+    task = state['source']['task']
     if design:
         try:
-            validate_task_design(state['source']['task'], design)
+            validate_task_design(task, design)
+            import task_inputs
+            task = task_inputs.expand(task, design)
         except (Invalid, KeyError, TypeError) as exc:
             design_gaps.append(str(exc))
     gaps += design_gaps
@@ -338,7 +349,7 @@ def load(url, issue=None, root=None):
     return {'data_version': 1, 'kind': 'platform-task', 'ok': not gaps, 'issue': url,
             'assurance': 'continuation-only', 'delivery': 'not-evaluated',
             'known_issues': list(known.values()), 'warnings': warnings,
-            'task': state['source']['task'], 'source': state['source'], 'parent': parent,
+            'task': task, 'source': state['source'], 'parent': parent,
             'requirements': state['requirements'], 'history_digest': state['history_digest'],
             'platform_history': state['platform_history'], 'design': design,
             'history': [entry['record']['design'] for entry in entries[:-1]],
@@ -355,19 +366,23 @@ def load(url, issue=None, root=None):
             'progress': list(progress.values()), 'pending_progress': pending, 'gaps': sorted(set(gaps))}
 
 
+def approval_sentence(approval, design=None):
+    sections = (design or {}).get('sections', [])
+    selected = '、'.join(section['id'] + ' ' + section['title'] for section in sections
+                        if section['id'] in approval['sections']) if design else '、'.join(approval['sections'])
+    deleted = ['删除章节 ' + row['id'] for row in approval.get('deletions', [])]
+    selected = records.prose('、'.join([selected, *deleted]).strip('、'))
+    action = {'approved': '批准', 'changes-requested': '要求修改', 'deferred': '暂缓'}.get(approval.get('decision'), '批准')
+    return (f'{records.prose(approval["reviewer"])} {action}方案第 {approval["design_revision"]} 版：{selected}。'
+            + '依据：' + records.prose(approval.get('confirmation', '')))
+
+
 def _markdown(name, row, heading, design=None):
     if name == 'design':
         ref = row['design']
         prose = f'方案第 {ref["revision"]} 版已发布：{records.prose(ref["path"])}，提交 {ref["commit"][:7]}。'
     elif name == 'approval':
-        approval = row['approval']
-        titles = {section['id']: section['title'] for section in (design or {}).get('sections', [])}
-        selected = '、'.join(titles.get(key, key) for key in approval['sections'])
-        deleted = ['删除章节 ' + row['id'] for row in approval.get('deletions', [])]
-        selected = records.prose('、'.join([selected, *deleted]).strip('、'))
-        action = {'approved': '批准', 'changes-requested': '要求修改', 'deferred': '暂缓'}.get(approval.get('decision'), '批准')
-        prose = (f'{records.prose(approval["reviewer"])} {action}方案第 {approval["design_revision"]} 版：{selected}。'
-                 + '依据：' + records.prose(approval.get('confirmation', '')))
+        prose = approval_sentence(row['approval'], design)
     else:
         owner = records.prose(row.get('owner') or row.get('author', ''))
         status = '已完成' if not row.get('remaining') else '进行中'
@@ -387,6 +402,13 @@ def _draft_result(name, url, row, gaps=(), *, design=None):
             'history_digest': row.get('history_digest'), 'gaps': list(gaps),
             'assurance': 'continuation-only', 'delivery': 'not-evaluated',
             'publication': 'draft-only; re-read history before an authorized append, then run tw team start'}
+
+
+DESIGN_PUBLICATION_STEPS = [
+    '先完成任务正文、变更请求描述等其他编辑。',
+    '最后生成方案记录，并立即发布到承载方案的变更请求；没有变更请求时发布到任务上。',
+    '发布后不要再编辑之前的评论。',
+]
 
 
 def draft_design(url, design, resolution=None, issue=None, *, path=None, root=None):
@@ -410,14 +432,19 @@ def draft_design(url, design, resolution=None, issue=None, *, path=None, root=No
         row.update(resolution=resolution, previous=None)
     require(not any('Invalid design ' in gap for gap in state['gaps']) or resolution,
             '方案历史有缺口；请核对全部方案分支，用 design-draft --reconcile "<原因>" 发布对账记录')
-    return {**_draft_result('design', url, row), 'pr_description': markdown}
+    return {**_draft_result('design', url, row), 'pr_description': markdown,
+            'next_steps': list(DESIGN_PUBLICATION_STEPS)}
 
 
-def draft_approval(url, value):
+def draft_approval(url, value, *, root=None):
     obj(value, {'reviewer'}, {'confirmation', 'decision', 'section_ids', 'code_digest', 'run_refs', 'mode', 'deletion_ids', 'resolution', 'revision'})
-    state = load(url)
+    root = platform_read.project_root(root)
+    state = load(url, root=root)
     require(state['design'] is not None, 'Missing versioned design; append it before review')
-    require(state['design_issue'] == url, 'Review the shared design on its own task issue')
+    task_sections = state['task']['section_ids']
+    if state['design_issue'] != url:
+        url = state['design_issue']
+        state = load(url, root=root)
     resolution = value.get('resolution')
     if resolution:
         obj(resolution, {'history_digest', 'reason'})
@@ -426,6 +453,18 @@ def draft_approval(url, value):
     gaps = [gap for gap in state['design_gaps'] if not (resolution and gap.startswith('Invalid approval '))]
     require(not gaps, '; '.join(gaps))
     kwargs = {key: item for key, item in value.items() if key != 'resolution'}
+    if resolution and 'section_ids' not in kwargs:
+        status = designs.approval_status(state['design'], state['approvals'], history=state['history'],
+                                         section_ids=task_sections, changed_paths=[])
+        kwargs['section_ids'] = status['required_sections']
+    profile = None
+    if root is not None:
+        from common import load_profile
+        profile = load_profile(root)
+    kwargs = designs.approval_selection(state['design'], state['approvals'], task_sections, state['history'], kwargs,
+                                       root=root, profile=profile)
+    if kwargs is None:
+        return {'ok': True, 'summary': '没有需要批准的章节'}
     approval = designs.approval_draft(state['design'], history=state['history'], **kwargs)
     row = {'data_version': 1, 'kind': 'approval-record', 'task': url,
            'requirements': state['requirements'], 'history_digest': state['history_digest'],
@@ -862,7 +901,7 @@ def draft(root, profile, url, progress, kind='implementation', completed_tasks=(
 def progress_draft(root, profile, url, progress, request_id):
     issue = platform_issue(url, root)
     source = task_source(issue)
-    task_valid(source['task'], profile, root)
+    task_valid(source['task'], profile, root, written=True)
     obj(progress, {'author', 'done', 'verified', 'remaining', 'questions'})
     row = {**progress, 'data_version': 1, 'kind': 'progress', 'task': url,
            'request_id': request_id, 'requirements': digest(source)}

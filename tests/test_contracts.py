@@ -282,7 +282,7 @@ class BusinessEvidence(unittest.TestCase):
 
     def test_local_start_checks_task_against_current_plan(self):
         self.setup_task()
-        original = copy.deepcopy(self.task)
+        original = plans.written_task(self.task)
         self.profile['risk_checks']['public-contract'] = ['unit']
         fixtures.write_config(self.root, self.profile)
         variants = [dict(original, risks=['public-contract']),
@@ -290,7 +290,7 @@ class BusinessEvidence(unittest.TestCase):
                     dict(original, acceptance_scope='task', parent='another-parent'),
                     dict(original, acceptance=[{**original['acceptance'][0], 'expectation':'A different requirement'}])]
         for task in variants:
-            self.write('task', task)
+            write(self.root / self.name('task'), task)
             for command in ('status', 'start'):
                 with self.subTest(command=command, task=task):
                     output = io.StringIO()

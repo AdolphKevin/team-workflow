@@ -134,6 +134,16 @@ def check_table(design, checks):
 def display(raw, design, reference, *, root):
     """The pull request shows the original body; front matter data becomes readable lines, never JSON."""
     body = raw.split('\n---\n', 1)[1].lstrip('\n') if raw.startswith('---\n') else raw
+    import design_links
+    from tw_runtime.team import platform_script
+    try:
+        config = json.loads((Path(root) / '.tw/config.json').read_text())
+    except FileNotFoundError:
+        config = {}
+    file_url = None
+    if 'file-url' in config.get('platform', {}).get('operations', []):
+        file_url = lambda path: platform_script.file_url(root, reference['repository'], reference['commit'], path)
+    body = design_links.rewrite(body, reference, file_url)
     assessment, roles = design['assessment'], design['roles']
     joined = lambda values: '、'.join(values) or '无'
     header = [

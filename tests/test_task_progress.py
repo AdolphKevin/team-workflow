@@ -115,7 +115,7 @@ class TaskProgress(unittest.TestCase):
     def test_run_names_checks_whose_inputs_changed_while_they_ran(self):
         self.check("from pathlib import Path; Path('app.py').write_text(Path('app.py').read_text() + '# touched')")
         fixtures.write_config(self.root, self.profile)
-        code, result = self.cli('run', '--task', self.name('task'))
+        code, result = self.cli('run', '--task', self.name('task'), '--design', self.name('design'))
         self.assertEqual(code, 1, result)
         self.assertEqual(result['checks'][0]['status'], 'passed')
         self.assertIs(result['checks'][0]['source_unchanged'], False)
@@ -123,7 +123,7 @@ class TaskProgress(unittest.TestCase):
         self.assertIn('--check unit', result['next_action'])
 
     def test_status_marks_execution_stale_after_source_changes(self):
-        code, executed = self.cli('run', '--task', self.name('task'))
+        code, executed = self.cli('run', '--task', self.name('task'), '--design', self.name('design'))
         self.assertEqual(code, 0, executed)
         record = json.loads((self.root / executed['artifact']['path']).read_text())
         self.assertNotIn('source_digest', record)
@@ -157,7 +157,7 @@ class TaskProgress(unittest.TestCase):
     def test_status_respects_revision_sensitive_execution_sources(self):
         self.profile['checks']['unit']['revision_sensitive'] = True
         fixtures.write_config(self.root, self.profile)
-        code, executed = self.cli('run', '--task', self.name('task'))
+        code, executed = self.cli('run', '--task', self.name('task'), '--design', self.name('design'))
         self.assertEqual(code, 0, executed)
         code, status = self.cli('status', '--task', self.name('task'), '--design', self.name('design'))
         self.assertEqual(code, 0, status)

@@ -183,9 +183,11 @@ def verify(root, profile, task, report, phase='delivery', _seen=None, live=None)
     require(phase in ('acceptance', 'delivery'), 'Unknown verification phase')
     live = phase == 'acceptance' if live is None else live
     tool = tool_gate()
-    task_valid(task, profile, root)
     obj(report, {'data_version', 'task_id', 'design', 'approvals', 'brief', 'runs', 'review'},
         {'acceptance', 'knowledge', 'design_history', 'close_authorization', 'dependencies', 'automation'})
+    import task_inputs
+    task = task_inputs.expand(task, design_files.read(inside(root, report['design'])))
+    task_valid(task, profile, root)
     require(report['data_version'] == RECORD_SCHEMA and report['task_id'] == task['id'],
             f'Expected a schema {RECORD_SCHEMA} delivery report for this task; regenerate it with delivery-template')
     strings(report['runs'])
@@ -197,7 +199,9 @@ def verify(root, profile, task, report, phase='delivery', _seen=None, live=None)
     if platform_read.is_task(root, task['id']):
         platform_state = coordination.load(task['id'], root=root)
         require(not platform_state['gaps'], 'Platform records are incomplete: ' + '; '.join(platform_state['gaps']))
-        require(platform_state['task'] == task, 'Platform task changed; read current requirements')
+        import task_inputs
+        require(task_inputs.written(platform_state['task']) == task_inputs.written(task),
+                'Platform task changed; read current requirements')
     if platform_state is not None:
         from contracts import reconcile
         reconcile(platform_state.get('known_issues', []), read(inside(root, report['review'])).get('findings', []))

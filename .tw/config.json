@@ -116,6 +116,6 @@
   "platform": {
     "argv": ["python3", ".tw/platform.py"],
     "timeout": 120,
-    "operations": ["task", "commit", "reference", "ci-result"]
+    "operations": ["task", "commit", "reference", "ci-result", "file-url"]
   }
 }

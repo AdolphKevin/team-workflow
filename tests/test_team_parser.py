@@ -31,7 +31,7 @@ EXPECTED = {
     'platform': {'--check', '--id', '--commit', '--reference', '--locator'},
     'project': {'--home', '--allow-modified-tool'},
     'snapshot': TASK | INPUT,
-    'run': TASK | INPUT | REQUEST | {'--with-task', '--check', '--portable'},
+    'run': TASK | INPUT | REQUEST | {'--with-task', '--check', '--portable', '--design'},
     'brief': TASK | INPUT | REQUEST | QUERY,
     'review': TASK | INPUT | REQUEST | (REPORT - {'--review'}) | {'--submit', '--file', '--from-platform'},
     'accept': TASK | INPUT | REQUEST | REPORT | {'--report', '--home'},
@@ -50,7 +50,7 @@ EXPECTED = {
     'start': TASK | INPUT | REQUEST | QUERY | {'--design', '--approval', '--design-history', '--dependency',
                                             '--grant', '--confirmed-by', '--home', '--run', '--report'},
     'design-draft': TASK | INPUT | REQUEST | {'--record', '--design', '--reconcile'},
-    'approval-draft': TASK | INPUT | REQUEST | {'--record', '--design', '--design-history', '--run', '--reviewer', '--confirmation', '--mode', '--revision', '--reconcile'},
+    'approval-draft': TASK | INPUT | REQUEST | {'--record', '--design', '--design-history', '--approval', '--run', '--reviewer', '--confirmation', '--mode', '--revision', '--reconcile', '--sections'},
     'design-diff': TASK | INPUT | REQUEST | {'--design', '--design-history'},
     'schema': set(),
     'cleanup': {'--apply', '--dry-run', '--plan', '--cleanup-scope', '--older-than'},
@@ -197,7 +197,8 @@ class TeamOptionBehavior(unittest.TestCase):
             path.write_text(text)
         self.profile['external_inputs'] = {'workspace': {'kind': 'file'}}
         test_workflow.write_config(self.root, self.profile)
-        write(self.root / '.tw/local/task.json', self.task)
+        import plan_fixtures as plans
+        write(self.root / '.tw/local/task.json', plans.written_task(self.task))
         args = ['snapshot', '--task', '.tw/local/task.json']
         code, missing = self.command(*args)
         self.assertEqual(code, 1)

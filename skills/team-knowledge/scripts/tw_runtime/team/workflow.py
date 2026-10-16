@@ -30,7 +30,7 @@ def parser():
                    acceptance=None, phase='delivery', kind='implementation', check=None, path=[], symbol=[],
                    reason=None, grant=None, confirmed_by=None, home=None, input=[], allow_modified_tool=False,
                    submit=False, from_platform=False, file=None, reviewer=None, confirmation=None, approval_mode=None, revision=None,
-                   reconcile=None)
+                   reconcile=None, sections=None)
     sub = p.add_subparsers(dest='command', required=True)
 
     locations = argparse.ArgumentParser(add_help=False)
@@ -83,7 +83,7 @@ def parser():
     c.add_argument('--reference', help='待核对的链接，默认任务地址')
     c.add_argument('--locator', help='ci-result 的不透明 JSON 定位信息；声明该操作时必填')
     command('snapshot', '读取源码与任务的内容指纹', task, inputs)
-    c = command('run', '执行项目登记的检查并保存结果', task, inputs, request)
+    c = command('run', '执行项目登记的检查并保存结果', task, inputs, request, design)
     c.add_argument('--with-task', action='append', default=[], type=Path,
                    help='Additional tasks sharing one validation batch')
     c.add_argument('--check', action='append', help='Run selected checks; verification still requires mandatory checks')
@@ -134,12 +134,13 @@ def parser():
     c = command('design-draft', '生成本地或平台方案草稿', task, inputs, request, design)
     c.add_argument('--record', type=Path, help='已提交的 Markdown 方案原文；格式见 references/designs.md')
     c.add_argument('--reconcile', help='对账原因；绑定当前平台历史并从第 1 版重新开始')
-    c = command('approval-draft', '生成具名评审人的方案批准草稿', task, inputs, request, design, history, runs)
+    c = command('approval-draft', '生成具名评审人的方案批准草稿', task, inputs, request, approvals, runs)
     c.add_argument('--record', type=Path, help='JSON input for the approval draft')
     c.add_argument('--reviewer', help='批准人的姓名；替代 --record')
     c.add_argument('--confirmation', help='批准说明，可省略')
     c.add_argument('--mode', dest='approval_mode', choices=['plan', 'combined'], help='方案批准或方案与代码合并批准')
     c.add_argument('--revision', help='批准时变更请求的完整提交号')
+    c.add_argument('--sections', help='逗号分隔的章节编号，或 all 选择全部现有章节')
     c.add_argument('--reconcile', help='对账原因；绑定当前平台历史重新确认批准')
     command('design-diff', '核对方案变化及受影响的章节', task, inputs, request, design, history)
     command('schema', '列出团队材料模板与字段说明')

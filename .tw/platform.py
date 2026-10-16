@@ -219,6 +219,16 @@ def commit(api, repo, commit_id):
             'author': text(author, 'name') + ' <' + text(author, 'email') + '>', 'time': timestamp}
 
 
+def file_url(repo, commit_id, path):
+    slug = repository(repo)
+    revision(commit_id)
+    name, separator, fragment = path.partition('#')
+    require(bool(name) and not name.startswith('/') and all(part not in ('', '.', '..') for part in name.split('/')),
+            '文件路径必须位于仓库内')
+    return {'url': WEB + slug + '/blob/' + commit_id + '/' + quote(name, safe='/')
+            + ('#' + fragment if separator else '')}
+
+
 def reference(api, url):
     parts, slug, path = web_url(url)
     kind, identifier = path[:2]
@@ -330,6 +340,10 @@ def main():
     command = commands.add_parser('commit')
     command.add_argument('--repo', required=True)
     command.add_argument('--revision', required=True)
+    command = commands.add_parser('file-url')
+    command.add_argument('--repo', required=True)
+    command.add_argument('--revision', required=True)
+    command.add_argument('--path', required=True)
     commands.add_parser('reference').add_argument('--url', required=True)
     command = commands.add_parser('ci-result')
     command.add_argument('--locator', required=True)
@@ -343,6 +357,8 @@ def main():
             value = commit(api, args.repo, args.revision)
         elif args.operation == 'reference':
             value = reference(api, args.url)
+        elif args.operation == 'file-url':
+            value = file_url(args.repo, args.revision, args.path)
         else:
             value = ci_result(api, json.loads(args.locator), args.output)
         print(json.dumps(value, ensure_ascii=False, allow_nan=False))

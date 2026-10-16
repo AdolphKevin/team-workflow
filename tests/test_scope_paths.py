@@ -161,7 +161,7 @@ class LocalScopeStart(unittest.TestCase):
         (self.root / 'tests').mkdir(exist_ok=True)
         write_text(self.root, '.tw/rules/tests.md', entry(
             '测试约束', '必须隔离。', scope=['self:tests/test_*.py'], source=['s']))
-        write(self.root / '.tw/local/task.json', self.task)
+        write(self.root / '.tw/local/task.json', plans.written_task(self.task))
         plans.write_design(self.root / '.tw/local/design.md', self.design)
 
     def assert_start_and_continuation(self, scope):

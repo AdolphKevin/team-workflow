@@ -76,9 +76,9 @@ def platform_problems(value):
         problems.append('platform.timeout 必须是正整数')
     operations = value.get('operations')
     if not (isinstance(operations, list) and all(isinstance(v, str) for v in operations)
-            and 'task' in operations and set(operations) <= {'task', 'commit', 'reference', 'ci-result'}
+            and 'task' in operations and set(operations) <= {'task', 'commit', 'reference', 'ci-result', 'file-url'}
             and len(set(operations)) == len(operations)):
-        problems.append('platform.operations 只能声明 task、commit、reference、ci-result，且必须包含 task，不得重复')
+        problems.append('platform.operations 只能声明 task、commit、reference、ci-result、file-url，且必须包含 task，不得重复')
     return problems
 
 

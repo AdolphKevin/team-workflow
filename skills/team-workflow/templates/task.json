@@ -8,11 +8,7 @@
   "risks": [],
   "acceptance": [
     {
-      "id": "A1",
-      "expectation": "__REPLACE__",
-      "checks": [
-        "unit"
-      ]
+      "id": "A1"
     }
   ],
   "design_id": "__REPLACE__",

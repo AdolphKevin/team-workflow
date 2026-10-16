@@ -414,7 +414,7 @@ def profile_valid(profile, root, check_context=True):
     return profile
 
 
-def task_valid(task, profile, root):
+def task_valid(task, profile, root, *, written=False):
     obj(task, {'data_version', 'id', 'base', 'goal', 'non_goals', 'kind', 'risks', 'acceptance',
                'design_id', 'section_ids', 'acceptance_scope'}, {'paths', 'symbols', 'scopes', 'parent'})
     require(type(task['data_version']) is int and task['data_version'] == 1, 'Expected task data_version 1')
@@ -441,10 +441,12 @@ def task_valid(task, profile, root):
     require(isinstance(task['acceptance'], list) and bool(task['acceptance']), 'Acceptance cannot be empty')
     seen = set()
     for row in task['acceptance']:
-        obj(row, {'id', 'expectation', 'checks'})
+        obj(row, {'id'} if written else {'id', 'expectation', 'checks'})
         key = text(row['id'])
         require(key not in seen, 'Duplicate acceptance ID')
         seen.add(key)
+        if written:
+            continue
         text(row['expectation'])
         strings(row['checks'])
         require(set(row['checks']) <= profile['checks'].keys(), 'Unknown acceptance check')

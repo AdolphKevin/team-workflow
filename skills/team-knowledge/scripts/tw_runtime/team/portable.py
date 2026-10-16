@@ -412,7 +412,9 @@ def aggregate(root, manifest, repositories):
         if platform_read.is_task(checkout, task['id']):
             from coordination import load
             platform = load(task['id'], root=checkout)
-            require(platform['task'] == task and not platform['gaps'], 'Joint task changed or has unresolved platform records')
+            import task_inputs
+            require(task_inputs.written(platform['task']) == task_inputs.written(task) and not platform['gaps'],
+                    'Joint task changed or has unresolved platform records')
             platform_states[task['id']] = (checkout, platform)
             parent = platform['parent'] or task['id']
         else:

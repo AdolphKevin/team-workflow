@@ -168,7 +168,7 @@ class PlatformContract(unittest.TestCase):
     def test_coordination_uses_ordered_platform_bodies_and_owners(self):
         import coordination
         value = self.task_response()
-        task = {'data_version': 1, 'id': value['id']}
+        task = {'data_version': 1, 'id': value['id'], 'acceptance': [{'id': 'A1'}]}
         import records
         value['items'][0]['body'] = records.comment({'data_version': 1, 'parent': None, 'task': task})
         self.response('task', value)
@@ -374,14 +374,15 @@ class PlatformImportContract(unittest.TestCase):
         self.git('add', '.tw/config.json')
         self.git('commit', '-qm', 'register platform fixture and command')
         self.task['base'] = self.git('rev-parse', 'HEAD').strip()
-        write(self.root / '.tw/local/task.json', self.task)
+        write(self.root / '.tw/local/task.json', plans.written_task(self.task))
+        plans.write_design(self.root / '.tw/local/design.md', plans.task_design(self.task))
         self.tw = FIXTURE.parents[1] / 'skills/team-knowledge/scripts/tw.py'
         self.environment = patch.dict(os.environ, {'TW_RUN_CONTEXT': json.dumps({
             'repository': 'code.example/group/sub/project', 'run_id': 'R17', 'attempt': '2', 'job': 'tests'}),
             'TW_PLATFORM_LOG': str(self.root / '.tw/local/calls.jsonl')})
         self.environment.start()
         self.addCleanup(self.environment.stop)
-        captured = self.command('run', '--task', '.tw/local/task.json', '--portable')
+        captured = self.command('run', '--task', '.tw/local/task.json', '--design', '.tw/local/design.md', '--portable')
         self.assertEqual(captured.returncode, 0, captured.stdout + captured.stderr)
         record = read(self.root / json.loads(captured.stdout)['artifact']['path'])
         manifest_path = self.root / record['results'][0]['portable']['path']

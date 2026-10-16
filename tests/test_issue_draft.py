@@ -26,6 +26,7 @@ class IssueAdoption(unittest.TestCase):
     def setUp(self):
         self.base.setUp(self)
         self.base.prepare(self)
+        self.task = plans.written_task(self.task)
         self.issue['body'] = 'Add two inputs.\n\nOriginal MATT spec text stays as written.'
         self.design_path = plans.design_source(self.root, self.design)
         self.child = {'html_url': CHILD, 'state': 'open', 'assignees': [{'login': 'bob'}], 'comments_data': [],

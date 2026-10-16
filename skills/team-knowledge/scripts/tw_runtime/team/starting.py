@@ -1,6 +1,6 @@
 """Select a task's most recent prepared context and compare its actual preparation inputs."""
 import design_files
-import copy
+import task_inputs
 from pathlib import Path
 
 from common import Invalid, artifact, artifact_valid, digest, read, require
@@ -16,19 +16,8 @@ def latest_context(root, task_id):
 
 
 def fill_acceptance(task, design):
-    """Only local start inputs may omit acceptance text; explicit values remain subject to validation."""
-    result = copy.deepcopy(task)
-    sections = {row['id']: row for row in design['sections']}
-    for row in result.get('acceptance', []):
-        if not isinstance(row, dict):
-            continue  # The ordinary task validator names invalid rows.
-        section = sections.get(row.get('id'), {})
-        if 'expectation' not in row or 'checks' not in row:
-            require(section.get('type') == 'acceptance',
-                    'Missing acceptance section: ' + str(row.get('id')) + '; check --design and run tw team start')
-            row.setdefault('expectation', section['body'])
-            row.setdefault('checks', copy.deepcopy(section['data']['checks']))
-    return result
+    """Resolve acceptance through the same contract used by platform and direct commands."""
+    return task_inputs.expand(task, design)
 
 
 def _values(root, context, key):
@@ -92,9 +81,7 @@ def select(args, root, profile):
               (read(artifact_valid(root, previous['design'])) if previous else None))
     require(design is not None, '；'.join((platform or {}).get('design_gaps', []))
             or 'start needs --design <design.md> or a shared plan')
-    # A platform task block is always fully specified and is never generated locally.
-    if not args.issue:
-        task = fill_acceptance(task, design)
+    task = fill_acceptance(task, design)
     approvals = ([read(local(root, p)) for p in args.approval] if args.approval else
                  platform['approvals'] if platform else _values(root, previous or {}, 'approvals'))
     history = ([design_files.read(local(root, p)) for p in args.design_history] if args.design_history else
@@ -145,13 +132,8 @@ def resolve_accept_context(args, root):
     require(ref is not None, 'accept needs a prepared context; run tw team start --task <task.json> --design <design.md>')
     if supplied:
         captured = read(artifact_valid(root, context['task']))
-        # The original file may still contain ID-only rows; every explicitly supplied field must agree.
-        rows = captured['acceptance']
-        same = (dict(supplied, acceptance=rows) == captured and
-                isinstance(supplied.get('acceptance'), list) and len(supplied['acceptance']) == len(rows) and
-                all(isinstance(row, dict) and row.get('id') == saved['id']
-                    and all(key in saved and saved[key] == value for key, value in row.items())
-                    for row, saved in zip(supplied['acceptance'], rows)))
+        task_inputs.validate_written(supplied)
+        same = supplied == task_inputs.written(captured)
         require(same, 'Task content changed since preparation; run tw team start with this task file before acceptance')
     args.context = Path(ref['path'])
     args.task = None

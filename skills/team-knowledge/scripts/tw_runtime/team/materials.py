@@ -153,10 +153,9 @@ def resolve(args, root):
         raise MaterialGap('context', '不存在；请先 start', task_id)
     if file_task:
         captured = read(checked(root, defaults['task'], 'task', task_id))
-        rows = captured['acceptance']
-        same = (dict(supplied, acceptance=rows) == captured and isinstance(supplied.get('acceptance'), list)
-                and len(supplied['acceptance']) == len(rows) and all(isinstance(row, dict) and row.get('id') == saved['id']
-                    and all(saved.get(k) == v for k, v in row.items()) for row, saved in zip(supplied['acceptance'], rows)))
+        import task_inputs
+        task_inputs.validate_written(supplied)
+        same = supplied == task_inputs.written(captured)
         if not same:
             raise MaterialGap('task', '内容已改变，须重新 start', task_id)
     # Use the normalized, complete task captured by start, even if its input still has ID-only acceptance rows.
