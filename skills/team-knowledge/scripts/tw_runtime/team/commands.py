@@ -206,10 +206,13 @@ def dispatch(args, root):
     if args.command == 'schema':
         directory = skill_resource('templates')
         return {'ok': True, 'summary': '统一项目数据格式与字段说明',
-                'templates': {p.stem: str(p) for p in sorted(directory.glob('*')) if p.suffix == '.json' or p.name == 'design.md'},
+                'templates': {p.stem: str(p) for p in sorted(directory.glob('*')) if p.suffix == '.json' or p.name in {'design.md', 'scenarios.yaml'}},
                 'reference': str(skill_resource('references/contracts.md')),
                 'data_version': RECORD_SCHEMA,
                 'next_action': 'Read the installed template and replace every placeholder.'}
+    if args.command == 'scenarios':
+        import scenarios
+        return scenarios.dispatch(args, root, load_profile(root))
     if args.command == 'project':
         return project_report(root, args.home)
     if args.command == 'cleanup':
@@ -584,6 +587,7 @@ def produce(args, root, profile, task, platform, request):
                    'design_history': [request.publish(f'design-history-{i}.json', v) for i, v in enumerate(history)],
                    'predecessors': [request.publish(f'predecessor-{i}.json', v) for i, v in enumerate(predecessors)],
                    'dependencies': selection['dependencies'],
+                   **({'design_source': platform['design_source']} if platform else {}),
                    'preparation_inputs': {**selection['signature'],
                                           **({'design_path': selection['design_path']} if selection['design_path'] else {})},
                    'implementation_ready': readiness['implementation_ready'] and not running,

@@ -109,5 +109,5 @@ class VerificationGaps(unittest.TestCase):
         fix = gap.split('改为：', 1)[1].split('（检查 ', 1)[0]
         raw = designs.render(self.design)
         line = next(line for line in raw.splitlines() if line.startswith('- 验证：'))
-        loaded = designs.load(raw.replace(line, fix))
+        loaded = designs.load(raw.replace(line, fix), scenario_reader=plans.scenario_reader)
         self.assertEqual(loaded['sections'][1]['data']['verification']['substitutes'], [allowed, missing])

@@ -49,6 +49,10 @@ def repeat_command(args):
 
 
 CODE_ACTIONS = {
+    Code.SCENARIO_FILE: lambda args, checks: '修正场景文件中列出的问题后重跑 tw team scenarios check <文件>。',
+    Code.CASE_LIST: lambda args, checks: '修正用例文件中列出的问题后重跑 tw team scenarios import-cases --task <身份> <文件>。',
+    Code.SCENARIO_COVERAGE: lambda args, checks: '按列出的用例补齐配对或场景后重跑 tw team scenarios coverage --task <身份> --pairs <配对文件>。',
+    Code.ACCEPTANCE_ENTRY: lambda args, checks: '修正 .tw/config.json 的 acceptance_entries 入口声明，再运行原命令。',
     Code.PROJECT_UNINITIALIZED: lambda args, checks: '先预览项目初始化：tw init --root '
         + shlex.quote(str(args.root.resolve())) + '；确认预览后写入：tw init --root '
         + shlex.quote(str(args.root.resolve())) + ' --apply',

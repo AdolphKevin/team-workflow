@@ -117,5 +117,37 @@
     "argv": ["python3", ".tw/platform.py"],
     "timeout": 120,
     "operations": ["task", "commit", "reference", "ci-result", "file-url"]
+  },
+  "acceptance_entries": {
+    "cli": {
+      "surface": "cli",
+      "operate": "在临时工作目录运行交付的命令",
+      "observe": [
+        "标准输出",
+        "错误输出",
+        "退出码",
+        "文件变化"
+      ],
+      "evidence": [
+        "命令原文",
+        "完整输出",
+        "文件差异"
+      ],
+      "isolation": "每轮新建临时目录"
+    },
+    "doc": {
+      "surface": "doc",
+      "operate": "阅读交付文档并逐项核对场景",
+      "observe": [
+        "正文",
+        "链接",
+        "示例"
+      ],
+      "evidence": [
+        "原文与位置",
+        "核对记录"
+      ],
+      "isolation": "固定文档版本"
+    }
   }
 }

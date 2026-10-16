@@ -56,7 +56,7 @@ class BusinessEvidence(unittest.TestCase):
 
     def test_missing_scenario_or_assessment_never_prepares_implementation(self):
         self.setup_task()
-        for field in ('scenario', 'verification'):
+        for field in ('scenarios', 'verification'):
             value = copy.deepcopy(self.design)
             del value['sections'][1]['data'][field]
             with self.assertRaisesRegex(Invalid, 'scenario'):
@@ -94,10 +94,17 @@ class BusinessEvidence(unittest.TestCase):
         self.task['acceptance'][0]['checks'] = ['journey']
         self.design['sections'][0]['body'] = self.task['goal']
         self.design['sections'][1]['body'] = self.task['acceptance'][0]['expectation']
-        self.design['sections'][1]['data']['scenario'] = {'actor': 'buyer', 'initial_state': 'No installed shop',
-            'steps': ['Install through the public CLI', 'Send the first message'],
-            'expected': 'Message accepted after installation', 'negative_cases': ['A missing channel prevents accepting the message'],
-            'sources': plans.sources()}
+        self.task['paths'].append('tests/fixtures/scenarios.json')
+        self.design['sections'][2]['data']['scope'].append('tests/fixtures/scenarios.json')
+        scenario_path = self.root / 'tests/fixtures/scenarios.json'
+        scenario_file = read(scenario_path)
+        positive, negative = scenario_file['sops'][0]['scenarios']
+        positive.update(actor='buyer', initial_state=['No installed shop'],
+                        steps=['Install through the public CLI', 'Send the first message'],
+                        expected=['Message accepted after installation'])
+        negative.update(expected=['A missing channel prevents accepting the message'])
+        write(scenario_path, scenario_file)
+        self.design['sections'][1]['data']['scenarios'][0]['sha256'] = __import__('common').sha(scenario_path)
         self.design['sections'][1]['data']['checks'] = ['journey']
         self.refresh()
         first = read(self.root / self.runs[0])

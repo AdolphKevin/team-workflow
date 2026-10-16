@@ -15,6 +15,8 @@ COMMANDS = {'start', 'run', 'status', 'review', 'approval-draft', 'accept', 'del
             'verify', 'handoff', 'progress', 'task-export'}
 SINGLE = ('context', 'task', 'design', 'brief', 'review', 'acceptance', 'delivery_report', 'delivery')
 OPTIONAL = ('review_markdown', 'review_source')
+OPTIONAL_ARRAY = ('case_imports',)
+OPTIONAL_SCENARIOS = ('case_coverage',)
 ARRAY = ('design_history', 'approvals', 'runs')
 OPTIONS = {'context': 'context', 'design': 'design', 'brief': 'brief', 'design_history': 'design_history',
            'approvals': 'approval', 'runs': 'run', 'review': 'review', 'acceptance': 'acceptance',
@@ -55,11 +57,11 @@ def load_snapshot(root, task_id):
         return None, None
     try:
         value = json.loads(payload.decode('utf-8'))
-        obj(value, {'data_version', 'kind', 'task_id', *SINGLE, *ARRAY}, {'platform', 'selected_runs', *OPTIONAL})
+        obj(value, {'data_version', 'kind', 'task_id', *SINGLE, *ARRAY}, {'platform', 'selected_runs', *OPTIONAL, *OPTIONAL_ARRAY, *OPTIONAL_SCENARIOS})
         if type(value['data_version']) is not int or value['data_version'] != 1 or value['kind'] != 'current-materials' or value['task_id'] != task_id:
             raise Invalid('记录类型、版本或任务身份不符')
-        for key in ARRAY:
-            if not isinstance(value[key], list):
+        for key in ARRAY + OPTIONAL_ARRAY:
+            if not isinstance(value.get(key, []), list):
                 raise Invalid(key + ' 必须是列表')
         return value, hashlib.sha256(payload).hexdigest()
     except (Invalid, OSError, UnicodeError, ValueError, TypeError, KeyError) as exc:
@@ -77,10 +79,10 @@ def validate(root, value, replaced=()):
     replaced = set(replaced)
     if 'review' in replaced:
         replaced.update(OPTIONAL)
-    for key in SINGLE + OPTIONAL + ARRAY:
+    for key in SINGLE + OPTIONAL + OPTIONAL_SCENARIOS + ARRAY + OPTIONAL_ARRAY:
         if key in replaced:
             continue
-        refs = value[key] if key in ARRAY else [value[key]] if value.get(key) is not None else []
+        refs = value.get(key, []) if key in ARRAY + OPTIONAL_ARRAY else [value[key]] if value.get(key) is not None else []
         for ref in refs:
             checked(root, ref, key, value['task_id'])
     if value.get('selected_runs') is not None and 'runs' not in replaced:
@@ -381,6 +383,8 @@ def finish(args, root, task, result, request):
             if result['continued'] and latest:
                 return request.finish(result)
             updated = initial(root, task['id'], result['context'], args.start_selection['platform'])
+            if latest:
+                updated.update({key: latest[key] for key in OPTIONAL_ARRAY + OPTIONAL_SCENARIOS if key in latest})
         elif latest:
             if latest['context'] != selection['value']['context']:
                 raise MaterialGap('context', '另一个 start 已取代本次上下文，请重新 start', task['id'])

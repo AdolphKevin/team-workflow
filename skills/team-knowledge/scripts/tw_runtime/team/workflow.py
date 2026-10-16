@@ -14,9 +14,10 @@ class TeamParser(argparse.ArgumentParser):
     def parse_args(self, args=None, namespace=None):
         value = super().parse_args(args, namespace)
         # Subparsers parse into a separate namespace; append without losing mappings before the command.
-        value.repository = value.repository + getattr(value, 'sub_repository', [])
-        if hasattr(value, 'sub_repository'):
-            del value.sub_repository
+        value.repository = value.repository + getattr(value, 'sub_repository', []) + getattr(value, 'action_repository', [])
+        for field in ('sub_repository', 'action_repository'):
+            if hasattr(value, field):
+                delattr(value, field)
         return value
 
 
@@ -143,6 +144,19 @@ def parser():
     c.add_argument('--sections', help='逗号分隔的章节编号，或 all 选择全部现有章节')
     c.add_argument('--reconcile', help='对账原因；绑定当前平台历史重新确认批准')
     command('design-diff', '核对方案变化及受影响的章节', task, inputs, request, design, history)
+    c = command('scenarios', '核对场景文件、导入用例与核对覆盖')
+    actions = c.add_subparsers(dest='scenario_action', required=True)
+    action_locations = argparse.ArgumentParser(add_help=False)
+    action_locations.add_argument('--root', type=Path, default=argparse.SUPPRESS)
+    action_locations.add_argument('--repository', dest='action_repository', action='append', default=[])
+    action = actions.add_parser('check', help='核对场景文件', parents=[action_locations, output])
+    action.add_argument('file', type=Path)
+    action = actions.add_parser('import-cases', help='导入测试用例', parents=[action_locations, output])
+    action.add_argument('--task', required=True)
+    action.add_argument('file', type=Path)
+    action = actions.add_parser('coverage', help='核对用例覆盖', parents=[action_locations, output])
+    action.add_argument('--task', required=True)
+    action.add_argument('--pairs', required=True, type=Path)
     command('schema', '列出团队材料模板与字段说明')
     c = command('cleanup', '预览或应用本机材料清理计划')
     c.add_argument('--apply', action='store_true', help='Apply an explicitly reviewed cleanup plan')

@@ -1,12 +1,13 @@
 # 批次 1：团队流程简化（T7）的 SOP 场景
-# 格式见 docs/proposals/2026-10-14-sop-retest-trust.md 第 3.1 节。
+# 格式见 docs/proposals/2026-10-16-scenario-acceptance-and-positive-text.md 第 2.1 节。
 # 预期结果只依据已批准的流程简化方案，不依据当前实现的输出。
 # 版本 2（2026-10-15）：按批次 1 第 1 轮的场景问题 Q2、Q3 改正 SOP-06-N03 的步骤与 SOP-07-P01 的预期措辞。
+# 版本 3（2026-10-16）：按场景格式补 SOP-06-P01，SOP-07 写明 negative_exempt；待 AdolphKevin 确认。
 
 metadata:
   requirement: "团队流程简化（T7）：固定材料组与 start、评审 Markdown 与逐项复核、deliver 顺序封装、参数归位、status 与关闭规则"
   batch: "tw-process-simplification-t7"
-  version: 2
+  version: 3
   owner: "AdolphKevin"
   sources:
     - ref: "docs/proposals/2026-10-15-process-simplification.md S1–S6、D1–D4、第 4 节"
@@ -35,7 +36,6 @@ sops:
         priority: P1
         refs: ["S4", "D1"]
         verify: cli
-        layer: local
         initial_state:
           - "按 docs/install.md 安装的两个技能，以及一个已初始化 .tw/ 的临时仓库"
         steps:
@@ -56,7 +56,6 @@ sops:
         priority: P1
         refs: ["S4"]
         verify: cli
-        layer: local
         initial_state:
           - "同 SOP-01-P01"
         steps:
@@ -83,7 +82,6 @@ sops:
         priority: P0
         refs: ["S1"]
         verify: cli
-        layer: local
         initial_state:
           - "一个已有团队配置的临时仓库，准备好任务文件、方案和批准"
         steps:
@@ -103,7 +101,6 @@ sops:
         priority: P0
         refs: ["S1"]
         verify: cli
-        layer: local
         initial_state:
           - "完成 SOP-02-P01，任务进行到运行检查之后"
         steps:
@@ -121,7 +118,6 @@ sops:
         priority: P1
         refs: ["S6"]
         verify: cli
-        layer: local
         initial_state:
           - "任务文件中的验收项只写编号，不抄写方案中的验收文字和检查"
         steps:
@@ -139,7 +135,6 @@ sops:
         priority: P0
         refs: ["S1"]
         verify: cli
-        layer: local
         initial_state:
           - "完成 SOP-02-P01"
           - "手工修改已记录的方案或批准文件的内容"
@@ -159,7 +154,6 @@ sops:
         priority: P1
         refs: ["S1"]
         verify: cli
-        layer: local
         initial_state:
           - "某条命令已用某个请求编号成功执行"
           - "之后显式换了一份同角色的材料"
@@ -179,7 +173,6 @@ sops:
         priority: P2
         refs: ["S1"]
         verify: cli
-        layer: local
         initial_state:
           - "完成 SOP-02-P01"
         steps:
@@ -198,7 +191,6 @@ sops:
         priority: P1
         refs: ["S1"]
         verify: cli
-        layer: platform
         initial_state:
           - "一个以 Issue 为任务的身份已经 start 过"
           - "随后 Issue 上发布了新版本的方案"
@@ -226,7 +218,6 @@ sops:
         priority: P0
         refs: ["S3", "D2"]
         verify: cli
-        layer: local
         initial_state:
           - "完成 start 和运行检查的任务"
         steps:
@@ -247,7 +238,6 @@ sops:
         priority: P0
         refs: ["S3"]
         verify: cli
-        layer: local
         initial_state:
           - "完成 SOP-03-P01 后修改了源码，并重新运行检查"
         steps:
@@ -268,7 +258,6 @@ sops:
         priority: P0
         refs: ["S3"]
         verify: cli
-        layer: local
         initial_state:
           - "SOP-03-P02 生成的 Markdown 中至少一项仍为待复核"
         steps:
@@ -287,7 +276,6 @@ sops:
         priority: P0
         refs: ["S3", "原则 1"]
         verify: cli
-        layer: local
         initial_state:
           - "评审人姓名与方案中的实施负责人相同"
         steps:
@@ -305,7 +293,6 @@ sops:
         priority: P1
         refs: ["S3"]
         verify: cli
-        layer: local
         initial_state:
           - "方案中有一项验收要求人工观察"
         steps:
@@ -323,7 +310,6 @@ sops:
         priority: P1
         refs: ["S3"]
         verify: cli
-        layer: local
         initial_state:
           - "完成评审提交与业务验收的任务"
         steps:
@@ -350,7 +336,6 @@ sops:
         priority: P0
         refs: ["S2", "D4"]
         verify: cli
-        layer: local
         initial_state:
           - "评审已提交并通过、尚未做业务验收的任务，本分支没有改动知识"
         steps:
@@ -369,7 +354,6 @@ sops:
         priority: P0
         refs: ["S2"]
         verify: cli
-        layer: local
         initial_state:
           - "评审已提交并通过的任务"
         steps:
@@ -389,7 +373,6 @@ sops:
         priority: P0
         refs: ["S2"]
         verify: cli
-        layer: local
         initial_state:
           - "评审中有一项验收结论为不通过"
         steps:
@@ -408,7 +391,6 @@ sops:
         priority: P0
         refs: ["S2", "原则 1"]
         verify: cli
-        layer: local
         initial_state:
           - "完成 tw team accept 之后修改了源码"
         steps:
@@ -427,7 +409,6 @@ sops:
         priority: P1
         refs: ["S2", "S1"]
         verify: cli
-        layer: local
         initial_state:
           - "deliver 在完成业务验收之后被中断"
         steps:
@@ -454,7 +435,6 @@ sops:
         priority: P0
         refs: ["S5"]
         verify: cli
-        layer: local
         initial_state:
           - "已生成评审 Markdown，但还没有提交"
         steps:
@@ -471,7 +451,6 @@ sops:
         priority: P1
         refs: ["S5"]
         verify: cli
-        layer: local
         initial_state:
           - "完成最终交付的任务"
         steps:
@@ -490,7 +469,6 @@ sops:
         priority: P1
         refs: ["S5"]
         verify: cli
-        layer: local
         initial_state:
           - "完成业务验收的任务"
           - "随后修改方案的验收节，或修改必需检查的配置"
@@ -508,7 +486,6 @@ sops:
         priority: P2
         refs: ["S5"]
         verify: doc
-        layer: local
         initial_state:
           - "安装后的 team-workflow 技能"
         steps:
@@ -526,6 +503,17 @@ sops:
       - "简化之后，批准、独立评审与业务验收、知识处置的门槛与阶段 2 相同"
     scenarios:
 
+      - id: SOP-06-P01
+        polarity: positive
+        title: 批准、独立验收与知识处置齐全时完成交付
+        actor: 成员
+        priority: P0
+        verify: cli
+        initial_state: [中等任务的方案已获具名批准，独立评审与业务验收已完成，知识处置已填写]
+        steps: [运行最终交付核查]
+        expected: [交付完成，记录引用当前的批准、评审、验收与知识处置]
+        forbidden_effects: []
+
       - id: SOP-06-N01
         polarity: negative
         negative_type: incomplete-input
@@ -534,7 +522,6 @@ sops:
         priority: P0
         refs: ["原则 1"]
         verify: cli
-        layer: local
         initial_state:
           - "评估为中等复杂度、尚无具体评审人批准的方案"
         steps:
@@ -552,7 +539,6 @@ sops:
         priority: P0
         refs: ["原则 1"]
         verify: cli
-        layer: local
         initial_state:
           - "方案修订了受批准约束的章节，但只有旧版本的批准"
         steps:
@@ -570,7 +556,6 @@ sops:
         priority: P0
         refs: ["原则 1"]
         verify: cli
-        layer: local
         initial_state:
           - "本分支改动了两条知识，交付时只列出一条"
         steps:
@@ -583,6 +568,7 @@ sops:
         evidence_hints: ["deliver 原始输出"]
 
   - id: SOP-07
+    negative_exempt: 本节点记录真实任务的整体复验，反向操作由 SOP-01 至 SOP-06 的逐项场景承担
     title: 真实任务与平台补验
     actor: "成员"
     entry: "本仓真实任务；跨仓联合核查"
@@ -598,7 +584,6 @@ sops:
         priority: P0
         refs: ["第 4 节"]
         verify: cli
-        layer: local
         initial_state:
           - "本仓的完整副本，选定一个不需要改知识的真实小任务，方案为简单"
         steps:
@@ -617,7 +602,6 @@ sops:
         priority: P1
         refs: ["第 4 节", "S3"]
         verify: cli
-        layer: local
         initial_state:
           - "本仓的完整副本，选定一个中等任务，方案已获批准"
         steps:
@@ -635,7 +619,6 @@ sops:
         priority: P2
         refs: ["T1（v4.1）", "批次 0 SOP-05-N02"]
         verify: cli
-        layer: platform
         initial_state:
           - "可只读访问 GitHub 的环境；主仓 A 与参与仓 B 的提交都已推送"
         steps:

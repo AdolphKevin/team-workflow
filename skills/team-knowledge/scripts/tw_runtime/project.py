@@ -9,7 +9,7 @@ from . import DATA_VERSION, FORMAT, KB, Invalid, entries, gitutil, globs
 
 CONFIG = f'{KB}/config.json'
 MAPPING = f'{KB}/local/repositories.json'
-TEAM_KEYS = ('checks', 'required_checks', 'risk_checks', 'inputs', 'external_inputs', 'environment_versions', 'accounts')
+TEAM_KEYS = ('checks', 'required_checks', 'risk_checks', 'inputs', 'external_inputs', 'environment_versions', 'accounts', 'acceptance_entries')
 KEYS = ('format', 'data_version', 'project', 'context', 'shared', 'documents', 'platform') + TEAM_KEYS
 DOC_ID = re.compile(r'^[a-z0-9][a-z0-9._-]*$')
 LEGACY = ('.codestable', '.team-workflow.json', '.team-workflow')

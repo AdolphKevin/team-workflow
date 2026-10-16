@@ -55,7 +55,12 @@ class LocalMapping(Case):
                                         'cwd': '.', 'timeout': 5, 'purpose': 'README exists', 'format': 'command',
                                         'required_cases': [], 'required_env': [], 'environment': {'kind': 'stateless'}}},
                        required_checks={'code': [], 'docs': []}, risk_checks={},
-                       inputs=[], external_inputs={}, environment_versions={}, accounts=[])
+                       inputs=[], external_inputs={}, environment_versions={}, accounts=[],
+                       acceptance_entries={'cli': {'surface': 'cli', 'operate': '运行命令', 'observe': ['输出'], 'evidence': ['输出'], 'isolation': '临时目录'}})
+        import shutil
+        scenario = self.root / 'tests/fixtures/scenarios.json'
+        scenario.parent.mkdir(parents=True)
+        shutil.copyfile(Path(__file__).parent / 'fixtures/scenarios.json', scenario)
         commit(self.root, 'shared configuration')
         worktrees = [self.base / name for name in ('A', 'B')]
         for checkout in worktrees:

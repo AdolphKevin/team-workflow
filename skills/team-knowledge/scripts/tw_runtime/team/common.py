@@ -294,14 +294,46 @@ def accounts(values):
     return values
 
 
+def acceptance_entries(values, declared_accounts):
+    """项目的真实验收入口与已声明账号。"""
+    try:
+        require(isinstance(values, dict), 'acceptance_entries 应为对象')
+        account_rows = declared_accounts if isinstance(declared_accounts, list) else []
+        account_ids = {row['id'] for row in account_rows if isinstance(row, dict) and isinstance(row.get('id'), str)}
+        for name, row in values.items():
+            require(isinstance(name, str) and bool(name.strip()), '入口名应为非空字符串')
+            require(isinstance(row, dict), f'acceptance_entries.{name} 应为对象')
+            required = {'surface', 'operate', 'observe', 'evidence', 'isolation'}
+            require(required <= row.keys(), f'acceptance_entries.{name} 缺少字段：' + '、'.join(sorted(required - row.keys())))
+            require(row.keys() <= required | {'address_env', 'accounts'},
+                    f'acceptance_entries.{name} 格式外字段：' + '、'.join(sorted(row.keys() - required - {'address_env', 'accounts'})))
+            for field in ('surface', 'operate', 'isolation'):
+                require(isinstance(row[field], str) and bool(row[field].strip()), f'acceptance_entries.{name}.{field} 应为非空字符串')
+            for field in ('observe', 'evidence'):
+                require(isinstance(row[field], list) and bool(row[field])
+                        and all(isinstance(item, str) and item.strip() for item in row[field]),
+                        f'acceptance_entries.{name}.{field} 应为非空字符串数组')
+            if 'accounts' in row:
+                require(isinstance(row['accounts'], list) and all(isinstance(item, str) and item in account_ids for item in row['accounts']),
+                        f'acceptance_entries.{name}.accounts 引用已声明的账号 id')
+            if 'address_env' in row:
+                require(isinstance(row['address_env'], str) and re.fullmatch(r'[A-Za-z_][A-Za-z0-9_]*', row['address_env']),
+                        f'acceptance_entries.{name}.address_env 填环境变量名')
+    except (Invalid, TypeError) as exc:
+        raise Invalid('验收入口声明：' + str(exc), error_code=Code.ACCEPTANCE_ENTRY) from exc
+    return values
+
+
 def load_profile(root, check_context=True):
     """Read the single project config and adapt its name for existing team logic."""
     require((Path(root) / CONFIG).exists(), '项目尚待初始化：缺少 .tw/config.json',
             error_code=Code.PROJECT_UNINITIALIZED)
     config = read(Path(root) / CONFIG)
+    if isinstance(config, dict):
+        acceptance_entries(config.get('acceptance_entries', {}), config.get('accounts', []))
     problems = config_problems(config)
     require(not problems, '；'.join(problems))
-    optional = {'external_inputs': {}, 'accounts': []}
+    optional = {'external_inputs': {}, 'accounts': [], 'acceptance_entries': {}}
     missing = [key for key in TEAM_KEYS if key not in config and key not in optional]
     require(not missing, '.tw/config.json 尚未配置团队功能，缺少字段：' + ', '.join(missing))
     profile = {key: config.get(key, optional.get(key)) for key in TEAM_KEYS}
@@ -312,10 +344,12 @@ def load_profile(root, check_context=True):
 
 
 def profile_valid(profile, root, check_context=True):
+    profile.setdefault('acceptance_entries', {})
     obj(profile, {'data_version', 'project', 'context', *TEAM_KEYS}, {'platform'})
     require(type(profile['data_version']) is int and profile['data_version'] == DATA_VERSION,
             '项目数据只支持 data_version 1')
     accounts(profile['accounts'])
+    acceptance_entries(profile['acceptance_entries'], profile['accounts'])
     location_settings(root)
     text(profile['project'])
     for name in strings(profile['context']):

@@ -1,7 +1,7 @@
-"""Pure versioned design contracts, section fingerprints and review accounting.
+"""方案结构、章节指纹与批准核对。
 
-Callers own history, artifact reads, code enumeration and platform publication.
-This module never reads a file, changes an input, or interprets prose as consent.
+本模块处理传入的数据。文件读取、平台访问和原文选择由调用方负责；
+Markdown 载入所需的场景数据通过必填的 scenario_reader 提供。
 """
 from error_codes import Code
 import hashlib
@@ -20,10 +20,10 @@ IDENTIFIER = re.compile(r'[A-Za-z0-9][A-Za-z0-9._-]{0,127}')
 SHA256 = re.compile(r'[0-9a-f]{64}')
 
 
-def load(text):
-    """Parse the human-authored Markdown source into the unchanged design value."""
+def load(text, *, scenario_reader):
+    """读取 Markdown 方案，核对场景引用并记录场景文件指纹。"""
     from design_markdown import load as parse
-    return parse(text)
+    return parse(text, scenario_reader=scenario_reader)
 
 
 def render(design):

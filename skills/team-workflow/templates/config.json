@@ -65,5 +65,21 @@
       "isolation": "__REPLACE__",
       "credential_env": []
     }
-  ]
+  ],
+  "acceptance_entries": {
+    "cli": {
+      "surface": "cli",
+      "operate": "在临时目录运行交付的命令",
+      "observe": [
+        "标准输出",
+        "退出码",
+        "文件变化"
+      ],
+      "evidence": [
+        "命令原文",
+        "完整输出"
+      ],
+      "isolation": "每轮使用独立临时目录"
+    }
+  }
 }

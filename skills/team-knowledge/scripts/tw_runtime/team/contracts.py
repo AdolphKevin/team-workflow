@@ -117,16 +117,18 @@ def design(value):
         if row['type'] != 'acceptance':
             continue
         data = row['data']
-        require({'scenario', 'verification'} <= data.keys(), 'Acceptance needs a business scenario and verification requirements: ' + row['id'])
-        scenario = obj(data['scenario'], {'actor', 'initial_state', 'steps', 'expected', 'negative_cases'}, {'sources'})
-        for key in ('actor', 'initial_state', 'expected'):
-            material(scenario[key])
-        if 'sources' in scenario:
-            sources(scenario['sources'])
-        for key in ('steps', 'negative_cases'):
-            strings(scenario[key], True)
-            for item in scenario[key]:
-                material(item)
+        require('scenario' not in data, '场景写在场景文件，验收节用 `- 场景：<路径>#<节点>`')
+        require({'scenarios', 'verification'} <= data.keys(), '验收需要 scenarios 场景引用与 verification 验证要求：' + row['id'])
+        require(isinstance(data['scenarios'], list) and bool(data['scenarios']), '验收至少引用一份场景文件')
+        for reference in data['scenarios']:
+            obj(reference, {'path', 'sha256', 'nodes'})
+            from designs import _path
+            _path(reference['path'])
+            import re
+            require(isinstance(reference['sha256'], str) and re.fullmatch(r'[a-f0-9]{64}', reference['sha256']), '场景引用填写 sha256')
+            strings(reference['nodes'], True)
+        if 'sources' in data:
+            sources(data['sources'])
         verification = data['verification']
         require(isinstance(verification, dict) and 'coverage' not in verification,
                 'verification 不再接受 coverage；验证：自动；用例 <用例>；替身 <替身>；覆盖范围写在 .tw/config.json 的 checks.<编号>.coverage')
@@ -163,7 +165,7 @@ def sources(values):
 
 def unsourced(task, plan):
     rows = {v['id']: v for v in plan['sections']}
-    return sorted(a['id'] for a in task['acceptance'] if not rows[a['id']]['data']['scenario'].get('sources'))
+    return sorted(a['id'] for a in task['acceptance'] if not rows[a['id']]['data'].get('sources'))
 
 
 def identity(value):

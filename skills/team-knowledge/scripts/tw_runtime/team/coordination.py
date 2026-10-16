@@ -371,6 +371,7 @@ def load(url, issue=None, root=None):
             'task': task, 'source': state['source'], 'parent': parent,
             'requirements': state['requirements'], 'history_digest': state['history_digest'],
             'platform_history': state['platform_history'], 'design': design,
+            'design_source': latest['source'] if latest else None,
             'history': [entry['record']['design'] for entry in entries[:-1]],
             'approvals': approvals, 'roles': dict(design['roles']) if design else {},
             'approval_records': [{'url': item['url'], 'reviewer': item['record']['approval']['reviewer'],

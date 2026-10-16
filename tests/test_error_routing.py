@@ -12,6 +12,7 @@ import commands
 import repairs
 import workflow
 import designs
+import plan_fixtures as plans
 import reviews
 import artifacts
 import contracts
@@ -117,7 +118,7 @@ class ErrorRouting(unittest.TestCase):
             exc = Invalid(reason, key='api-1')
             with self.subTest(reason=reason), patch.object(designs, 'validate_design', side_effect=exc):
                 with self.assertRaises(Invalid) as raised:
-                    designs.load(raw)
+                    designs.load(raw, scenario_reader=plans.scenario_reader)
                 self.assertEqual(getattr(raised.exception, 'line', None), number)
 
     def test_invalid_identifier_keeps_original_line_with_arbitrary_reason(self):
@@ -126,7 +127,7 @@ class ErrorRouting(unittest.TestCase):
         for reason in ('任意说明甲', 'Role 任意说明乙 api-2'):
             with self.subTest(reason=reason), patch.object(Invalid, '__str__', return_value=reason):
                 with self.assertRaises(Invalid) as raised:
-                    designs.load(raw)
+                    designs.load(raw, scenario_reader=plans.scenario_reader)
                 self.assertEqual(getattr(raised.exception, 'line', None), number)
 
 

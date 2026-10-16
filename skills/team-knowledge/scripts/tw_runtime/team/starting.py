@@ -79,7 +79,7 @@ def select(args, root, profile):
         read(artifact_valid(root, previous['task'])) if previous else None)
     require(task is not None, '当前任务身份尚缺准备上下文', next_action=repairs.command(args, 'start', '--design <方案文件>'))
     design = (design_files.read(local(root, args.design)) if args.design else (platform or {}).get('design') or
-              (read(artifact_valid(root, previous['design'])) if previous else None))
+              (design_files.read(artifact_valid(root, previous['design'])) if previous else None))
     if design is None:
         error = Invalid('；'.join((platform or {}).get('design_gaps', []))
                         or 'start needs --design <design.md> or a shared plan')

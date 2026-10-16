@@ -54,7 +54,7 @@ class MarkdownInputCases(unittest.TestCase):
         with contextlib.redirect_stdout(output):
             code = workflow.main(['schema', '--root', str(self.root)])
         self.assertEqual(code, 0)
-        self.assertEqual(set(json.loads(output.getvalue())['templates']), {'config', 'design', 'task'})
+        self.assertEqual(set(json.loads(output.getvalue())['templates']), {'config', 'design', 'task', 'scenarios'})
 
     def test_schema_points_to_markdown_design_template(self):
         raw = io.StringIO()
@@ -78,4 +78,4 @@ class MarkdownFixtureCases(unittest.TestCase):
             path = Path(directory) / 'design.md'
             value = example()
             plans.write_design(path, value)
-            self.assertEqual(designs.load(path.read_text()), value)
+            self.assertEqual(designs.load(path.read_text(), scenario_reader=plans.scenario_reader), value)

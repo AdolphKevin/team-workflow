@@ -340,7 +340,7 @@ class DeliveryCases(unittest.TestCase):
 
     def test_acceptance_needs_confirmed_business_sources(self):
         self.setup_task()
-        del self.design['sections'][1]['data']['scenario']['sources']
+        del self.design['sections'][1]['data']['sources']
         self.write('design', self.design)
         from contracts import execution_environment
         self.assertIn('Acceptance scenario needs confirmed business sources: A1',
@@ -350,7 +350,7 @@ class DeliveryCases(unittest.TestCase):
 
     def test_scenario_sources_are_explicit_and_unique(self):
         self.setup_task()
-        scenario = self.design['sections'][1]['data']['scenario']
+        scenario = self.design['sections'][1]['data']
         valid = copy.deepcopy(scenario['sources'])
         for value, message in (([], 'non-empty'), ([{'ref': 'SOP#1', 'version': '1'}], 'Missing fields: confirmed_by'),
                                ([{'ref': '__REPLACE__', 'version': '1', 'confirmed_by': 'carol'}], 'Unfilled template'),

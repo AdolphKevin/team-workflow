@@ -29,6 +29,7 @@ def configuration(root, profile):
             'context': list(profile['context']), 'shared': {}, 'documents': [],
             **{key: profile[key] for key in ('checks', 'required_checks', 'risk_checks', 'inputs',
                                           'external_inputs', 'environment_versions', 'accounts')},
+            'acceptance_entries': profile.get('acceptance_entries', {'cli': {'surface': 'cli', 'operate': '运行命令', 'observe': ['输出'], 'evidence': ['输出'], 'isolation': '临时目录'}}),
             **({'platform': profile['platform']} if 'platform' in profile else {})}
 
 
@@ -51,6 +52,10 @@ class WorkflowCases(unittest.TestCase):
         (self.root / '.gitignore').write_text('__pycache__/\n')
         (self.root / 'AGENTS.md').write_text('Respect the public behavior.\n')
         (self.root / 'app.py').write_text('def add(a, b):\n    return a+b\n')
+        import shutil
+        scenario = self.root / 'tests/fixtures/scenarios.json'
+        scenario.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(Path(__file__).parent / 'fixtures/scenarios.json', scenario)
         self.git('add', '.')
         self.git('commit', '-qm', 'fixture')
         self.profile = {'data_version': 1, 'project': 'sample', 'context': ['AGENTS.md'],

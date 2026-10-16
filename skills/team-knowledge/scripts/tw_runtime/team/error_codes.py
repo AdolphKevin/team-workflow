@@ -2,6 +2,10 @@
 
 
 class Code:
+    SCENARIO_FILE = 'scenario-file-invalid'
+    CASE_LIST = 'case-list-invalid'
+    SCENARIO_COVERAGE = 'scenario-coverage-incomplete'
+    ACCEPTANCE_ENTRY = 'acceptance-entry-invalid'
     INVALID = 'invalid-or-incomplete-input'
     PROJECT_UNINITIALIZED = 'project-not-initialized'
     CURRENT_MATERIALS = 'current-materials-incomplete'

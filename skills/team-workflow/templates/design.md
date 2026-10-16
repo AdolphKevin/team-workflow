@@ -20,11 +20,7 @@ __REPLACE__
 <!-- tw-section id=A1 type=acceptance -->
 __REPLACE__
 
-- 角色：__REPLACE__
-- 初始状态：__REPLACE__
-- 步骤：__REPLACE__
-- 预期：__REPLACE__
-- 反例：__REPLACE__
+- 场景：docs/sop/scenarios.yaml#SOP-02
 - 依据：位置 __REPLACE__；版本 __REPLACE__；确认人 __REPLACE__
 - 检查：__REPLACE__
 - 验证：自动
