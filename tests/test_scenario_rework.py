@@ -116,3 +116,6 @@ class ScenarioFindingIdentity(unittest.TestCase):
         self.assertEqual(code, 0, delivered)
         self.assertTrue(delivered['business_accepted'])
         self.assertTrue(delivered['delivery_complete'])
+        self.assertEqual(delivered['unverified_scope'], [{'scenario': 'S-P', 'status': 'blocked',
+            'finding': 'Q9', 'finding_state': 'deferred'}])
+        self.assertIn('S-P：blocked；问题 Q9：deferred', delivered['summary_markdown'])

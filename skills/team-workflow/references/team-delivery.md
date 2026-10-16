@@ -53,7 +53,7 @@ tw team deliver --task <身份> --reason <不需要更新知识的理由>
 
 ## 状态与关闭 Issue
 
-中断后运行 `tw team status --task <身份> --format text`，按返回的下一条命令接续；阶段、步骤与发布状态见[状态约定](contracts.md#进度恢复与统计)。
+中断后运行 `tw team status --task <身份> --format text`，阶段判定、记录报告方式与下一步见[状态约定](contracts.md#进度恢复与统计)。
 
 关闭 Issue 的条件为：最终交付完成；收尾说明或完整实施交接**已发布**；报告记录 `close_authorization`，含具名确认人 `confirmed_by` 和可核对的授权来源 `reference`。步骤为：
 

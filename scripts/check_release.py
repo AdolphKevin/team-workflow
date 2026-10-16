@@ -18,17 +18,20 @@ def sha(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def text_rules():
+    spec = importlib.util.spec_from_file_location('release_text_rules', Path(__file__).with_name('release_text_rules.py'))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def skill_document_checks(root=ROOT):
+    return text_rules().check(root)
+
+
 def markdown_links(root, path, text):
-    """技能文档的相对引用随发行物一起分发。"""
-    from urllib.parse import unquote
-    for link in re.findall(r'\]\(([^)]+)\)', re.sub(r'```.*?```', '', text, flags=re.DOTALL)):
-        link = link.strip().removeprefix('<').removesuffix('>')
-        if re.match(r'[a-zA-Z][a-zA-Z0-9+.-]*:', link) or link.startswith(('#', '//')):
-            continue
-        target = (path.parent / unquote(link.split('#')[0])).resolve()
-        if path.is_relative_to(root / 'skills'):
-            assert target.is_relative_to((root / 'skills').resolve()), f'skill link must stay in skills/: {path.relative_to(root)} -> {link}'
-        assert target.is_file(), f'broken file link: {path.relative_to(root)} -> {link}'
+    errors = text_rules().links(root, path, text, skills_only=path.is_relative_to(root / 'skills'))[0]
+    assert not errors, '; '.join(f'{e["path"]}:{e["line"]}: {e["problem"]}' for e in errors)
 
 
 def check(root=ROOT):
@@ -99,7 +102,7 @@ def check(root=ROOT):
         for pattern in (r'/' + r'Users/[^/\s]+/', r'/private/' + 'var/folders/', r'gh[pousr]_[A-Za-z0-9]{30,}',
                         r'-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----'):
             assert not re.search(pattern, text), f'private material in {path.relative_to(root)}'
-        if path.suffix == '.md':
+        if path.suffix == '.md' and not path.is_relative_to(root / 'skills'):
             markdown_links(root, path, text)
     assert not (root / 'skills/cs').exists(), 'Legacy CS runtime must not be shipped'
     assert not (root / 'skills/team-workflow/scripts').exists(), 'Team runtime must live in tw_runtime/team'
@@ -109,12 +112,15 @@ def check(root=ROOT):
         'skills/team-workflow/MANIFEST.json is stale; run python3 scripts/package.py --manifest'
     budgets = knowledge_checks(root)
     team_budget = team_checks(root)
+    docs = skill_document_checks(root)
+    errors = [e for row in docs for e in row['errors']]
+    assert not errors, '; '.join(f'{e["path"]}:{e["line"]}: {e["problem"]}' for e in errors)
     names = lint_names(root)
     imported = import_scripts(root)
     return {'ok': True, 'version': version, 'upstream_files': len(lock['files']), 'source_files_checked': len(files),
             'undefined_name_lint': {'files': names['files'], 'lint_version': names['lint_version']},
             'scripts_imported': imported, 'skill_manifest_files': len(shipped['files']), 'knowledge': budgets,
-            'team': team_budget}
+            'team': team_budget, 'document_checks': docs}
 
 
 KNOWLEDGE_BUDGETS = {'SKILL.md': 2500, 'references/writing.md': 3000, 'references/migration.md': 3000,
@@ -177,5 +183,37 @@ def import_scripts(root):
     return count
 
 
+def write_junit(path, rows, integrity_error=None):
+    import xml.etree.ElementTree as ET
+    rows = [*rows, {'name': 'release-integrity', 'errors': ([{'path': 'release', 'line': 1, 'problem': integrity_error}] if integrity_error else [])}]
+    suite = ET.Element('testsuite', tests=str(len(rows)), failures=str(sum(bool(r['errors']) for r in rows)), errors='0', skipped='0')
+    for row in rows:
+        case = ET.SubElement(suite, 'testcase', classname='SkillDocs', name=row['name'])
+        if row['errors']:
+            message = '\n'.join(f'{e["path"]}:{e["line"]}: {e["problem"]}' for e in row['errors'])
+            ET.SubElement(case, 'failure', message=message).text = message
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    ET.ElementTree(suite).write(path, encoding='utf-8', xml_declaration=True)
+
+
+def main():
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--junitxml', type=Path)
+    args = parser.parse_args()
+    rows = skill_document_checks()
+    error = None
+    try:
+        value = check()
+    except (AssertionError, OSError, ValueError) as exc:
+        error = str(exc)
+        value = {'ok': False, 'problem': error, 'document_checks': rows}
+    if args.junitxml:
+        write_junit(args.junitxml, rows, error)
+    print(json.dumps(value, ensure_ascii=False, indent=2))
+    return 0 if value['ok'] else 1
+
+
 if __name__ == '__main__':
-    print(json.dumps(check(), indent=2))
+    sys.exit(main())

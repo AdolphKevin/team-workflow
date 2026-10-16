@@ -9,7 +9,7 @@ SKILL = ROOT / 'skills/team-workflow'
 class ChangeRequestDocs(unittest.TestCase):
     def test_status_records_and_successfully_submitted_reviews_are_documented(self):
         text = (SKILL / 'references/contracts.md').read_text()
-        for rule in ('业务结论以新的 accept 为准', '评审在成功提交后计为完成'):
+        for rule in ('`verify --report <报告>` 继续按当前材料显式复核', '评审在成功提交后计为完成'):
             self.assertIn(rule, text)
         delivery = (SKILL / 'references/team-delivery.md').read_text()
         self.assertIn('(contracts.md#进度恢复与统计)', delivery)

@@ -156,7 +156,12 @@ class RelocationCases(unittest.TestCase):
                 self.relocate(copy=True)
                 code, retried = self.command(*args, '--request-id', request_id)
                 self.assertEqual(code, 0, retried)
-                self.assertEqual(retried, result)
+                if args[0] == 'deliver':
+                    self.assertTrue(retried['reused'])
+                    self.assertEqual(retried['artifact'], self.current()['delivery'])
+                    self.assertEqual(retried['summary_markdown'], result['summary_markdown'])
+                else:
+                    self.assertEqual(retried, result)
                 self.assertEqual((self.root / directory / 'request.json').read_bytes(), claim)
                 self.assertEqual((self.root / directory / 'response.json').read_bytes(), response)
 

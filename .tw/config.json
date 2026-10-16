@@ -74,13 +74,22 @@
     "release": {
       "argv": [
         "python3",
-        "scripts/check_release.py"
+        "scripts/check_release.py",
+        "--junitxml",
+        "{output}/results.xml"
       ],
-      "purpose": "发行检查：链接、篇幅预算、上游补丁反向恢复与技能清单",
+      "purpose": "发行检查：技能文字、链接、篇幅预算、上游补丁反向恢复与技能清单",
       "cwd": ".",
       "timeout": 600,
-      "format": "command",
-      "required_cases": [],
+      "format": "junit",
+      "required_cases": [
+        "SkillDocs::concepts",
+        "SkillDocs::versions",
+        "SkillDocs::negative-chains",
+        "SkillDocs::links",
+        "SkillDocs::retest-board",
+        "SkillDocs::release-integrity"
+      ],
       "required_env": [],
       "environment": {
         "kind": "stateless"
@@ -94,7 +103,8 @@
         "substitutes": [],
         "isolation": "isolated",
         "isolation_evidence": []
-      }
+      },
+      "report": "{output}/results.xml"
     }
   },
   "required_checks": {

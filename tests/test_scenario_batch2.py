@@ -2,6 +2,7 @@
 import copy
 import json
 import unittest
+from common import read, artifact_valid
 
 import test_scenario_acceptance as acceptance
 
@@ -54,6 +55,9 @@ class Batch2Regressions(unittest.TestCase):
         code, delivered = self.call('deliver', '--task', self.task['id'], '--reason', '现有知识已覆盖')
         self.assertEqual(code, 0, delivered)
         self.assertTrue(delivered['delivery_complete'])
+        group = self.current()
+        for key in ('acceptance', 'delivery_report', 'delivery'):
+            self.assertEqual(read(artifact_valid(self.root, group[key]))['task_id'], self.task['id'])
         self.assertTrue(delivered['regression_pending'])
         self.assertEqual([row['id'] for row in delivered['automation_status']['pending']], ['S-N', 'T-P', 'T-N'])
         self.assertEqual(delivered['automation_status']['automated'], [

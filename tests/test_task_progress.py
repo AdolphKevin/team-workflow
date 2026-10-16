@@ -181,6 +181,11 @@ class TaskProgress(unittest.TestCase):
         self.assertEqual({row['id']: row['state'] for row in status['steps']}['delivery'], 'done')
         (self.root / 'app.py').write_text('def add(a,b): return a+b+0\n')
         code, status = self.cli('status', '--task', self.name('task'), '--design', self.name('design'))
+        self.assertEqual(status['task_phase'], 'delivered')
+        self.assertEqual(self.cli('start', '--task', self.name('task'), '--design', self.name('design'))[0], 0)
+        code, status = self.cli('status', '--task', self.name('task'), '--design', self.name('design'))
+        self.assertEqual(code, 0, status)
+        self.assertEqual(status['task_phase'], 'in-progress')
         states = {row['id']: row['state'] for row in status['steps']}
         self.assertEqual((states['acceptance'], states['delivery']), ('stale', 'stale'))
         self.assertEqual(status['next_step']['id'], 'scenarios')  # 产品变化先重新执行场景，再复核验收

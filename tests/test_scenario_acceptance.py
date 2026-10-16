@@ -33,6 +33,18 @@ class ScenarioAcceptance(unittest.TestCase):
 
     def test_run_waits_for_scenarios_and_pending_points_to_submit_with_root(self):
         self.prepare()
+        additional = copy.deepcopy(self.design['sections'][1])
+        additional.update(id='A2', title='第二验收项')
+        self.design['sections'][1]['data']['scenarios'][0]['nodes'] = ['S']
+        additional['data']['scenarios'][0]['nodes'] = ['T']
+        self.design['sections'].append(additional)
+        self.design['sections'][0]['data']['requirement_acceptance'].append('A2')
+        self.design['sections'][0]['data']['impact'][0]['acceptance'].append('A2')
+        self.design['sections'][2]['data']['acceptance'].append('A2')
+        self.task['acceptance'].append({'id': 'A2', 'expectation': additional['body'], 'checks': ['unit']})
+        self.write('task', self.task)
+        self.write('design', self.design)
+        self.approve_start()
         code, ran = self.call('run', '--task', self.task['id'])
         self.assertEqual(code, 0, ran)
         self.assertNotIn('review_draft', ran)
@@ -47,8 +59,13 @@ class ScenarioAcceptance(unittest.TestCase):
         code, ready = self.call('run', '--task', self.task['id'])
         self.assertEqual(code, 0, ready)
         text = (self.root / ready['review_file']).read_text()
-        for token in ('S-P', 'S-N', 'T-P', 'T-N', 'passed', '实际结果', '已核对预期结果与副作用', '执行者', 'carol', '轮次：1'):
-            self.assertIn(token, text)
+        for key, included, excluded in (('A1', ('S-P', 'S-N'), ('T-P', 'T-N')),
+                                         ('A2', ('T-P', 'T-N'), ('S-P', 'S-N'))):
+            section = text.partition('## 验收 ' + key)[2].split('\n## ', 1)[0]
+            for token in (*included, 'passed', '实际结果', '已核对预期结果与副作用', '执行者', 'carol', '轮次：1'):
+                self.assertIn(token, section)
+            for token in excluded:
+                self.assertNotIn(token, section)
 
     def test_accept_requires_scenarios_and_records_summary_and_rounds(self):
         self.prepare()
@@ -98,6 +115,8 @@ class ScenarioAcceptance(unittest.TestCase):
         self.reviewed()
         code, refused = self.call('accept', '--task', self.task['id'])
         self.assertEqual((code, refused.get('error_code')), (1, 'tester-cases-missing'))
+        self.assertIn('测试同事的用例集', refused['problem'])
+        self.assertIn('scenarios import-cases', refused['next_action'])
         path = self.root / '.tw/local/cases.json'
         path.write_text(json.dumps({'cases': [{'id': 'C1', 'title': '合成用例'}]}))
         self.assertEqual(self.call('scenarios', 'import-cases', '--task', self.task['id'], path)[0], 0)
@@ -125,6 +144,8 @@ class ScenarioAcceptance(unittest.TestCase):
         code, refused = self.call('accept', '--task', self.task['id'])
         self.assertEqual((code, refused.get('error_code')), (1, 'scenario-acceptance-incomplete'))
         self.assertIn('T-N', refused['problem'])
+        self.assertIn('accepted', refused['problem'])
+        self.assertIn('deferred', refused['problem'])
         self.assertEqual(refused['scenario_states'], {'failed': [], 'pending': [], 'blocked': ['S-P', 'T-N']})
         self.assertIn('review', refused['next_action'])
         self.assertIn('--submit', refused['next_action'])

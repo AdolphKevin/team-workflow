@@ -99,8 +99,14 @@ class PlatformReview(unittest.TestCase):
         item = self.post(latest)
         code, again = self.command('deliver', '--task', self.url, '--reason', '本次沿用已有知识。')
         self.assertEqual(code, 0, again)
+        self.assertTrue(again['reused'])
+        self.assertEqual(self.current()['review'], imported)
+        code, registered = self.command('review', '--task', self.url, '--from-platform')
+        self.assertEqual(code, 0, registered)
         self.assertNotEqual(self.current()['review'], imported)
-        self.assertEqual(again['steps'][0]['step'], 'review')
+        code, again = self.command('deliver', '--task', self.url, '--reason', '本次沿用已有知识。')
+        self.assertEqual(code, 0, again)
+        self.assertEqual(again['steps'][0]['step'], 'acceptance')
         review = read(self.root / self.current()['review']['path'])
         self.assertEqual(review['platform_url'], item['url'])
         self.assertEqual(review['spec']['summary'], '第二轮已独立核对验收结果。')
@@ -141,7 +147,10 @@ class PlatformReview(unittest.TestCase):
                 code, delivered = self.command('deliver', '--task', self.url, '--reason', '本次沿用已有知识。')
                 self.assertEqual(code, 0, delivered)
                 self.assertEqual(self.current()['review'], submitted['artifact'])
-                self.assertNotIn('review', [row['step'] for row in delivered['steps']])
+                if delivered.get('reused'):
+                    self.assertEqual(delivered['artifact'], self.current()['delivery'])
+                else:
+                    self.assertNotIn('review', [row['step'] for row in delivered['steps']])
 
     def test_deliver_reuses_the_same_platform_submission_including_legacy_registration(self):
         import reviews
@@ -162,7 +171,10 @@ class PlatformReview(unittest.TestCase):
                 code, delivered = self.command('deliver', '--task', self.url, '--reason', '本次沿用已有知识。')
                 self.assertEqual(code, 0, delivered)
                 self.assertEqual(self.current()['review'], submitted['artifact'])
-                self.assertNotIn('review', [row['step'] for row in delivered['steps']])
+                if delivered.get('reused'):
+                    self.assertEqual(delivered['artifact'], self.current()['delivery'])
+                else:
+                    self.assertNotIn('review', [row['step'] for row in delivered['steps']])
 
     def missing_submission_time(self, platform):
         import reviews
@@ -247,16 +259,14 @@ class PlatformReview(unittest.TestCase):
         self.assertEqual(closed['task_phase'], 'closed')
         self.assertIsNone(closed['next_step'])
         self.assertEqual(closed['next_action'], '任务已关闭')
-        self.assertEqual([row['state'] for row in closed['steps']], ['done'] * 6)
+        self.assertEqual([row['state'] for row in closed['steps']], ['done'] * 7)
         self.assertEqual(closed['publication'], before['publication'])
         self.assertNotIn('源码已变', '\n'.join(closed['step_lines']))
         self.platform['state'] = 'open'
         self.response()
         code, opened = self.command('status', '--task', self.url)
         self.assertEqual(code, 0, opened)
-        self.assertEqual(opened['task_phase'], 'in-progress')
-        self.assertEqual(opened['next_step']['id'], 'run')
-        self.assertEqual(next(row['state'] for row in opened['steps'] if row['id'] == 'run'), 'stale')
+        self.assertEqual(opened['task_phase'], 'delivered')
         (self.root / 'app.py').write_text('def add(a,b): return a+b+1\n')
         code, failed = self.command('run', '--task', self.url)
         self.assertEqual(code, 1, failed)
@@ -270,6 +280,26 @@ class PlatformReview(unittest.TestCase):
         self.assertEqual(code, 0, closed)
         self.assertEqual(closed['summary'], '任务已关闭')
         self.assertEqual(next(row['state'] for row in closed['steps'] if row['id'] == 'run'), 'failed')
+
+    def test_closed_status_reads_pre_scenario_snapshot_as_records(self):
+        from common import write, artifact
+        self.prepare()
+        group = self.current()
+        path = self.root / group['design']['path']
+        value = read(path)
+        value['sections'][1]['data']['scenario'] = {'roles': ['用户'], 'steps': ['旧格式']}
+        value['sections'][1]['data'].pop('scenarios')
+        write(path, value)
+        group['design'] = artifact(self.root, path)
+        write(self.current_path(), group)
+        self.platform['state'] = 'closed'
+        self.response()
+        code, closed = self.command('status', '--task', self.url)
+        self.assertEqual(code, 0, closed)
+        self.assertEqual(closed['summary'], '任务已关闭')
+        self.assertEqual(closed['task_phase'], 'closed')
+        self.assertIsNone(closed['next_step'])
+        self.assertNotIn('stale', [row['state'] for row in closed['steps']])
 
     def test_platform_entry_cannot_be_mixed_with_a_local_file_or_submit(self):
         source = self.prepare()

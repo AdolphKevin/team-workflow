@@ -397,6 +397,7 @@ sops:
 
 
       - id: SOP-05-P04
+        regression: {"check": "unit", "cases": ["test_four_command_delivery.FourCommandDelivery::test_simple_start_and_status_share_steps_and_next_command"]}
         polarity: positive
         title: 简单任务开工后 start 与 status 给出相同的步骤与下一步
         actor: 实施负责人
@@ -478,6 +479,7 @@ sops:
 
 
       - id: SOP-06-P02
+        regression: {"check": "unit", "cases": ["test_four_command_delivery.FourCommandDelivery::test_local_delivery_summary_states_ci_is_unverified"]}
         polarity: positive
         title: 检查只在本机运行时交付摘要写明 CI 未验证
         actor: 评审人
@@ -499,7 +501,7 @@ sops:
     scenarios:
 
       - id: SOP-07-P01
-        regression: {"manual": "概念唯一定义与链接可达性需要通读文档确认；已有文档测试只核对部分链接与字段", "owner": "AdolphKevin", "trigger": "修改技能文档时"}
+        regression: {"check": "release", "cases": ["SkillDocs::concepts", "SkillDocs::links"]}
         polarity: positive
         title: 收尾条件、批准路径与工具职责各有唯一定义
         actor: 阅读技能的代理
@@ -513,7 +515,7 @@ sops:
         evidence_hints: ["检索命令与命中位置", "链接路径"]
 
       - id: SOP-07-N01
-        regression: {"manual": "肯定式句子需要跨行语义判断；文字检索提供候选而非语义结论", "owner": "AdolphKevin", "trigger": "修改技能文档时"}
+        regression: {"check": "release", "cases": ["SkillDocs::versions", "SkillDocs::negative-chains"]}
         polarity: negative
         negative_type: stale-input
         title: 文本中没有版本对比句与双重否定
@@ -528,7 +530,7 @@ sops:
         evidence_hints: ["检索输出"]
 
       - id: SOP-07-P02
-        regression: {"manual": "看板职责的完整性需要通读说明并核对命令范围；已有测试只断言契约关键词", "owner": "AdolphKevin", "trigger": "修改技能文档时"}
+        regression: {"check": "release", "cases": ["SkillDocs::retest-board"]}
         polarity: positive
         title: 场景指南把看板写成项目代理搭建的工具
         actor: 阅读技能的代理
@@ -542,6 +544,7 @@ sops:
         evidence_hints: ["引用段落", "检索输出"]
 
       - id: SOP-07-P03
+        regression: {"manual": "代理行为不确定", "owner": "AdolphKevin", "trigger": "技能 Markdown 改动时"}
         polarity: positive
         title: 新会话照技能把简单任务从接入做到交付
         actor: 只装候选技能的新会话
@@ -555,6 +558,7 @@ sops:
         evidence_hints: ["会话记录", "命令与参数记录", "最终仓库与 .tw/local 的文件差异"]
 
       - id: SOP-07-N02
+        regression: {"manual": "代理行为不确定", "owner": "AdolphKevin", "trigger": "技能 Markdown 改动时"}
         polarity: negative
         negative_type: permission
         title: 中等任务方案未批准时，会话先取得批准再实施
@@ -569,6 +573,7 @@ sops:
         evidence_hints: ["会话记录", "命令记录", "批准前后的文件差异"]
 
       - id: SOP-07-N03
+        regression: {"manual": "代理行为不确定", "owner": "AdolphKevin", "trigger": "技能 Markdown 改动时"}
         polarity: negative
         negative_type: incomplete-input
         title: 普通任务遇到未接入的项目时报告前提并停下
@@ -591,6 +596,7 @@ sops:
     scenarios:
 
       - id: SOP-08-P01
+        regression: {"check": "unit", "cases": ["test_platform_review.PlatformReview::test_status_closed_task_reports_last_records_and_open_task_checks_current_source", "test_platform_review.PlatformReview::test_closed_status_reads_pre_scenario_snapshot_as_records"]}
         polarity: positive
         title: 已关闭的平台任务按记录显示任务已关闭
         actor: 成员
@@ -604,6 +610,7 @@ sops:
         evidence_hints: ["完整输出", "运行前后的 current.json"]
 
       - id: SOP-08-P02
+        regression: {"check": "unit", "cases": ["test_task_phases.DeliveredTask::test_unrelated_commit_keeps_delivered_records_and_reuses_delivery"]}
         polarity: positive
         title: 已交付任务不因同一分支的后续提交而过期
         actor: 成员
@@ -617,6 +624,7 @@ sops:
         evidence_hints: ["两次输出"]
 
       - id: SOP-08-N01
+        regression: {"check": "unit", "cases": ["test_task_phases.DeliveredTask::test_run_reopens_delivered_task_and_uses_current_inputs"]}
         polarity: negative
         negative_type: stale-input
         title: 已交付任务重新运行检查后回到进行中

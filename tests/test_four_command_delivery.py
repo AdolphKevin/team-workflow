@@ -142,7 +142,13 @@ class FourCommandDelivery(unittest.TestCase):
         code, result = self.command('deliver', '--task', self.task['id'], '--reason', '现有知识已覆盖')
         self.assertEqual(code, 0, result)
         self.assertEqual(result['ci_verified_checks'], [])
-        self.assertIn('检查只在本机运行，CI 未验证', result['summary_markdown'])
+        self.assertIn('检查只在本机运行，CI 未验证', result['summary_markdown'].split('**还没做或需要注意的**')[1].split('**状态**')[0])
+        group = self.current()
+        for key in ('acceptance', 'delivery_report', 'delivery'):
+            record = read(artifact_valid(self.root, group[key]))
+            self.assertEqual(record['task_id'], self.task['id'])
+        self.assertEqual(read(artifact_valid(self.root, group['acceptance']))['kind'], 'acceptance')
+        self.assertEqual(read(artifact_valid(self.root, group['delivery']))['kind'], 'delivery-verification')
         self.assertTrue(result['business_accepted'])
         self.assertTrue(result['delivery_complete'])
         self.assertIn('场景汇总：', result['summary_markdown'])
@@ -431,8 +437,8 @@ class FourCommandDelivery(unittest.TestCase):
         report = self.current()['delivery_report']
         code, result = self.command('deliver', '--task', self.task['id'])
         self.assertEqual(code, 0, result)
-        self.assertTrue(result['steps'][0]['reused'])
-        self.assertTrue(result['steps'][1]['reused'])
+        self.assertTrue(result['reused'])
+        self.assertEqual(result['artifact'], self.current()['delivery'])
         self.assertEqual(self.current()['delivery_report'], report)
 
     def test_interrupted_deliver_reuses_the_completed_acceptance_and_report(self):
@@ -557,7 +563,8 @@ class FourCommandDelivery(unittest.TestCase):
         claims = sorted(self.current_path().parent.glob('requests/*/request.json'))
         code, again = self.command(*args)
         self.assertEqual(code, 0, again)
-        self.assertEqual(again['artifact'], first['artifact'])
+        self.assertTrue(again['reused'])
+        self.assertEqual(again['artifact'], self.current()['delivery'])
         self.assertEqual(sorted(self.current_path().parent.glob('requests/*/request.json')), claims)
 
     def test_combined_submission_same_request_is_idempotent(self):

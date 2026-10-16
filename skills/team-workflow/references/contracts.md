@@ -254,7 +254,13 @@ tw team status --root "$PROJECT" --task "$TASK_ID" --format text
 tw team metrics --root "$PROJECT" [--task "$TASK"] [--since 2026-10-01] [--format text]
 ```
 
-`status` 只读取记录，业务结论以新的 accept 为准。`task_phase` 为 `closed` 或 `in-progress`：平台已关闭时报告各步骤最后记录，概要和 `next_action` 为“任务已关闭”，`next_step` 为 null；进行中按当前材料核对步骤，有效验收与交付列入 `verified_records`（`acceptance`、`delivery` 含 `path`、`sha256`）。
+`task_phase` 由同一入口判定，分为三个阶段：
+
+- `closed`：平台任务已关闭，优先于其他阶段；`status` 按各步骤最后记录报告，概要及 `next_action` 为“任务已关闭”，`next_step` 为 null。
+- `delivered`：当前材料组含通过的最终交付记录，且交付后本任务尚无新的开工、运行、评审或场景轮次；`status` 概要为“任务已交付”，按最后记录展示步骤，`verified_records` 列出验收和交付记录（`path`、`sha256`），下一步为发布收尾说明或交接、记录关闭授权。`deliver` 返回已有交付记录及摘要，标明 `reused: true`。这两个阶段直接读取记录，方案快照保留为历史材料。
+- `in-progress`：其余情况；为本任务重新 `start`、`run`、`review`（生成或提交）或 `scenarios submit` 后按当前材料核对。进行中读取旧格式内部快照时，用当前格式方案重新 `start`。
+
+`verify --report <报告>` 继续按当前材料显式复核；业务结论以该次核对为准。
 
 评审在成功提交后计为完成。步骤状态为 `done`、`pending`、`stale`、`failed`、`running-or-interrupted`、`not-recorded`。场景验收步骤列通过、失败、受阻、待执行数量；待执行或失败时指向 `scenarios pending`。采用有效评审后指向 `deliver`；绑定变化时受影响步骤过期。显式方案内容变化时重新 `start`，相同内容换路径可经核对登记。
 

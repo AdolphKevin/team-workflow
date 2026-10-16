@@ -182,7 +182,9 @@ class ReviewFeedbackStatus(unittest.TestCase):
         self.assertEqual(code, 0, delivered)
         code, status = self.command('status', '--task', self.task['id'])
         self.assertEqual(code, 0, status)
-        self.assertEqual(status['summary'], '已交付；关闭需要授权，工具不执行关闭')
+        self.assertEqual(status['summary'], '任务已交付')
+        self.assertEqual(status['task_phase'], 'delivered')
+        self.assertIn('关闭授权', status['next_action'])
         self.assertEqual(status['verified_records'], {key: self.current()[key] for key in ('acceptance', 'delivery')})
         self.assertIsNone(status['next_step'])
 
@@ -217,6 +219,13 @@ class ReviewFeedbackStatus(unittest.TestCase):
         (self.root / 'app.py').write_text('def add(a,b): return sum((a,b))\n')
         code, status = self.command('status', '--task', self.task['id'])
         self.assertEqual(code, 0, status)
+        self.assertEqual(status['task_phase'], 'delivered')
+        self.assertTrue(status['verified_records']['delivery'])
+        code, reopened = self.command('start', '--task', self.task['id'])
+        self.assertEqual(code, 0, reopened)
+        code, status = self.command('status', '--task', self.task['id'])
+        self.assertEqual(code, 0, status)
+        self.assertEqual(status['task_phase'], 'in-progress')
         self.assertEqual(status['verified_records'], {})
         states = {row['id']: row['state'] for row in status['steps']}
         for name in ('run', 'review', 'acceptance', 'knowledge', 'delivery'):
@@ -230,6 +239,13 @@ class ReviewFeedbackStatus(unittest.TestCase):
         fixtures.write_config(self.root, self.profile)
         code, status = self.command('status', '--task', self.task['id'])
         self.assertEqual(code, 0, status)
+        self.assertEqual(status['task_phase'], 'delivered')
+        self.assertTrue(status['verified_records']['delivery'])
+        code, reopened = self.command('start', '--task', self.task['id'])
+        self.assertEqual(code, 0, reopened)
+        code, status = self.command('status', '--task', self.task['id'])
+        self.assertEqual(code, 0, status)
+        self.assertEqual(status['task_phase'], 'in-progress')
         self.assertEqual(status['verified_records'], {})
         by_id = {row['id']: row for row in status['steps']}
         for key in ('run', 'review', 'acceptance', 'knowledge', 'delivery'):

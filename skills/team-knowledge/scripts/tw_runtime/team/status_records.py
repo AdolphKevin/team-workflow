@@ -138,3 +138,47 @@ def publication(platform):
             'complete': published and not bool(current.get('remaining')),
             'url': pointer.get('url') if published else None,
             'summary': '收尾说明或交接已发布' if published else '尚未发布收尾说明或完整实施交接'}
+
+
+def closing_action(root, task_id):
+    from repairs import task_command
+    return ('按已有授权发布收尾说明或完整交接，在报告副本记录关闭授权后运行 '
+            + task_command(root, task_id, 'verify', '--report <报告>') + '，再由获授权成员关闭任务。')
+
+
+def recorded(root, task_id, phase, group, platform):
+    import checklist
+    import records
+    progress = {'steps': checklist.recorded_steps(root, checklist.records(root, task_id)),
+                'next_step': None, 'finished': True, 'completion_summary': '任务已关闭' if phase == 'closed' else '任务已交付'}
+    verified = {}
+    proof = None
+    for key in ('acceptance', 'delivery'):
+        ref = (group or {}).get(key)
+        if ref:
+            value = read(artifact_valid(root, ref))
+            if value.get('ok') and value.get('business_accepted' if key == 'acceptance' else 'delivery_complete'):
+                verified[key] = ref
+                if key == 'delivery':
+                    proof = value
+    if proof and 'summary_counts' in proof:
+        row = {'id': 'scenarios', 'label': '场景验收', 'state': 'done',
+               'evidence': (proof.get('scenario_rounds') or [{}])[-1].get('path'),
+               'summary_counts': proof['summary_counts'], 'first_pass': proof['statistics']['first_pass']}
+        progress['steps'].insert(2, row)
+    view = None
+    if platform:
+        view = platform if 'items' not in platform else {'current': None, 'previous': None}
+        for item in platform.get('items', []):
+            try:
+                value = records.block(item['body'], 'handoff', required=False)
+            except Invalid:
+                continue
+            if value:
+                view.update(current=value, previous={'url': item['url']})
+    summary = progress['completion_summary']
+    action = '任务已关闭' if phase == 'closed' else closing_action(root, task_id)
+    progress['completion_summary'] = summary if phase == 'closed' else action
+    return {'ok': True, 'task_phase': phase, 'summary': summary, 'next_action': action,
+            'steps': progress['steps'], 'next_step': None, 'step_lines': checklist.render(progress),
+            'verified_records': verified, 'publication': publication(view), 'warnings': []}

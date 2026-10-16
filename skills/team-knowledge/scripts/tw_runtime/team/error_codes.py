@@ -22,6 +22,7 @@ class Code:
     TOOL_DEFECT = 'tool-defect'
     TASK_INPUT = 'task-input-invalid'
     DESIGN_INPUT = 'design-input-invalid'
+    DESIGN_SNAPSHOT = 'design-snapshot-invalid'
     REVIEW_BINDING_STALE = 'review-binding-stale'
     REVIEW_FILE_UNREADABLE = 'review-file-unreadable'
     REVIEW_RUN_INCOMPLETE = 'review-run-incomplete'

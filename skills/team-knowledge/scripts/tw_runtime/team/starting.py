@@ -110,6 +110,11 @@ def select(args, root, profile):
         # The original filename is navigation metadata, not a change to the prepared content.
         old = {key: value for key, value in old.items() if key != 'design_path'}
     continued = previous is not None and selected == old and not (selection and selection['repair'])
+    if continued and 'design' in explicit:
+        try:
+            design_files.read(artifact_valid(root, previous['design']))
+        except (Invalid, OSError, ValueError, TypeError, KeyError):
+            continued = False
     require(not platform_gap or continued, platform_gap or '')
     args.context = Path(previous_ref['path']) if continued else None
     if not args.issue:

@@ -111,7 +111,11 @@ def read(path, *, internal=True):
         checkout = gitutil.toplevel(path.resolve().parent) or path.resolve().parent
         return designs.load(raw, scenario_reader=scenario_reader(checkout))
     except Invalid as exc:
-        raise DesignReadError(path, str(exc), **{key: value for key, value in fields(exc).items() if key != 'error_code'}) from exc
+        error = DesignReadError(path, str(exc), **{key: value for key, value in fields(exc).items() if key != 'error_code'})
+        if internal and raw.lstrip().startswith(('{', '[')) and path.suffix == '.json':
+            error.error_code = Code.DESIGN_SNAPSHOT
+            error.next_action = '用当前格式的方案重新开工：tw team start --task <身份> --design <当前格式方案.md>'
+        raise error from exc
 
 
 def _checkout(root, repository):

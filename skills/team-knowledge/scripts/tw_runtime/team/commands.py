@@ -8,7 +8,7 @@ import repairs
 import task_inputs
 from pathlib import Path
 
-from common import (RECORD_SCHEMA, Invalid, artifact, digest, evidence_file, inside, location_settings, now,
+from common import (RECORD_SCHEMA, Invalid, artifact, artifact_valid, digest, evidence_file, inside, location_settings, now,
                     load_profile, read, require, skill_resource, task_valid)
 import knowledge
 import validation
@@ -230,6 +230,9 @@ def dispatch(args, root):
         mappings = {key: (root / Path(path).expanduser()).resolve() for key, path in location_settings(root)['repositories'].items()}
         return portable.aggregate(root, read(local(root, args.joint)), mappings)
     from tw_runtime.team import platform_script as platform_read
+    completed = recorded_command(args, root)
+    if completed is not None:
+        return completed
     # Validate caller paths before materials.resolve replaces them with tool-owned snapshots.
     for path in ([args.design] if args.design else []) + list(args.design_history):
         design_files.read(local(root, path), internal=False)
@@ -793,8 +796,62 @@ def continuation_status_inputs(args, root, task):
     return current
 
 
-def task_phase(platform):
-    return 'closed' if platform and platform['task_state'] == 'closed' else 'in-progress'
+def task_phase(platform, root=None, task_id=None, group=None):
+    """先读平台关闭事实，再按最终交付及后续活动确定阶段。"""
+    if platform and platform.get('task_state', platform.get('state')) == 'closed':
+        return 'closed'
+    if root is None or group is None or not group.get('delivery'):
+        return 'in-progress'
+    import checklist
+    from datetime import datetime
+    try:
+        proof = read(artifact_valid(root, group['delivery']))
+        if not (proof.get('kind') == 'delivery-verification' and proof.get('ok')
+                and proof.get('delivery_complete') and proof.get('task_id') == task_id):
+            return 'in-progress'
+        delivered_at = datetime.fromisoformat(proof['at'])
+        for claim, response in checklist.records(root, task_id):
+            if claim.get('command') in ('start', 'run', 'review') and datetime.fromisoformat((response or {}).get('finished_at', claim['started_at'])) > delivered_at:
+                return 'in-progress'
+        for ref in group.get('scenario_rounds', []):
+            row = read(artifact_valid(root, ref))
+            if datetime.fromisoformat(row['submitted_at']) > delivered_at:
+                return 'in-progress'
+    except (Invalid, OSError, ValueError, KeyError, TypeError):
+        return 'in-progress'
+    return 'delivered'
+
+
+def recorded_command(args, root):
+    """完成阶段在方案解析之前读取；显式 verify 保留当前核对。"""
+    if args.command not in ('status', 'deliver'):
+        return None
+    import materials
+    import status_records
+    from tw_runtime.team import platform_script as platform_read
+    identity = args.issue or (str(args.task) if args.task else None)
+    if args.task and (root / args.task).is_file():
+        identity = task_inputs.validate_written(read(local(root, args.task)),
+            local(root, args.task).relative_to(root).as_posix())['id']
+    if identity is None and args.context:
+        context = read(local(root, args.context))
+        identity = read(artifact_valid(root, context['task']))['id']
+    if identity is None:
+        return None
+    platform = (platform_read.call(root, 'task', '--id', identity)
+                if platform_read.is_task(root, identity, required=False) else None)
+    group = materials.load(root, identity)
+    phase = task_phase(platform, root, identity, group)
+    if phase == 'in-progress':
+        return None
+    if args.command == 'deliver' and phase == 'delivered':
+        ref = group['delivery']
+        proof = read(artifact_valid(root, ref))
+        return {**proof, 'artifact': ref, 'reused': True, 'task_phase': phase,
+                'summary': '任务已交付', 'next_action': status_records.closing_action(root, identity)}
+    if args.command == 'status':
+        return status_records.recorded(root, identity, phase, group, platform)
+    return None
 
 
 def task_steps(args, root, profile, task):
@@ -820,13 +877,10 @@ def current_status(root, task_id, current=None):
 def status(args, root, profile, task, platform=None):
     import checklist
     import status_records
-    phase = task_phase(platform)
-    if phase == 'closed':
-        progress = {'steps': checklist.recorded_steps(root, checklist.records(root, task['id'])),
-                    'next_step': None, 'finished': True, 'completion_summary': '任务已关闭'}
-        return {'ok': True, 'task_phase': phase, 'summary': '任务已关闭', 'next_action': '任务已关闭',
-                'steps': progress['steps'], 'next_step': None, 'step_lines': checklist.render(progress),
-                'publication': status_records.publication(platform), 'warnings': platform.get('warnings', [])}
+    phase = task_phase(platform, root, task['id'], (getattr(args, 'material_selection', None) or {}).get('value'))
+    if phase in ('closed', 'delivered'):
+        return status_records.recorded(root, task['id'], phase,
+            (getattr(args, 'material_selection', None) or {}).get('value'), platform)
     progress = task_steps(args, root, profile, task)
     value = _status(args, root, profile, task, platform)
     value['task_phase'] = phase
