@@ -1,19 +1,20 @@
 ---
 design: "D-local-state"
 task: "https://github.com/AdolphKevin/team-workflow/issues/5"
-revision: 2
+revision: 1
 assessment: {"complexity":"medium","risks":["public-contract"],"effort":"约 1 代理日","drivers":["改动 tw 读取共享仓映射的查找顺序，影响所有项目","新增已提交内容的引用检查"],"uncertainties":[],"required_skills":["Python","git worktree"]}
 roles: {"design_owner":"Claude","implementation_owner":"Codex","acceptance_owner":"AdolphKevin"}
 ---
 
 # 本机状态的边界方案
 
-> 状态：草案，待批准 · 日期：2026-10-15 · 方案负责人：Claude
+> 状态：已批准 · 日期：2026-10-15 · 方案负责人：Claude
 >
 > 前置：[合并重构方案](2026-10-14-unified-redesign.md) v4.2 的 L1、L2、T3 节，[以 Issue 和变更请求承载流程](2026-10-15-issue-and-change-request-flow.md) v3。
 >
 > - v1 → v2：撤回“状态移到 `git rev-parse --git-path tw`”。本机状态留在 `.tw/local/`，改为修正边界；原做法见第 7 节。
 > - 方案第 2 版（实施中）：第 1 节与 A3 中的示例路径改为不直接写出完整的本机路径，避免被本方案新增的引用检查误报；含义不变。
+> - 验证写法改为新格式（[验收绑定简化](2026-10-15-acceptance-binding-and-flow-fixes.md)）：A1–A7 的验证行只写方式和允许的替身，覆盖范围以检查登记为准；方案历史按对账从第 1 版重新开始，业务内容不变。
 >
 > 本方案不改入库知识、三道门和执行绑定的语义。
 
@@ -21,6 +22,8 @@ roles: {"design_owner":"Claude","implementation_owner":"Codex","acceptance_owner
 
 | 时间 | 批准人 | 范围 | 依据 |
 | --- | --- | --- | --- |
+| 2026-10-15 | AdolphKevin | 本方案全文 | 会话中批准方案，并授权 Claude 在 PR 上代为发布批准 |
+| 2026-10-16 | AdolphKevin | 新验证写法重新发布的第 1 版 | 批准验收绑定简化方案（D8：重新开始方案历史、全部章节重新批准） |
 
 ## 0 摘要
 <!-- tw-section id=scope-global type=global-scope -->
@@ -136,7 +139,7 @@ roles: {"design_owner":"Claude","implementation_owner":"Codex","acceptance_owner
 - 反例：B 误用 A 的覆盖；A 的任务材料出现在 B
 - 依据：位置 docs/proposals/2026-10-15-local-state-location.md；版本 v2；确认人 AdolphKevin
 - 检查：unit
-- 验证：自动；层级 journey；入口 tw brief、tw team start、tw team status；环境 临时 git 仓库与两个 worktree；替身 无；隔离 isolated；隔离依据 无；用例 无
+- 验证：自动；替身 项目平台脚本夹具
 
 ### A2 映射查找顺序与错误提示
 <!-- tw-section id=A2 type=acceptance -->
@@ -149,7 +152,7 @@ roles: {"design_owner":"Claude","implementation_owner":"Codex","acceptance_owner
 - 反例：整份替换而非逐项覆盖；坏文件被静默忽略
 - 依据：位置 docs/proposals/2026-10-15-local-state-location.md；版本 v2；确认人 AdolphKevin
 - 检查：unit
-- 验证：自动；层级 unit；入口 project.mapping；环境 临时目录；替身 无；隔离 isolated；隔离依据 无；用例 无
+- 验证：自动；替身 项目平台脚本夹具
 
 ### A3 已提交内容不引用本机材料
 <!-- tw-section id=A3 type=acceptance -->
@@ -162,7 +165,7 @@ roles: {"design_owner":"Claude","implementation_owner":"Codex","acceptance_owner
 - 反例：布局说明被误报；docs/ 中的死链未被发现
 - 依据：位置 docs/proposals/2026-10-15-local-state-location.md；版本 v2；确认人 AdolphKevin
 - 检查：unit、release
-- 验证：自动；层级 unit；入口 tw check、scripts/check_release.py；环境 临时仓库与本仓；替身 无；隔离 isolated；隔离依据 无；用例 无
+- 验证：自动；替身 项目平台脚本夹具
 
 ### A4 列出不归工具管理的本机目录
 <!-- tw-section id=A4 type=acceptance -->
@@ -175,7 +178,7 @@ tw audit 列出 .tw/local/ 下不归工具管理的目录及大小。
 - 反例：工具目录被列为不归管理
 - 依据：位置 docs/proposals/2026-10-15-local-state-location.md；版本 v2；确认人 AdolphKevin
 - 检查：unit
-- 验证：自动；层级 unit；入口 tw audit；环境 临时仓库；替身 无；隔离 isolated；隔离依据 无；用例 无
+- 验证：自动；替身 项目平台脚本夹具
 
 ### A5 没有用户级文件时行为不变
 <!-- tw-section id=A5 type=acceptance -->
@@ -188,7 +191,7 @@ tw audit 列出 .tw/local/ 下不归工具管理的目录及大小。
 - 反例：现有断言需要修改才能通过
 - 依据：位置 docs/proposals/2026-10-15-local-state-location.md；版本 v2；确认人 AdolphKevin
 - 检查：unit
-- 验证：自动；层级 unit；入口 scripts/test.py；环境 本仓；替身 无；隔离 isolated；隔离依据 无；用例 无
+- 验证：自动；替身 项目平台脚本夹具
 
 ### A6 全量检查通过
 <!-- tw-section id=A6 type=acceptance -->
@@ -201,7 +204,7 @@ python3 scripts/test.py、python3 scripts/check_release.py、tw check 全部通�
 - 反例：任何一项失败
 - 依据：位置 docs/proposals/2026-10-15-local-state-location.md；版本 v2；确认人 AdolphKevin
 - 检查：unit、release
-- 验证：自动；层级 unit；入口 scripts/test.py、scripts/check_release.py、tw check；环境 本仓；替身 无；隔离 isolated；隔离依据 无；用例 无
+- 验证：自动；替身 项目平台脚本夹具
 
 ### A7 新 worktree 只配用户级映射即可使用共享仓
 <!-- tw-section id=A7 type=acceptance -->
@@ -214,7 +217,7 @@ python3 scripts/test.py、python3 scripts/check_release.py、tw check 全部通�
 - 反例：新 worktree 提示缺少映射；解析到错误目录
 - 依据：位置 docs/proposals/2026-10-15-local-state-location.md；版本 v2；确认人 AdolphKevin
 - 检查：无
-- 验证：人工；层级 manual；入口 tw brief、tw team start；环境 真实已迁移项目的新 worktree；替身 无；隔离 unresolved；隔离依据 无；用例 无
+- 验证：人工
 
 ## 6 影响范围
 <!-- tw-section id=impact type=scope depends=scope-global -->
