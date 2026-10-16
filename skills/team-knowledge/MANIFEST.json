@@ -1,11 +1,11 @@
 {
   "algorithm": "sha256",
   "files": {
-    "SKILL.md": "8ae78e4c0ec43b57f66dd61dd8eedb74ffe2bbd1c46c5334d0de09d603c466a0",
+    "SKILL.md": "0a516b72f5de24d9d55be763640e9e492d4ef38a23fb70f8e801af7ba98b4b09",
     "agents/openai.yaml": "d660ec45c2b67e9aeb482b06764b44c03503913ad2756ffbac8b0d68a7992121",
-    "references/lessons-from-history.md": "fbe4eb849d75016cf2c9093ad6bdbf9a8f3b610f965f11c8aa31f9812a4cfc44",
-    "references/migration.md": "d64c8d4780c02a5a5d5017938389c2b1dc72a005d4ce3434bb7182333b50b99d",
-    "references/writing.md": "45965852b0c951aed55d0b0b5c0e3b23c3130ad065f4795c8052f5a966e81ad1",
+    "references/lessons-from-history.md": "7198df83a4afef18658bc9594b3af273b8ada32d49c564f48936a3e8f853a2b7",
+    "references/migration.md": "ce1b258814a949136292d454d1c1e12414b41f2a63540480f635f6f4cfba9751",
+    "references/writing.md": "503f82020e3c913cc76b4272b0c86dd5820859251806dec62fe0a50bc501afac",
     "scripts/tw.py": "130a162b2c953756bf302d3ff12c44de087edb5f0be31bd840a29fe2f9a1b6b6",
     "scripts/tw_runtime/__init__.py": "d036cf2a6620a8459baf0ca9459ebe14cfd3b0ff21157578e4a8f54370931fc6",
     "scripts/tw_runtime/audit.py": "868be832df1413c0f60e73b540d2fcf23ba37226259d65c477de61701fe9c4ab",
