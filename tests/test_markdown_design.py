@@ -31,19 +31,10 @@ class MarkdownDesignCases(unittest.TestCase):
             number = next(i for i, line in enumerate(changed.splitlines(), 1) if line.endswith(label))
             with self.subTest(label=label), self.assertRaisesRegex(Invalid, f'第 {number} 行.*验证：自动.*checks.*coverage'):
                 designs.load(changed, scenario_reader=plans.scenario_reader)
-        manual = value['sections'][3]['data']
-        manual.update(checks=[], verification={'method': 'manual', 'cases': [], 'substitutes': []})
-        raw = designs.render(value)
-        self.assertIn('- 验证：人工\n', raw)
-        self.assertEqual(designs.load(raw, scenario_reader=plans.scenario_reader), value)
-        for field in ('用例 无', '替身 无'):
-            changed = raw.replace('- 验证：人工', '- 验证：人工；' + field)
-            number = next(i for i, line in enumerate(changed.splitlines(), 1) if line.endswith(field))
-            with self.subTest(field=field), self.assertRaisesRegex(Invalid, f'第 {number} 行.*人工'):
-                designs.load(changed, scenario_reader=plans.scenario_reader)
-        manual['verification']['coverage'] = {}
-        with self.assertRaisesRegex(Invalid, 'coverage'):
-            designs.validate_design(value)
+        changed = raw.replace('- 验证：自动', '- 验证：人工')
+        number = next(i for i, line in enumerate(changed.splitlines(), 1) if line.startswith('- 验证：人工'))
+        with self.assertRaisesRegex(Invalid, f'第 {number} 行.*人工执行按场景逐条记录.*submit'):
+            designs.load(changed, scenario_reader=plans.scenario_reader)
 
     def test_m1_roundtrip_all_fields_and_section_types(self):
         values = [example(level) for level in ('simple', 'medium', 'complex')]

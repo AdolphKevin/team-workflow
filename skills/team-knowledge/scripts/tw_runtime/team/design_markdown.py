@@ -138,24 +138,24 @@ def sources(value):
 
 
 def verification_text(value):
-    return '；'.join(['自动' if value['method'] == 'automatic' else '人工'] +
+    return '；'.join(['自动'] +
                     [label + ' ' + listing(value[key], outer=('；',))
                      for label, key in (('用例', 'cases'), ('替身', 'substitutes')) if value[key]])
 
 
 def verification(value):
     parts = split(value, '；', fields=True, arrays=True)
-    require(parts[0] in ('自动', '人工'), '验证方式应为自动或人工')
+    require(parts[0] != '人工', '人工执行按场景逐条记录，用 tw team scenarios submit 登记')
+    require(parts[0] == '自动', '验证方式填写自动')
     fields = {}
     for item in parts[1:]:
         label, sep, val = item.partition(' ')
         require(label not in {'层级', '入口', '环境', '隔离', '隔离依据'},
-                '请改为“验证：自动；用例 <用例>；替身 <替身>”或“验证：人工”；覆盖范围写在 .tw/config.json 的 checks.<编号>.coverage')
+                '请改为“验证：自动；用例 <用例>；替身 <替身>”；覆盖范围写在 .tw/config.json 的 checks.<编号>.coverage')
         require(sep and label not in fields, '验证标签缺值或重复：' + label)
         fields[label] = val.strip()
     require(fields.keys() <= {'替身', '用例'}, '未知验证标签')
-    require(parts[0] != '人工' or not fields, '人工验证不能填写用例或替身；请写“验证：人工”')
-    result = {'method': 'automatic' if parts[0] == '自动' else 'manual',
+    result = {'method': 'automatic',
               'cases': array(fields.get('用例', '无'), outer=('；',)),
               'substitutes': array(fields.get('替身', '无'), outer=('；',))}
     strings(result['cases']); strings(result['substitutes'])
@@ -256,7 +256,8 @@ def render(value):
             if 'sources' in data:
                 label('依据', source_text(data['sources']))
             label('检查', listing(data['checks']))
-            label('验证', verification_text(data['verification']))
+            if 'verification' in data:
+                label('验证', verification_text(data['verification']))
             used.update(('scenarios', 'sources', 'checks', 'verification'))
         elif row['type'] == 'task':
             for name, key in (('验收', 'acceptance'), ('范围', 'scope'), ('前置任务', 'blocked_by')):
@@ -455,7 +456,9 @@ def load(raw, *, scenario_reader):
                     from scenario_files import reference
                     result.append(reference(filename, selected, scenario_reader))
                 return result
-            data.update(scenarios=field('场景', references), checks=field('检查', array), verification=field('验证', verification))
+            data.update(scenarios=field('场景', references), checks=field('检查', array))
+            if data['checks'] or '验证' in labels:
+                data['verification'] = field('验证', verification)
             if '依据' in labels:
                 data['sources'] = field('依据', sources)
         elif kind == 'task':

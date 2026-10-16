@@ -125,7 +125,7 @@ def deliver(args, root, profile, task, request):
                  'closable': bool(result.get('closable')) if not stopped else False,
                  'summary_markdown': result.get('summary_markdown', ''),
                  'summary': '交付完成。' if not stopped else '交付停在' + {'review': '平台评审', 'acceptance': '业务验收', 'delivery-report': '交付报告', 'delivery': '最终核查'}[stopped] + '。'}
-        for key in ('close_note', 'acceptance_scope', 'scope', 'automation_status', 'regression_pending'):
+        for key in ('close_note', 'acceptance_scope', 'scope', 'automation_status', 'regression_pending', 'summary_counts', 'statistics', 'scenario_rounds', 'scenario_files'):
             if key in result:
                 value[key] = result[key]
         if stopped:

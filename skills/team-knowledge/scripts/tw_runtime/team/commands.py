@@ -37,7 +37,7 @@ def readable_fields(value, indent=''):
         if isinstance(item, (dict, list)):
             lines += [indent + key + '：', *readable_fields(item, indent + '  ')]
         else:
-            lines.append(indent + key + '：' + str(item))
+            lines.append(indent + ('- ' if key == '-' else key + '：') + str(item))
     return lines
 
 
@@ -115,8 +115,8 @@ def readable(result):
         if key in result:
             lines.append(key + ': ' + str(result[key]))
     if isinstance(result.get('automation_status'), dict):
-        for row in result['automation_status']['pending_automation']:
-            lines.append(f"自动化待建设：{row['id']} → {row['finding']}，期限 {row['due']}")
+        for row in result['automation_status']['pending']:
+            lines.append('尚未沉淀回归：' + row['id'])
     return '\n'.join(lines)
 
 
@@ -505,7 +505,7 @@ def produce(args, root, profile, task, platform, request):
         return {'ok': value.get('ok', True), 'artifact': request.publish(name, value, args.out),
                 **{k: value[k] for k in ('summary', 'gaps', 'problem', 'next_action', 'implementation_ready',
                                        'business_accepted', 'delivery_complete', 'regression_pending', 'automation_status', 'closable', 'acceptance_scope', 'scope', 'validation_active', 'verification_gaps',
-                                       'summary_markdown', 'close_note', 're_evaluated', 'tool', 'environment_checked', 'pending_acceptance', 'pending_sections', 'authorizations_needed') if k in value}}
+                                       'summary_counts', 'statistics', 'scenario_rounds', 'scenario_files', 'summary_markdown', 'close_note', 're_evaluated', 'tool', 'environment_checked', 'pending_acceptance', 'pending_sections', 'authorizations_needed') if k in value}}
     if args.command == 'deliver':
         import delivery_sequence
         return delivery_sequence.deliver(args, root, profile, task, request)
@@ -822,6 +822,13 @@ def task_steps(args, root, profile, task):
     return value
 
 
+def current_status(root, task_id):
+    """按任务身份走状态入口的同一套材料读取与流程计算。"""
+    from workflow import parser
+    args = parser().parse_args(['status', '--root', str(root), '--task', task_id])
+    return dispatch(args, root)
+
+
 def status(args, root, profile, task, platform=None):
     import checklist
     import status_records
@@ -897,6 +904,8 @@ def status(args, root, profile, task, platform=None):
     import scenario_rounds
     scenario_rounds.status_step(root, profile, task['id'], progress,
                                (getattr(args, 'material_selection', None) or {}).get('effective'))
+    if (progress.get('next_step') or {}).get('id') == 'scenarios':
+        value.update(next_step=progress['next_step'], next_action=progress['next_step']['next_command'])
     value['step_lines'] = checklist.render(progress)
     if progress.get('rules_changed'):
         value['step_lines'].append('注意：开始任务后团队流程规则已更新；按当前规则核对已完成的步骤。')

@@ -31,6 +31,9 @@ class StartAccept(unittest.TestCase):
     setUp, git, check, setup_task, write, name = (base.setUp, base.git, base.check,
                                                base.setup_task, base.write, base.name)
 
+    def setup_task(self, *args, **kwargs):
+        return test_delivery.DeliveryCases.setup_task(self, *args, ready_scenarios=False, **kwargs)
+
     def command(self, *args):
         result = subprocess.run([sys.executable, str(TW), '--root', str(self.root), 'team', *args],
                                 text=True, capture_output=True)
@@ -178,6 +181,7 @@ class StartAccept(unittest.TestCase):
         ref = ran['artifact']
         self.write('approval-new', designs.approval_draft(self.design, 'carol', 'Approved actual execution',
                    code_digest=validation.source_digest(self.root, self.profile), run_refs=[ref]))
+        plans.submit_scenarios(self.root, self.task)
         code, drafted = self.command('review', '--context', context, '--run', ref['path'])
         self.assertEqual(code, 0, drafted)
         review = read(self.root / drafted['binding']['path'])['template']
@@ -185,7 +189,7 @@ class StartAccept(unittest.TestCase):
         for axis in ('standards', 'spec'):
             review[axis] = {'status': 'passed', 'summary': 'Read actual command and exact assertion', 'evidence': [ref]}
         review['acceptance'] = [{'id': 'A1', 'status': 'passed', 'summary': 'Actual addition returned 3',
-                                 'evidence': [ref], 'observations': [plans.observation(ref)]}]
+                                 'evidence': [ref], 'observations': plans.observations(self.root, ref)}]
         self.write('review-new', review)
         return context, ref
 
@@ -261,6 +265,7 @@ class StartAccept(unittest.TestCase):
         context = started['context']['path']
         code, ran = self.command('run', '--context', context)
         self.assertEqual(code, 0, ran)
+        plans.submit_scenarios(self.root, self.task)
         code, drafted = self.command('review', '--context', context, '--run', ran['artifact']['path'])
         self.assertEqual(code, 0, drafted)
         ref = ran['artifact']
@@ -269,7 +274,7 @@ class StartAccept(unittest.TestCase):
         for axis in ('standards', 'spec'):
             review[axis] = {'status': 'passed', 'summary': 'Read command and exact result', 'evidence': [ref]}
         review['acceptance'] = [{'id': 'A1', 'status': 'passed', 'summary': '1 + 2 returned 3',
-                                 'evidence': [ref], 'observations': [plans.observation(ref)]}]
+                                 'evidence': [ref], 'observations': plans.observations(self.root, ref)}]
         self.write('review-new', review)
         code, accepted = self.command('accept', '--task', self.task['id'], '--run', ref['path'],
                                       '--review', self.name('review-new'))

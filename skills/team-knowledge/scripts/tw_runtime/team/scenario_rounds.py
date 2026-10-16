@@ -1,11 +1,11 @@
 """场景的当前状态、待执行清单与结果轮次。"""
-import shlex
 import uuid
 
 from common import Invalid, artifact, artifact_valid, create, now, read, require, sha, write
 from error_codes import Code
 from scenario_files import FileProblems
 import materials
+import repairs
 import scenario_results
 import scenarios
 import validation
@@ -80,9 +80,30 @@ def statistics(entries, history, states):
                                for state in ('passed', 'failed', 'blocked', 'pending')}}
 
 
-def current_state(root, profile, group):
+def regression_passed(root, profile, task, group, entry, checks=None):
+    checks = checks if checks is not None else {}
+    regression = entry.get('regression', {})
+    if 'check' not in regression:
+        return False
+    key = regression['check']
+    selection = (key, tuple(regression['cases']))
+    if selection not in checks:
+        # 把场景用例交给原有解码与运行选用，同时核对 Go 父用例的子用例。
+        try:
+            check = profile['checks'][key]
+            require(check['format'] != 'command', '回归检查提供逐项用例报告')
+            selected_profile = {**profile, 'checks': {**profile['checks'], key: {
+                **check, 'required_cases': list(dict.fromkeys(check['required_cases'] + regression['cases']))}}}
+            validation.verify_runs(root, selected_profile, task, regression_runs(root, group), checks=[key])
+            checks[selection] = True
+        except (Invalid, OSError, ValueError, TypeError, KeyError):
+            checks[selection] = False
+    return checks[selection]
+
+
+def current_state(root, profile, group, inputs=None):
     """所有场景命令共用的当前状态入口；历史只按内容与源码判定。"""
-    design, task, entries = scenarios.task_entries(root, group, profile)
+    design, task, entries = inputs or scenarios.task_entries(root, group, profile)
     source = validation.source_digest(root, profile)
     product = validation.product_digest(root, profile, design)
     history = rounds(root, group)
@@ -95,25 +116,6 @@ def current_state(root, profile, group):
                 latest[key] = (record, row)
     checks = {}
 
-    def regression_passed(entry):
-        regression = entry.get('regression', {})
-        if 'check' not in regression:
-            return False
-        key = regression['check']
-        selection = (key, tuple(regression['cases']))
-        if selection not in checks:
-            # 把场景用例交给原有解码与运行选用，同时核对 Go 父用例的子用例。
-            try:
-                check = profile['checks'][key]
-                require(check['format'] != 'command', '回归检查提供逐项用例报告')
-                selected_profile = {**profile, 'checks': {**profile['checks'], key: {
-                    **check, 'required_cases': list(dict.fromkeys(check['required_cases'] + regression['cases']))}}}
-                validation.verify_runs(root, selected_profile, task, regression_runs(root, group), checks=[key])
-                checks[selection] = True
-            except (Invalid, OSError, ValueError, TypeError, KeyError):
-                checks[selection] = False
-        return checks[selection]
-
     states = []
     for key, entry in entries.items():
         state, reason = 'pending', 'changed' if key in previous else 'new'
@@ -123,24 +125,22 @@ def current_state(root, profile, group):
                 state, reason = 'failed', 'failed'
             elif row['status'] in ('blocked', 'skip'):
                 state, reason = 'blocked', None
-            elif record['product_digest'] == product or regression_passed(entry):
+            elif record['product_digest'] == product or regression_passed(root, profile, task, group, entry, checks):
                 state, reason = 'passed', None
             else:
                 reason = 'source-changed'
-        states.append({**entry, 'state': state, 'reason': reason})
+        result = ({'result': latest[key][1], 'round': latest[key][0]['round']} if key in latest else {})
+        states.append({**entry, 'state': state, 'reason': reason, **result})
     totals = statistics(entries, history, states)
     return {'scenarios': states, 'source_digest': source, 'product_digest': product,
-            'summary_counts': totals['summary_counts'], 'statistics': totals}
+            'summary_counts': totals['summary_counts'], 'statistics': totals,
+            'scenario_rounds': group.get('scenario_rounds', []),
+            'scenario_files': [{'path': path, 'sha256': checksum} for path, checksum in sorted(
+                {(row['file'], row['file_sha256']) for row in entries.values()})]}
 
 
-def pending_action(task_id):
-    return 'tw team scenarios pending --task ' + shlex.quote(task_id)
-
-
-def review_action(root, task_id):
-    import reviews
-    return (reviews.submission_action(root, task_id) if reviews.locations(root, task_id)[0].is_file()
-            else 'tw team review --task ' + shlex.quote(task_id))
+def pending_action(root, task_id):
+    return repairs.task_command(root, task_id, 'scenarios pending')
 
 
 def pending_result(root, task_id, value):
@@ -153,12 +153,14 @@ def pending_result(root, task_id, value):
         lines += readable_fields(row['acceptance_entry'], '  ')
         for key, label in (('initial_state', '初始状态'), ('steps', '步骤'), ('expected', '预期结果'),
                            ('forbidden_effects', '核对副作用')):
-            lines += [label + '：'] + ['  ' + str(i) + '. ' + text for i, text in enumerate(row[key], 1)]
+            lines += [label + ('：' if row[key] else '：无')] + ['  ' + str(i) + '. ' + text for i, text in enumerate(row[key], 1)]
     counts = value['summary_counts']
     lines.append('当前汇总：' + '，'.join(key + ' ' + str(counts[key]) for key in counts))
+    from commands import current_status
     return {'ok': True, 'task_id': task_id, **value, 'pending': rows, 'pending_count': len(rows), 'lines': lines,
             'summary': f'本任务有 {len(rows)} 条待执行场景。',
-            'next_action': pending_action(task_id) if rows else review_action(root, task_id)}
+            'next_action': ('按清单执行场景，然后提交结果：' + repairs.task_command(
+                root, task_id, 'scenarios submit', '--results <文件>')) if rows else current_status(root, task_id)['next_action']}
 
 
 def pending(root, task_id, profile):
@@ -166,20 +168,22 @@ def pending(root, task_id, profile):
 
 
 def status_step(root, profile, task_id, progress, group=None):
-    """只补充状态展示，保留现有流程的判定和总下一步。"""
+    """在检查之后展示场景执行，未执行的场景先于评审。"""
     group = group or materials.load(root, task_id)
     if group is None:
         return
     value = current_state(root, profile, group)
     counts = value['summary_counts']
     todo = counts['pending'] + counts['failed']
-    review = next((row['next_command'] for row in progress['steps'] if row['id'] == 'review'), review_action(root, task_id))
-    row = {'id': 'scenarios', 'label': '场景验收', 'state': 'pending' if todo or counts['blocked'] else 'done',
+    row = {'id': 'scenarios', 'label': '场景验收', 'state': 'pending' if todo else 'done',
            'evidence': (group.get('scenario_rounds') or [{}])[-1].get('path'),
-           'summary_counts': counts, 'first_pass': value['statistics']['first_pass'],
-           'next_command': pending_action(task_id) if todo else review}
+           'summary_counts': counts, 'first_pass': value['statistics']['first_pass']}
+    if todo:
+        row['next_command'] = pending_action(root, task_id)
     index = next((i + 1 for i, row in enumerate(progress['steps']) if row['id'] == 'run'), len(progress['steps']))
     progress['steps'].insert(index, row)
+    if todo and (progress.get('next_step') or {}).get('id') in ('review', 'acceptance', 'knowledge', 'delivery'):
+        progress.update(next_step=row, finished=False)
 
 
 def task_metrics(root, profile, group, since=None):
@@ -209,8 +213,7 @@ def submit(root, task_id, profile, path):
                 independent(design, row['executor'], '场景执行者')
             except Invalid as exc:
                 raise Invalid('由独立于实施负责人的执行者提交结果：' + row['executor'], error_code=exc.error_code,
-                              next_action='由未参与实施的执行者实际执行并提交：tw team scenarios submit --task '
-                              + shlex.quote(task_id) + ' --results <文件>') from exc
+                              next_action='由未参与实施的执行者实际执行并提交：' + repairs.task_command(root, task_id, 'scenarios submit', '--results <文件>')) from exc
         history = rounds(root, group)
         number = max((record['round'] for record in history), default=0) + 1
         directory = materials.path(root, task_id).parent / 'scenarios' / ('round-' + str(number) + '-' + uuid.uuid4().hex)
@@ -232,7 +235,7 @@ def submit(root, task_id, profile, path):
         require(after['source_digest'] == before['source_digest']
                 and {row['id']: row['fingerprint'] for row in after['scenarios']} == {key: row['fingerprint'] for key, row in entries.items()},
                 '提交期间源码或场景内容已变化，请按当前内容重新执行。', error_code=Code.SOURCE_STALE,
-                next_action=pending_action(task_id))
+                next_action=pending_action(root, task_id))
         record = {'data_version': 1, 'kind': 'scenario-round', 'task_id': task_id, 'round': number,
                   'source_digest': before['source_digest'], 'product_digest': before['product_digest'],
                   'submitted_at': now(), 'results': rows,

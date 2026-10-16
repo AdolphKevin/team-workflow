@@ -191,7 +191,8 @@ def render(value):
             counts, rate = row['summary_counts'], row['first_pass']
             lines.insert(index + 1, '   当前汇总：' + '，'.join(key + ' ' + str(counts[key]) for key in counts)
                          + f'；一次通过率 {rate["numerator"]}/{rate["denominator"]}')
-            lines.insert(index + 2, '   下一步：' + row['next_command'])
+            if row.get('next_command'):
+                lines.insert(index + 2, '   下一步：' + row['next_command'])
     if value['next_step']:
         lines += ['', '下一步：' + value['next_step']['label'], value['next_step']['next_command']]
     else:

@@ -127,3 +127,60 @@ def task_design(task):
                                 'drivers': ['Arithmetic'], 'uncertainties': [], 'required_skills': []},
                  'roles': {'design_owner': 'alice', 'implementation_owner': 'bob', 'acceptance_owner': 'carol'},
                  'sections': sections, 'issues': []})
+
+
+def submit_scenarios(root, task, report=None):
+    """合成项目的验收前置：从命令入口登记独立执行的合成场景结果。"""
+    import contextlib
+    from datetime import datetime, timezone
+    import io
+    import json
+    import workflow
+    import materials
+    from unittest.mock import patch
+    from tw_runtime.team import platform_script
+    from common import write
+
+    def command(*args):
+        out = io.StringIO()
+        # 平台传输建立前的本地准备覆盖开工、场景登记及其流程状态读取。
+        isolation = patch.object(platform_script, 'is_task', return_value=False) if report is not None else contextlib.nullcontext()
+        with isolation, contextlib.redirect_stdout(out):
+            code = workflow.main([*args, '--root', str(root)])
+        value = json.loads(out.getvalue())
+        assert code == 0, value
+        return value
+
+    if report is not None:
+        path = root / '.tw/local/scenario-fixture-task.json'
+        write(path, written_task(task))
+        args = ['start', '--task', str(path), '--design', report['design']]
+        for name in report.get('approvals', []):
+            args += ['--approval', name]
+        command(*args)
+    pending = command('scenarios', 'pending', '--task', task['id'])
+    if pending['pending']:
+        directory = root / '.tw/local/scenario-fixture'
+        directory.mkdir(parents=True, exist_ok=True)
+        (directory / 'evidence.txt').write_text('合成项目：从 app.add 的公开入口核对 1+2=3。\n')
+        rows = [{'scenario': row['id'], 'status': 'pass', 'actual': '合成算术入口结果为 3，未写入额外数据',
+                 'executor': 'carol', 'executed_at': datetime.now(timezone.utc).isoformat(), 'evidence': ['evidence.txt']}
+                for row in pending['pending']]
+        path = directory / 'results.jsonl'
+        path.write_text(''.join(json.dumps(row) + '\n' for row in rows))
+        command('scenarios', 'submit', '--task', task['id'], '--results', str(path))
+    return materials.load(root, task['id'])['scenario_rounds']
+
+
+def observations(root, ref, check='unit', cases=()):
+    import materials
+    # 此处只读取已由 submit 登记的轮次。
+    from common import read
+    from pathlib import Path
+    try:
+        record = read(Path(root) / ref['path'])
+    except (ValueError, OSError):
+        record = {}
+    task_id = next(iter(record.get('task_digests', {})), 'TASK-fixture')
+    group = materials.load(root, task_id) or {}
+    return [observation(ref, check, cases), {'kind': 'scenarios', 'rounds': group.get('scenario_rounds', [])}]

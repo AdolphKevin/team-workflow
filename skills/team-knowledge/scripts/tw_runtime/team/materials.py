@@ -233,6 +233,14 @@ def fingerprint(args, root):
         return None
     result = {'context': artifact(root, local(root, args.context))} if args.context else {}
     selection = args.material_selection
+    value = selection.get('effective') or selection.get('value') or {}
+    result['scenarios'] = {key: value.get(key) for key in OPTIONAL_ARRAY + OPTIONAL_SCENARIOS}
+    if getattr(args, 'design', None):
+        from scenario_acceptance import bindings, current
+        from common import load_profile
+        design = design_files.read(local(root, args.design))
+        task = read(local(root, args.task))
+        result['scenario_bindings'] = bindings(current(root, load_profile(root), task, design)[1])
     if args.command == 'review' and not args.submit:
         import reviews
         result['review_history'] = reviews.history_inputs(root, selection['task_id'], selection.get('effective') or selection['value'])

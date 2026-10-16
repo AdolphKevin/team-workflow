@@ -9,6 +9,7 @@ import test_markdown_review as markdown
 import test_workflow as fixtures
 from common import artifact, artifact_valid, read, write
 import designs
+import plan_fixtures as plans
 
 
 class ReviewRecheck(unittest.TestCase):
@@ -36,6 +37,7 @@ class ReviewRecheck(unittest.TestCase):
             (self.root / 'app.py').write_text('def add(a, b):\n    # Same confirmed behavior; new implementation.\n    return sum((a, b))\n')
         code, result = self.command('run', '--task', self.task['id'])
         self.assertEqual(code, 0, result)
+        plans.submit_scenarios(self.root, self.task)
         self.ran = result
         return result
 
@@ -183,34 +185,22 @@ class ReviewRecheck(unittest.TestCase):
         self.assertIn('未提交的最新判断，不能丢失。', path.read_text())
         self.assertTrue(result['recheck'])
 
-    def test_manual_observation_is_carried_without_rewriting_and_requires_its_own_recheck(self):
+    def test_document_scenarios_are_preserved_and_rechecked_with_acceptance(self):
         path, previous = self.submitted(manual=True)
         observed = read(self.root / previous['artifact']['path'])['acceptance'][0]['observations']
         self.rerun()
         path, _ = self.recheck()
         source = path.read_text()
-        self.assertIn('- 观察人：carol', source)
-        self.assertIn('- 结果：观察到结果为 3', source)
-        self.assertIn('- 数据：result=3; count=1', source)
-        self.assertEqual(source.count('- 复核：待复核'), 4)
-        for name in ('## 规范 standards', '## 需求 spec', '## 验收 A1'):
-            source = self.field(source, name, '复核', '已复核')
+        self.assertNotIn('人工观察', source)
+        self.assertEqual(source.count('- 复核：待复核'), 3)
         code, refused = self.submit(path, source)
         self.assertEqual(code, 1, refused)
-        self.assertIn('人工观察 A1', refused['problem'])
         code, result = self.submit(path, self.confirmed(source))
         self.assertEqual(code, 0, result)
-        self.assertEqual(read(self.root / result['artifact']['path'])['acceptance'][0]['observations'], observed)
+        current = read(self.root / result['artifact']['path'])['acceptance'][0]['observations']
+        self.assertEqual(current[0]['kind'], 'scenarios')
+        self.assertTrue(all(ref in current[0]['rounds'] for ref in observed[0]['rounds']))
 
-    def test_human_can_replace_a_manual_observation_before_confirming_it(self):
-        path, _ = self.submitted(manual=True)
-        self.rerun()
-        path, _ = self.recheck()
-        source = self.field(path.read_text(), '### 人工观察 A1', '结果', '再次实际操作，结果仍为3。')
-        code, result = self.submit(path, self.confirmed(source))
-        self.assertEqual(code, 0, result)
-        observed = read(self.root / result['artifact']['path'])['acceptance'][0]['observations'][0]
-        self.assertEqual(observed['result'], '再次实际操作，结果仍为3。\n数据：result=3; count=1')
 
     def test_file_comparison_uses_saved_fingerprints_including_additions_and_deletions(self):
         (self.root / 'removed.py').write_text('obsolete = True\n')

@@ -62,6 +62,7 @@ class FourCommandDelivery(unittest.TestCase):
         return result
 
     def run_checks(self, *extra):
+        plans.submit_scenarios(self.root, self.task)
         code, result = self.command('run', '--task', self.task['id'], *extra)
         self.assertEqual(code, 0, result)
         self.ran = result

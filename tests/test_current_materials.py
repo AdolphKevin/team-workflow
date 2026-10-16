@@ -54,6 +54,7 @@ class CurrentMaterials(unittest.TestCase):
     def reviewed(self):
         started = self.prepared()
         ran = self.run_identity()
+        plans.submit_scenarios(self.root, self.task)
         code, draft = self.command('review', '--task', self.task['id'])
         self.assertEqual(code, 0, draft)
         review = read(self.root / draft['binding']['path'])['template']
@@ -62,7 +63,7 @@ class CurrentMaterials(unittest.TestCase):
         for axis in ('standards', 'spec'):
             review[axis] = {'status': 'passed', 'summary': 'Read public behavior and exact assertion output', 'evidence': [ref]}
         review['acceptance'] = [{'id': 'A1', 'status': 'passed', 'summary': 'Actual addition returned 3',
-                                 'evidence': [ref], 'observations': [plans.observation(ref)]}]
+                                 'evidence': [ref], 'observations': plans.observations(self.root, ref)}]
         self.write('review-current', review)
         return started, ran, review
 
@@ -327,7 +328,7 @@ class CurrentMaterials(unittest.TestCase):
         ref = artifact(self.root, copied)
         for axis in ('standards', 'spec'):
             review[axis]['evidence'] = [ref]
-        review['acceptance'][0].update(evidence=[ref], observations=[plans.observation(ref)])
+        review['acceptance'][0].update(evidence=[ref], observations=plans.observations(self.root, ref))
         self.write('review-copy', review)
         report['review'] = self.name('review-copy')
         self.write('report-copy', report)
@@ -354,6 +355,7 @@ class CurrentMaterials(unittest.TestCase):
         import test_workflow
         test_workflow.write_config(self.root, self.profile)
         passed = self.run_identity()
+        plans.submit_scenarios(self.root, self.task)
         code, draft = self.command('review', '--task', self.task['id'])
         self.assertEqual(code, 0, draft)
         review = read(self.root / draft['binding']['path'])['template']
@@ -362,7 +364,7 @@ class CurrentMaterials(unittest.TestCase):
         for axis in ('standards', 'spec'):
             review[axis] = {'status': 'passed', 'summary': 'Read exact execution output', 'evidence': [ref]}
         review['acceptance'] = [{'id': 'A1', 'status': 'passed', 'summary': '1+2 returned 3',
-                                 'evidence': [ref], 'observations': [plans.observation(ref)]}]
+                                 'evidence': [ref], 'observations': plans.observations(self.root, ref)}]
         self.write('review-selected', review)
         marker = self.root / '.tw/local/fail-check'
         marker.touch()

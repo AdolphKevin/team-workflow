@@ -42,6 +42,7 @@ class CloseNote(unittest.TestCase):
             'run_refs': [artifact(self.root, self.root / path) for path in self.runs]})
         self.publish(approval, 'carol')
         self.write('approval', approval['record']['approval'])
+        plans.submit_scenarios(self.root, self.task, self.report)
 
     def github(self, endpoint, paginate=False, binary=False):
         if endpoint == 'repos/example/project/issues/149':
@@ -139,6 +140,7 @@ class CloseNote(unittest.TestCase):
             'run_refs': [artifact(self.root, self.root / path) for path in self.runs]})
         self.publish(approval, 'carol')
         self.write('approval', approval['record']['approval'])
+        plans.submit_scenarios(self.root, self.task, self.report)
         self.accept_and_record_knowledge()
         result = delivery.verify(self.root, self.profile, self.task, self.report)
         self.assertTrue(result['delivery_complete'])

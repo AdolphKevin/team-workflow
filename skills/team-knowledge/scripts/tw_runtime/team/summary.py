@@ -20,13 +20,17 @@ def render(result, task, profile=None):
     delivered = result.get('delivery_complete')
     lines = [f'**任务**：{task.get("goal", task["id"])}（{task["id"]}）', '']
     lines.append('**验证了哪些业务场景**')
-    observations = result.get('observations', {})
     named_cases = result.get('named_cases', {})
     lines += _lines([f'{row["id"]}：{row["expectation"]}'
-                     + (f'（{len(observations.get(row["id"], []))} 条实际观察）' if observations.get(row['id']) else '')
                      + ('；用例 ' + '、'.join(named_cases[row['id']]) if named_cases.get(row['id']) else
                         '；未指明用例，证据为整项检查通过' if row['id'] in result.get('unspecified_cases', []) else '')
                      for row in task.get('acceptance', [])], '没有登记验收场景')
+    if 'summary_counts' in result:
+        lines += ['', '场景汇总：' + '，'.join(key + ' ' + str(value) for key, value in result['summary_counts'].items())]
+        stats = result['statistics']
+        for key, label in (('first_pass', '一次通过率'), ('agreement', '多人一致')):
+            ratio = stats[key]
+            lines.append(label + '：' + str(ratio['numerator']) + '/' + str(ratio['denominator']))
     lines += ['', '**哪些检查实际运行并通过**']
     lines += _lines([f'{key}：{checks.get(key, {}).get("purpose", "项目检查")}' for key in result.get('checks', [])],
                     '没有必需检查')
@@ -37,7 +41,8 @@ def render(result, task, profile=None):
         lines.append(f'- 运行环境：{"本次实际核对" if environment == "now" else "沿用业务验收当时记录的环境"}')
     open_items = []
     if result.get('regression_pending'):
-        open_items.append('有应沉淀的自动回归尚未完成（见 automation_status）')
+        open_items.append('整体交付未完成：以下场景尚未沉淀回归')
+        open_items += [row['id'] for row in result['automation_status']['pending']]
     if result.get('superseded_execution'):
         open_items.append(f'{len(result["superseded_execution"])} 份较早或已过期的运行记录未被采用，仅作历史保留')
     if result.get('tool', {}).get('override'):

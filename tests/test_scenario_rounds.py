@@ -99,7 +99,7 @@ class ScenarioRounds(unittest.TestCase):
         self.assertEqual(value['statistics']['first_pass'], {'numerator': 3, 'denominator': 4, 'rate': 0.75})
         self.assertEqual(value['statistics']['summary_counts'], {'passed': 3, 'failed': 1, 'blocked': 0, 'pending': 0})
         self.assertEqual(value['pending_count'], 1)
-        self.assertIn('scenarios pending', value['next_action'])
+        self.assertIn('scenarios submit', value['next_action'])
         group = self.current()
         self.assertEqual(group['scenario_rounds'], [value['artifact']])
         record = read(self.root / value['artifact']['path'])
@@ -244,7 +244,10 @@ class ScenarioRounds(unittest.TestCase):
         self.assertEqual(dashboard['statistics']['agreement'], {'numerator': 4, 'denominator': 4, 'rate': 1.0})
         self.assertEqual(dashboard['statistics']['first_pass'], first['statistics']['first_pass'])
         self.assertEqual(dashboard['pending_count'], 0)
-        self.assertIn('tw team review', dashboard['next_action'])
+        code, flow = self.call('status', '--task', self.task['id'])
+        self.assertEqual(code, 0, flow)
+        self.assertEqual(flow['next_step']['id'], 'run')
+        self.assertEqual(dashboard['next_action'], flow['next_step']['next_command'])
         self.scenarios['sops'][0]['scenarios'][0]['expected'] = ['全新内容']
         self.save_scenarios()
         current = self.pending()['statistics']

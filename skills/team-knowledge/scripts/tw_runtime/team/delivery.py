@@ -9,6 +9,7 @@ from common import (RECORD_SCHEMA, Invalid, artifact, artifact_valid, digest, ev
                     require, sha, strings, task_valid, text, tool_gate)
 import knowledge
 import validation
+import scenario_acceptance
 
 
 def evidence(root, profile, item):
@@ -88,11 +89,13 @@ def review_template(root, profile, task, report):
     import issue_history
     known = {v['id']: v for v in issue_history.known(root, task['id'])}
     known.update({v['id']: v for v in design.get('issues', [])})
+    _, state = scenario_acceptance.current(root, profile, task, design, report['runs'])
+    known.update({v['id']: v for v in scenario_acceptance.findings(state, list(known.values()), design, task)})
     pending = {'status': 'pending', 'summary': '', 'evidence': []}
     return {'data_version': RECORD_SCHEMA, 'kind': 'review', 'task_id': task['id'],
             'task_digest': digest(task), 'source_digest': validation.source_digest(root, profile),
             'validation_policy': review_policy(root, profile, task),
-            'sections': selected, 'reviewer': '', 'standards': dict(pending), 'spec': dict(pending),
+            **scenario_acceptance.bindings(state), 'sections': selected, 'reviewer': '', 'standards': dict(pending), 'spec': dict(pending),
             'risks': task['risks'], 'knowledge_conflicts_resolved': False,
             'acceptance': [{'id': a['id'], **pending, 'observations': []} for a in task['acceptance']],
             'findings': list(known.values())}
@@ -120,6 +123,9 @@ def check_review_format(root, profile, task, review, selected, design):
         require(bool(row.get('evidence')), 'Review needs actual evidence')
         for ref in row['evidence']:
             evidence(root, profile, ref)
+    _, state = scenario_acceptance.current(root, profile, task, design)
+    require(all(review.get(key) == value for key, value in scenario_acceptance.bindings(state).items()),
+            '评审所用场景文件或轮次已变化，请重新复核', error_code=Code.REVIEW_BINDING_STALE)
     require(review.get('risks') == task['risks'], 'Review must assess the current risks')
     require(type(review.get('knowledge_conflicts_resolved')) is bool, 'Knowledge conflict disposition must be specified')
     from contracts import reconcile, issues
@@ -197,6 +203,8 @@ def check_review(root, profile, task, review, selected, design, status, executio
     require_review_passed(task, review, status['required_sections'])
     for row in review['acceptance']:
         check_observations(root, profile, design, row, execution, run_paths)
+        refs = [item for item in row.get('observations', []) if item.get('kind') == 'scenarios']
+        require(len(refs) == 1 and refs[0].get('rounds') == review['scenario_rounds'], '验收观察引用评审所用的场景轮次')
 
 
 def verify(root, profile, task, report, phase='delivery', _seen=None, live=None):
@@ -209,8 +217,9 @@ def verify(root, profile, task, report, phase='delivery', _seen=None, live=None)
     require(phase in ('acceptance', 'delivery'), 'Unknown verification phase')
     live = phase == 'acceptance' if live is None else live
     tool = tool_gate()
+    require('automation' not in report, '回归状态写在场景文件各场景的 regression', error_code=Code.REPORT_INCOMPLETE)
     obj(report, {'data_version', 'task_id', 'design', 'approvals', 'brief', 'runs', 'review'},
-        {'acceptance', 'knowledge', 'design_history', 'close_authorization', 'dependencies', 'automation'},
+        {'acceptance', 'knowledge', 'design_history', 'close_authorization', 'dependencies'},
         error_code=Code.REPORT_INCOMPLETE)
     import task_inputs
     task = task_inputs.expand(task, design_files.read(inside(root, report['design'])))
@@ -258,9 +267,12 @@ def verify(root, profile, task, report, phase='delivery', _seen=None, live=None)
                 error_code=Code.APPROVAL_NOT_SHARED,
                 next_action=reviews.submission_action(root, task['id'],
                     reviews.case_repair(root, task['id'], artifact(root, inside(root, report['review'])))['review_file']))
+    scenario_group, scenario_state = scenario_acceptance.current(root, profile, task, design, report['runs'])
     from contracts import unsourced
     missing = unsourced(task, design)
     require(not missing, 'Acceptance scenario needs confirmed business sources: ' + ', '.join(missing))
+    if review.get('source_digest') == before:
+        scenario_acceptance.check(root, profile, task, design, review, scenario_group, scenario_state)
     try:
         check_review_format(root, profile, task, review, selected, design)
     except Invalid as exc:
@@ -305,16 +317,18 @@ def verify(root, profile, task, report, phase='delivery', _seen=None, live=None)
         repair = reviews.case_repair(root, task['id'], artifact(root, inside(root, report['review'])))
         exc.next_action, exc.review_file = repair['next_action'], repair['review_file']
         raise
-    from contracts import automation
-    regression = automation(report['automation'], task, review['findings'], profile, execution) if 'automation' in report else 'not-declared'
+    regression = scenario_acceptance.regression(root, profile, task, scenario_group, scenario_state, review['findings'])
     materials = [artifact(root, inside(root, report[p])) for p in ('design', 'brief', 'review')]
     materials += [artifact(root, inside(root, p)) for p in report['approvals'] + report['runs'] + report.get('design_history', [])]
-    materials += dependency_materials
-    verification = {row['id']: row['data']['verification'] for row in design['sections'] if row['type'] == 'acceptance'}
+    materials += dependency_materials + scenario_state['scenario_rounds']
+    materials += [ref for row in scenario_state['scenarios'] for ref in row.get('result', {}).get('evidence', [])]
+    verification = {row['id']: row['data'].get('verification') for row in design['sections'] if row['type'] == 'acceptance'}
     named_cases = {row['id']: sorted(set(verification[row['id']]['cases']) | set(row.get('cases', [])))
-                   for row in review['acceptance'] if verification[row['id']]['method'] == 'automatic'}
+                   for row in review['acceptance'] if verification[row['id']] is not None}
     result = {'data_version': RECORD_SCHEMA, 'kind': 'acceptance' if phase == 'acceptance' else 'delivery-verification',
               'ok': True, 'at': now(), 'phase': phase, 'task_id': task['id'], 'task_digest': digest(task),
+              **scenario_acceptance.bindings(scenario_state),
+              'summary_counts': scenario_state['summary_counts'], 'statistics': scenario_state['statistics'],
               'source_digest': before, 'sections': selected, 'checks': execution['checks'], 'materials': materials,
               'scope': 'business-acceptance' if phase == 'acceptance' else 'team-delivery',
               'acceptance_scope': task['acceptance_scope'], 'report': dict(report), 'issues': review['findings'],
@@ -328,7 +342,7 @@ def verify(root, profile, task, report, phase='delivery', _seen=None, live=None)
               'environment': {key: row.get('binding', {}).get('environment')
                               for key, row in sorted(execution['results'].items())},
               'environment_checked': 'now' if live else 'recorded at acceptance',
-              'regression_pending': regression != 'not-declared' and bool(regression['pending_automation']),
+              'regression_pending': bool(regression['pending']),
               'assurance': 'content-bound records and explicit reviews; delivery_complete covers acceptance, knowledge '
                            'and handoff records, not regression automation (see automation_status); '
                            'not signed or exhaustive business proof'}
@@ -358,6 +372,8 @@ def verify(root, profile, task, report, phase='delivery', _seen=None, live=None)
                 '业务验收记录属于其他任务或任务已经改动', error_code=Code.ACCEPTANCE_STALE)
         require(accepted.get('sections') == selected, '业务验收之后方案章节已变化，需要重新验收', error_code=Code.ACCEPTANCE_STALE)
         require(accepted.get('source_digest') == before, '业务验收之后源码已变化，需要重新验收', error_code=Code.ACCEPTANCE_STALE)
+        require(all(accepted.get(key) == value for key, value in scenario_acceptance.bindings(scenario_state).items()),
+                '业务验收之后场景文件或轮次已变化，需要重新验收', error_code=Code.ACCEPTANCE_STALE)
         require(contents(accepted.get('materials')) == contents(result['materials']),
                 '业务验收之后执行、评审、批准或方案材料已变化，需要用当前材料重新验收', error_code=Code.ACCEPTANCE_STALE)
         result['environment'] = accepted.get('environment', result['environment'])
@@ -401,6 +417,8 @@ def verify(root, profile, task, report, phase='delivery', _seen=None, live=None)
         require(all(latest[key] == platform_state[key] for key in observed) and not latest['gaps'],
                 'Platform requirements, approvals or progress changed during verification', error_code=Code.PLATFORM_CHANGED)
     require(digest(issue_history.known(root, task['id'])) == issues_before, 'Known issues changed during verification')
+    require(scenario_acceptance.bindings(scenario_acceptance.current(root, profile, task, design, report['runs'])[1])
+            == scenario_acceptance.bindings(scenario_state), '验收期间场景文件或轮次已变化', error_code=Code.ACCEPTANCE_STALE)
     require(validation.source_digest(root, profile) == before, 'Source changed during verification', error_code=Code.SOURCE_STALE)
     return result
 
@@ -413,58 +431,45 @@ def contents(materials):
 
 
 def check_observations(root, profile, design, row, execution, run_paths):
-    """Source citations alone cannot satisfy a behavioral acceptance claim."""
-    from contracts import match_coverage, material
+    """检查核对自身覆盖，场景轮次承担业务入口的验收。"""
+    from contracts import match_coverage
     section = next((s for s in design['sections'] if s['id'] == row['id']), None)
     require(section is not None, 'Unknown acceptance observation')
-    requirement = section['data']['verification']
+    requirement = section['data'].get('verification')
     observations = row.get('observations')
-    require(isinstance(observations, list) and bool(observations), 'Acceptance needs actual execution or manual observations')
+    require(isinstance(observations, list) and bool(observations), '验收需要检查或场景轮次观察')
     cases = set()
-    if requirement['method'] == 'automatic':
+    if requirement is not None:
         checks = section['data']['checks']
         for key in checks:
             require(execution['results'].get(key, {}).get('status') == 'passed', 'Check did not pass: ' + key)
             require('coverage' in profile['checks'][key], '检查缺少覆盖声明：' + key)
             match_coverage(requirement, profile['checks'][key]['coverage'])
-        scope = next(s['data'] for s in design['sections'] if s['id'] == 'scope-global')
-        if row['id'] in scope['requirement_acceptance']:
-            require(any(profile['checks'][key]['coverage']['level'] == 'journey' for key in checks),
-                    '需求级验收 ' + row['id'] + ' 至少需要一项 journey 层级检查，或改为人工验收')
     for observation in observations:
-        if requirement['method'] == 'automatic':
-            obj(observation, {'kind', 'run', 'check', 'cases'})
-            require(observation['kind'] == 'execution', 'Automatic acceptance needs original execution, not source links')
-            ref = observation['run']
-            path = artifact_valid(root, ref)
-            require(path.relative_to(root).as_posix() in run_paths, 'Observation run was not verified for this task')
-            key = observation['check']
-            require(key in section['data']['checks'] and key in execution['results'], 'Observation check does not cover this acceptance')
-            require(path.relative_to(root).as_posix() == execution['selected_runs'][key],
-                    'Observation must reference the selected execution for this check')
-            record = read(path)
-            identifiers = [r['id'] for r in record.get('results', [])] if record['kind'] == 'execution' else [record['result']['id']]
-            require(key in identifiers, 'Observation check belongs to another run')
-            result = execution['results'][key]
-            strings(observation['cases'])
-            for case in observation['cases']:
-                require(result.get('cases', {}).get(case) == 'passed', 'Observed case is missing, failed or skipped: ' + case)
-            cases.update(case for case, outcome in result.get('cases', {}).items() if outcome == 'passed')
-        else:
-            obj(observation, {'kind', 'observer', 'at', 'steps', 'result', 'evidence'})
-            require(observation['kind'] == 'manual', 'Manual acceptance needs actual observations')
-            from contracts import independent
-            independent(design, observation['observer'], 'Manual observer')
-            material(observation['result'])
-            observed_at = datetime.fromisoformat(observation['at'])
-            require(observed_at.tzinfo is not None, 'Manual observation needs a timezone')
-            from datetime import timezone
-            require(observed_at <= datetime.now(timezone.utc), 'Observation cannot be dated in the future')
-            strings(observation['steps'], True)
-            require(bool(observation['evidence']), 'Manual observation needs captured evidence')
-            for ref in observation['evidence']:
-                evidence(root, profile, ref)
-    for case in sorted(set(requirement['cases']) | set(row.get('cases', []))):
+        if observation.get('kind') == 'scenarios':
+            obj(observation, {'kind', 'rounds'})
+            for ref in observation['rounds']:
+                artifact_valid(root, ref)
+            continue
+        require(observation.get('kind') == 'execution', '观察种类填写 execution 或 scenarios；人工执行用 tw team scenarios submit 登记')
+        require(requirement is not None, '检查为无的验收项使用 scenarios 观察')
+        obj(observation, {'kind', 'run', 'check', 'cases'})
+        ref = observation['run']
+        path = artifact_valid(root, ref)
+        require(path.relative_to(root).as_posix() in run_paths, 'Observation run was not verified for this task')
+        key = observation['check']
+        require(key in section['data']['checks'] and key in execution['results'], 'Observation check does not cover this acceptance')
+        require(path.relative_to(root).as_posix() == execution['selected_runs'][key],
+                'Observation must reference the selected execution for this check')
+        record = read(path)
+        identifiers = [r['id'] for r in record.get('results', [])] if record['kind'] == 'execution' else [record['result']['id']]
+        require(key in identifiers, 'Observation check belongs to another run')
+        result = execution['results'][key]
+        strings(observation['cases'])
+        for case in observation['cases']:
+            require(result.get('cases', {}).get(case) == 'passed', 'Observed case is missing, failed or skipped: ' + case)
+        cases.update(case for case, outcome in result.get('cases', {}).items() if outcome == 'passed')
+    for case in sorted(set((requirement or {}).get('cases', [])) | set(row.get('cases', []))):
         if case not in cases and case in row.get('cases', []):
             raise ReviewCaseError(row['id'], case)
         require(case in cases, '验收 ' + row['id'] + ' 用例不存在或未通过：' + case)

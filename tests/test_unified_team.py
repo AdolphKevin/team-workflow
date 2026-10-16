@@ -80,7 +80,7 @@ class UnifiedTeam(unittest.TestCase):
         code, drafted = self.command(*args)
         self.assertEqual(code, 0, drafted)
         report = read(self.root / drafted['artifact']['path'])
-        self.assertNotIn('acceptance', report)
+        self.assertEqual(report.pop('acceptance'), self.name('acceptance'))
         report['knowledge'] = {'files': [], 'reason': '现有规则已覆盖本任务'}
         self.write('final', report)
         code, refused = self.command('verify', '--task', self.name('task'), '--report', self.name('final'), *home)
@@ -164,7 +164,8 @@ class UnifiedTeam(unittest.TestCase):
                 '--brief', self.name('brief'), '--review', self.name('review'), '--request-id', 'template')
         code, first = self.command(*args)
         self.assertEqual(code, 0, first)
-        for extra in (('--acceptance', self.name('acceptance')), ()):
+        self.write('acceptance-copy', read(self.root / self.name('acceptance')))
+        for extra in (('--acceptance', self.name('acceptance-copy')), ()):
             if not extra:
                 self.rule()  # same arguments, different knowledge content
             with self.subTest(extra=extra):

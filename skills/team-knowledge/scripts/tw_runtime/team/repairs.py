@@ -15,9 +15,16 @@ def task_option(args):
     return '--task ' + (shlex.quote(str(identity)) if identity else '<任务文件>')
 
 
+def project_command(root, name, options=''):
+    return 'tw team ' + name + (' ' + options if options else '') + ' --root ' + shlex.quote(str(root.resolve()))
+
+
+def task_command(root, task_id, name, extra=''):
+    return project_command(root, name, '--task ' + shlex.quote(str(task_id)) + (' ' + extra if extra else ''))
+
+
 def command(args, name, extra=''):
-    return ('tw team ' + name + ' ' + task_option(args) + (' ' + extra if extra else '')
-            + ' --root ' + shlex.quote(str(args.root.resolve())))
+    return project_command(args.root, name, task_option(args) + (' ' + extra if extra else ''))
 
 
 def review_submission(args, *, recheck=False):
@@ -49,11 +56,13 @@ def repeat_command(args):
 
 
 CODE_ACTIONS = {
-    Code.SCENARIO_RESULT: lambda args, checks: '修正结果文件中列出的行，再运行 tw team scenarios submit --task <身份> --results <文件>。',
-    Code.SCENARIO_RESULTS_INCOMPLETE: lambda args, checks: '按列出的场景补齐结果后重新提交：tw team scenarios submit --task <身份> --results <文件>。',
-    Code.SCENARIO_FILE: lambda args, checks: '修正场景文件中列出的问题后重跑 tw team scenarios check <文件>。',
-    Code.CASE_LIST: lambda args, checks: '修正用例文件中列出的问题后重跑 tw team scenarios import-cases --task <身份> <文件>。',
-    Code.SCENARIO_COVERAGE: lambda args, checks: '按列出的用例补齐配对或场景后重跑 tw team scenarios coverage --task <身份> --pairs <配对文件>。',
+    Code.SCENARIO_ACCEPTANCE: lambda args, checks: '按清单完成场景验收：' + command(args, 'scenarios pending'),
+    Code.TESTER_CASES: lambda args, checks: '导入测试同事的用例集：' + command(args, 'scenarios import-cases', '<文件>'),
+    Code.SCENARIO_RESULT: lambda args, checks: '修正结果文件中列出的行，再运行 ' + command(args, 'scenarios submit', '--results <文件>'),
+    Code.SCENARIO_RESULTS_INCOMPLETE: lambda args, checks: '按列出的场景补齐结果后重新提交：' + command(args, 'scenarios submit', '--results <文件>'),
+    Code.SCENARIO_FILE: lambda args, checks: '修正场景文件中列出的问题后重跑 ' + project_command(args.root, 'scenarios check', '<文件>'),
+    Code.CASE_LIST: lambda args, checks: '修正用例文件中列出的问题后重跑 ' + command(args, 'scenarios import-cases', '<文件>'),
+    Code.SCENARIO_COVERAGE: lambda args, checks: '按列出的用例补齐配对或场景后重跑 ' + command(args, 'scenarios coverage', '--pairs <配对文件>'),
     Code.ACCEPTANCE_ENTRY: lambda args, checks: '修正 .tw/config.json 的 acceptance_entries 入口声明，再运行原命令。',
     Code.PROJECT_UNINITIALIZED: lambda args, checks: '先预览项目初始化：tw init --root '
         + shlex.quote(str(args.root.resolve())) + '；确认预览后写入：tw init --root '

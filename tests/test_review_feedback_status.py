@@ -106,6 +106,7 @@ class ReviewFeedbackStatus(unittest.TestCase):
 
     def test_failed_execution_can_be_described_and_submitted_but_cannot_be_accepted(self):
         self.start('medium', passed=False)
+        plans.submit_scenarios(self.root, self.task)
         code, ran = self.command('run', '--task', self.task['id'])
         self.assertEqual(code, 1, ran)
         code, draft = self.command('review', '--task', self.task['id'])
@@ -168,7 +169,8 @@ class ReviewFeedbackStatus(unittest.TestCase):
         # 保留原来的三个交付步骤断言；场景展示插入后按步骤身份核对。
         for key in ('acceptance', 'knowledge', 'delivery'):
             self.assertIn('tw team deliver', by_id[key]['next_command'])
-        self.assertIn('tw team scenarios pending', by_id['scenarios']['next_command'])
+        self.assertEqual(by_id['scenarios']['state'], 'done')
+        self.assertNotIn('next_command', by_id['scenarios'])
         code, accepted = self.command('accept', '--task', self.task['id'])
         self.assertEqual(code, 0, accepted)
         code, status = self.command('status', '--task', self.task['id'])
@@ -232,8 +234,9 @@ class ReviewFeedbackStatus(unittest.TestCase):
         by_id = {row['id']: row for row in status['steps']}
         for key in ('run', 'review', 'acceptance', 'knowledge', 'delivery'):
             self.assertEqual(by_id[key]['state'], 'stale', by_id[key])
-        # 场景状态使用自己的产品与内容指纹，本夹具尚有两条待执行场景。
-        self.assertEqual(by_id['scenarios']['summary_counts']['pending'], 2)
+        # 检查策略变化不改变已独立核对的产品与场景内容。
+        self.assertEqual(by_id['scenarios']['summary_counts']['pending'], 0)
+        self.assertEqual(by_id['scenarios']['summary_counts']['passed'], 2)
 
     def test_explicit_new_design_expires_material_dependent_steps(self):
         self.reviewed()

@@ -2,6 +2,8 @@
 
 
 class Code:
+    SCENARIO_ACCEPTANCE = 'scenario-acceptance-incomplete'
+    TESTER_CASES = 'tester-cases-missing'
     SCENARIO_FILE = 'scenario-file-invalid'
     CASE_LIST = 'case-list-invalid'
     SCENARIO_COVERAGE = 'scenario-coverage-incomplete'

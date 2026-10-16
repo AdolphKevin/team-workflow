@@ -100,28 +100,72 @@ def task_entries(root, group, profile):
     else:
         reader = design_files.scenario_reader(root)
     task = read(materials.checked(root, group['task'], 'task', group['task_id']))
+    return design, task, design_entries(design, task, profile, reader)
+
+
+def design_entries(design, task, profile, reader):
     acceptance = {row['id'] for row in task['acceptance']}
     entries = {}
     for section in design['sections']:
         if section['type'] != 'acceptance' or section['id'] not in acceptance:
             continue
         for ref in section['data']['scenarios']:
-            value, _ = reader(ref['path'])
+            value, file_sha256 = reader(ref['path'])
             for node in value['sops']:
                 if node['id'] in ref['nodes']:
                     for row in node['scenarios']:
                         entry = {**row, 'node': node['id'], 'file': ref['path'],
-                                 'fingerprint': scenario_files.fingerprint(row),
+                                 'fingerprint': scenario_files.fingerprint(row), 'file_sha256': file_sha256,
                                  'acceptance_entry': profile.get('acceptance_entries', {}).get(row['verify'])}
                         require(row['id'] not in entries or entries[row['id']] == entry,
                                 '场景编号在本任务中唯一：' + row['id'], error_code=Code.SCENARIO_FILE)
                         entries[row['id']] = entry
-    return design, task, entries
+    return entries
 
 
 def task_scenarios(root, group):
     from common import load_profile
     return set(task_entries(root, group, load_profile(root))[2])
+
+
+def check_coverage(document, cases, identifiers):
+    v, pairs, categories = scenario_files.Validation(document), document.value, {}
+    if not v.shape(pairs, (), {'covered', 'conflict', 'disposed'}, pairs.keys() if isinstance(pairs, dict) else ()):
+        raise scenario_files.FileProblems(v.errors, Code.SCENARIO_COVERAGE)
+    for category in ('covered', 'conflict', 'disposed'):
+        for index, row in enumerate(v.array(pairs.get(category), (category,))):
+            p = (category, index)
+            required = {'case', 'state', 'reason', 'confirmed_by'} if category == 'disposed' else {'case', 'scenarios', 'note'}
+            if not v.shape(row, p, required, row.keys() if isinstance(row, dict) else ()):
+                continue
+            key = row.get('case')
+            if not isinstance(key, str) or key not in cases:
+                v.add(p + ('case',), 'case 引用已导入的用例：' + str(key))
+            else:
+                categories.setdefault(key, []).append(category)
+            if category == 'disposed':
+                if row.get('state') not in ('blocked', 'deferred', 'out-of-scope'):
+                    v.add(p + ('state',), 'state 取 blocked、deferred 或 out-of-scope')
+                for field in ('reason', 'confirmed_by'):
+                    v.text(row.get(field), p + (field,))
+            else:
+                for ordinal, scenario in enumerate(v.array(row.get('scenarios'), p + ('scenarios',))):
+                    if not isinstance(scenario, str) or scenario not in identifiers:
+                        v.add(p + ('scenarios', ordinal), 'scenarios 引用本任务的场景编号：' + str(scenario))
+                if not isinstance(row.get('note'), str):
+                    v.add(p + ('note',), 'note 应为字符串')
+    incomplete = []
+    for key in cases:
+        assigned = categories.get(key, [])
+        if len(assigned) != 1 or assigned[0] == 'conflict':
+            category = 'unclassified' if not assigned else assigned[0] if len(assigned) == 1 else 'duplicate'
+            incomplete.append({'case': key, 'category': category})
+            v.add((), '用例 ' + key + '：' + category)
+    if v.errors:
+        result = scenario_files.FileProblems(v.errors, Code.SCENARIO_COVERAGE).result()
+        result['cases'] = incomplete
+        return result
+    return {'ok': True}
 
 
 def coverage(root, task_id, path):
@@ -134,42 +178,10 @@ def coverage(root, task_id, path):
     with guard(root):
         group = current(root, task_id)
         cases, identifiers = imported_cases(root, group), task_scenarios(root, group)
-        v, pairs, categories = scenario_files.Validation(document), document.value, {}
-        if not v.shape(pairs, (), {'covered', 'conflict', 'disposed'}, pairs.keys() if isinstance(pairs, dict) else ()):
-            raise scenario_files.FileProblems(v.errors, Code.SCENARIO_COVERAGE)
-        for category in ('covered', 'conflict', 'disposed'):
-            for index, row in enumerate(v.array(pairs.get(category), (category,))):
-                p = (category, index)
-                required = {'case', 'state', 'reason', 'confirmed_by'} if category == 'disposed' else {'case', 'scenarios', 'note'}
-                if not v.shape(row, p, required, row.keys() if isinstance(row, dict) else ()):
-                    continue
-                key = row.get('case')
-                if not isinstance(key, str) or key not in cases:
-                    v.add(p + ('case',), 'case 引用已导入的用例：' + str(key))
-                else:
-                    categories.setdefault(key, []).append(category)
-                if category == 'disposed':
-                    if row.get('state') not in ('blocked', 'deferred', 'out-of-scope'):
-                        v.add(p + ('state',), 'state 取 blocked、deferred 或 out-of-scope')
-                    for field in ('reason', 'confirmed_by'):
-                        v.text(row.get(field), p + (field,))
-                else:
-                    for ordinal, scenario in enumerate(v.array(row.get('scenarios'), p + ('scenarios',))):
-                        if not isinstance(scenario, str) or scenario not in identifiers:
-                            v.add(p + ('scenarios', ordinal), 'scenarios 引用本任务的场景编号：' + str(scenario))
-                    if not isinstance(row.get('note'), str):
-                        v.add(p + ('note',), 'note 应为字符串')
-        incomplete = []
-        for key in cases:
-            assigned = categories.get(key, [])
-            if len(assigned) != 1 or assigned[0] == 'conflict':
-                category = 'unclassified' if not assigned else assigned[0] if len(assigned) == 1 else 'duplicate'
-                incomplete.append({'case': key, 'category': category})
-                v.add((), '用例 ' + key + '：' + category)
-        if v.errors:
-            result = scenario_files.FileProblems(v.errors, Code.SCENARIO_COVERAGE).result()
-            result['cases'] = incomplete
+        result = check_coverage(document, cases, identifiers)
+        if not result['ok']:
             return result
+        pairs = document.value
         ref = snapshot(root, group, 'coverage.json', raw)
         group['case_coverage'] = ref
         write(materials.path(root, task_id), group)

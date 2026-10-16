@@ -11,6 +11,7 @@ import test_four_command_delivery as four
 import test_workflow as fixtures
 from common import Invalid, read
 import validation
+import plan_fixtures as plans
 
 
 class RelocationCases(unittest.TestCase):
@@ -115,16 +116,7 @@ class RelocationCases(unittest.TestCase):
 
     def test_completed_delivery_and_preparation_continue_after_copy(self):
         accepted = self.accepted()
-        # 全部步骤完成的夹具也完成新增的场景展示步骤，保留搬迁后的逐项断言。
-        scenarios = read(self.root / 'tests/fixtures/scenarios.json')
-        evidence = Path(accepted['artifact']['path']).relative_to('.tw/local').as_posix()
-        results = self.root / '.tw/local/relocation-scenarios.jsonl'
-        results.write_text(''.join(json.dumps({'scenario': row['id'], 'status': 'pass',
-            'actual': '独立夹具已核对场景结果', 'executor': 'carol',
-            'executed_at': datetime.now(timezone.utc).isoformat(), 'evidence': [evidence]}) + '\n'
-            for node in scenarios['sops'] for row in node['scenarios']))
-        code, submitted = self.command('scenarios', 'submit', '--task', self.task['id'], '--results', str(results))
-        self.assertEqual(code, 0, submitted)
+        # accepted 夹具已逐场景提交结果，再沿用该验收测试搬迁。
         code, delivered = self.command('deliver', '--task', self.task['id'], '--reason', 'No reusable knowledge changed.')
         self.assertEqual(code, 0, delivered)
         before = self.current()
@@ -151,6 +143,8 @@ class RelocationCases(unittest.TestCase):
         for args in commands:
             with self.subTest(command=args[0]):
                 request_id = 'relocatable-' + args[0]
+                if args[0] == 'run':
+                    plans.submit_scenarios(self.root, self.task)
                 if args[0] == 'review':
                     code, result = self.submit(request_id=request_id)
                 else:

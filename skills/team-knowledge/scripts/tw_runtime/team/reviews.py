@@ -15,6 +15,7 @@ from artifacts import directory
 from common import (Invalid, artifact, artifact_valid, create, create_text, digest, inside, now,
                     load_profile, read, sha, write)
 import delivery
+import scenario_acceptance
 import review_history
 import validation
 from error_codes import Code
@@ -263,13 +264,14 @@ def snapshot(args, root, profile, task, draft_id, allow_incomplete=False):
         execution['gap'] = str(exc)
     chosen = {key: artifact(root, inside(root, path)) for key, path in execution['selected_runs'].items()}
     bindings = {key: template[key] for key in ('task_id', 'task_digest', 'source_digest', 'validation_policy', 'sections', 'risks')}
+    bindings.update({key: template[key] for key in ('scenario_rounds', 'scenario_files')})
     bindings.update(format_version=2, draft_id=draft_id,
                     runs=[artifact(root, inside(root, p)) for p in report['runs']], selected_runs=chosen)
     source = review_history.source_record(root, profile, task)
     if source['source_digest'] != bindings['source_digest']:
         raise ReviewError('绑定', 1, '生成评审期间源码已改变，请保持工作区稳定后重试。')
     value = {'data_version': 1, 'kind': 'review-draft-binding', 'bindings': bindings, 'template': template,
-             'automatic': {}, 'manual': {}, 'generated': {}, 'at': now(), 'previous_review': None,
+             'automatic': {}, 'generated': {}, 'at': now(), 'previous_review': None,
              'previous_markdown': None, 'source_snapshot': source, 'acceptance_results': {}, 'rechecks': []}
     value['approval_needed'] = (status.get('review_mode') == 'combined'
                                 and not (status.get('fully_approved') and status.get('combined_complete')))
@@ -279,16 +281,16 @@ def snapshot(args, root, profile, task, draft_id, allow_incomplete=False):
             design, [design_files.read(local(root, path)) for path in args.design_history])
     from contracts import execution_environment
     sections = {row['id']: row for row in design['sections']}
+    _, scenario_state = scenario_acceptance.current(root, profile, task, design, report['runs'])
+    value['scenario_states'] = {row['id']: {'state': row['state'], 'fingerprint': row['fingerprint'],
+        'result': row.get('result')} for row in scenario_state['scenarios']}
     for row in task['acceptance']:
         key = row['id']
         section = sections[key]
-        requirement = section['data']['verification']
+        requirement = section['data'].get('verification', {'cases': []})
         value['acceptance_results'][key] = {'checks': {check: {'run': chosen.get(check),
             **{name: execution['results'].get(check, {}).get(name) for name in ('status', 'cases', 'exit_code')}}
             for check in section['data']['checks']}}
-        if requirement['method'] == 'manual':
-            value['manual'][key] = True
-            continue
         observations, evidence = [], []
         lines = ['- ' + gap for gap in execution_environment(profile, {**task, 'acceptance': [row]}, design)]
         if not requirement['cases']:
@@ -332,6 +334,12 @@ def snapshot(args, root, profile, task, draft_id, allow_incomplete=False):
             observations.append({'kind': 'execution', 'run': ref, 'check': check, 'cases': cases})
             if ref not in evidence:
                 evidence.append(ref)
+        scene_rows = scenario_acceptance.selected(section, scenario_state)
+        lines += scenario_acceptance.result_lines(scene_rows)
+        observations.append({'kind': 'scenarios', 'rounds': template['scenario_rounds']})
+        for ref in template['scenario_rounds'] + [ref for scene in scene_rows for ref in scene.get('result', {}).get('evidence', [])]:
+            if ref not in evidence:
+                evidence.append(ref)
         value['automatic'][key] = {'observations': observations, 'evidence': evidence}
         value['generated']['results-' + key] = '\n'.join(lines)
     return value, design, status, execution
@@ -365,14 +373,8 @@ def render(value):
         if key in value['automatic']:
             lines += [_protected('results-' + key, value['generated']['results-' + key])]
             lines += [filled('验收 ' + key, '用例')]
-        else:
-            lines += ['本项要求人工观察；工具未代填操作或结果。']
         name = '验收 ' + key
         lines += [filled(name, field) for field in ('结论', '理由', '证据文件')] + recheck(name)
-        if key in value['manual']:
-            name = '人工观察 ' + key
-            lines += ['', '### ' + name] + [filled(name, field) for field in
-                      ('观察人', '时间', '操作', '结果', '数据', '证据文件')] + recheck(name)
         lines.append('')
     lines += ['## 问题清单', '状态使用 open、resolved、accepted、deferred；已知问题的身份字段保持原样。', '']
     issues = {'问题 ' + issue['id']: issue for issue in value['template']['findings']}
@@ -423,6 +425,8 @@ def _sections(text, value):
         heading = re.match(r'^(#{2,3}) (.+)$', line)
         if heading:
             section = heading[2].strip()
+            if section.startswith('人工观察 '):
+                raise ReviewError(section, number, '人工执行按场景逐条记录，用 tw team scenarios submit 登记')
             if section in sections:
                 raise ReviewError(section, number, '小节重复。')
             sections[section] = {'line': number, 'fields': {}}
@@ -501,20 +505,6 @@ def compile_review(root, value, sections):
             row.update(copy.deepcopy(value['automatic'][key]))
             row['cases'] = [part.strip().removeprefix('- ').strip() for part in
                             re.split('[、\n]', _value(sections, name, '用例', False)) if part.strip()]
-        else:
-            name = '人工观察 ' + key
-            data = {field: _value(sections, name, field) for field in ('观察人', '时间', '操作', '结果', '数据', '证据文件')}
-            try:
-                at = datetime.fromisoformat(data['时间'])
-                if at.tzinfo is None or at > datetime.now(timezone.utc):
-                    raise ValueError('时间须带时区且不能晚于当前时间')
-            except ValueError as exc:
-                raise ReviewError(name, sections[name]['line'], '观察时间无效：' + str(exc)) from exc
-            refs = _evidence(root, data['证据文件'], name, sections[name]['line'])
-            row['evidence'] = refs
-            row['observations'] = [{'kind': 'manual', 'observer': data['观察人'], 'at': data['时间'],
-                'steps': [line.strip().removeprefix('- ').strip() for line in data['操作'].splitlines() if line.strip()],
-                'result': data['结果'] + '\n数据：' + data['数据'], 'evidence': refs}]
         for ref in row['evidence']:
             if ref not in defaults:
                 defaults.append(ref)
@@ -571,8 +561,6 @@ def progress(text, value):
     fields = [('评审信息', '评审人'), ('评审信息', '知识冲突已处理')]
     for name in ['规范 standards', '需求 spec'] + ['验收 ' + row['id'] for row in value['template']['acceptance']]:
         fields += [(name, '结论'), (name, '理由')]
-    for key in value['manual']:
-        fields += [('人工观察 ' + key, field) for field in ('观察人', '时间', '操作', '结果', '数据', '证据文件')]
     completed = sum(bool(sections.get(name, {}).get('fields', {}).get(field, {}).get('value', '').strip()) for name, field in fields)
     pending = pending_rechecks(value, sections)
     return {'completed': completed, 'total': len(fields), 'pending_rechecks': pending}
@@ -775,7 +763,7 @@ def submit(args, root, profile, task, request):
         delivery.check_review_format(root, profile, task, review, fresh['bindings']['sections'], design)
     except (Invalid, ValueError, TypeError, KeyError) as exc:
         message = str(exc)
-        section = getattr(exc, 'section', None) or next(('人工观察 ' + key for key in value['manual']), '验收 ' + task['acceptance'][0]['id'])
+        section = getattr(exc, 'section', None) or '验收 ' + task['acceptance'][0]['id']
         raise ReviewError(section, sections.get(section, {'line': 1})['line'], '评审核查未通过：' + message) from exc
     approved, refs = None, []
     from contracts import identity
@@ -869,11 +857,17 @@ def from_run(args, root, profile, task, result, request):
     if result['artifact'] not in refs:
         refs.append(result['artifact'])
     child_args.run = [Path(ref['path']) for ref in refs]
+    from scenario_rounds import pending_action
+    _, scenario_state = scenario_acceptance.current(root, profile, task, design_files.read(Path(root) / args.design),
+                                                   [ref['path'] for ref in refs])
     try:
         validation.verify_runs(root, profile, task, [ref['path'] for ref in refs], live=False)
     except Invalid as exc:
         result['review_gap'] = str(exc)
-        result['next_action'] = '补齐必需检查后提交评审：tw team run --task ' + shlex.quote(task['id'])
+        result['next_action'] = pending_action(root, task['id'])
+        return result
+    if scenario_state['summary_counts']['pending'] or scenario_state['summary_counts']['failed']:
+        result['next_action'] = pending_action(root, task['id'])
         return result
     inputs = {'command': 'review', 'task': digest(task), 'profile': digest(profile),
               'source': validation.source_digest(root, profile), 'runs': refs,
