@@ -64,6 +64,30 @@ def source_stale(root, value, source_digest, profile=None):
     return value.get('source_digest') not in (None, source_digest)
 
 
+def record_evidence(key, response):
+    return (response.get('context' if key == 'prepare' else 'artifact') or response.get('artifact') or {}).get('path')
+
+
+def recorded_steps(root, rows):
+    """只按每一步最后一次请求的结果生成步骤记录。"""
+    result = []
+    for key, label, match in STEPS:
+        last = next((row for row in reversed(rows) if match(row[0])), None)
+        state, evidence = 'pending', None
+        if last:
+            claim, response = last
+            if response and response.get('ok'):
+                state, evidence = 'done', record_evidence(key, response)
+            else:
+                state = 'failed' if response else 'running-or-interrupted'
+                evidence = (response or {}).get('request_directory') or claim.get('started_at')
+        row = {'id': key, 'label': label, 'state': state, 'evidence': evidence}
+        if state == 'done' and (_artifact_value(root, last[1]) or {}).get('tool', {}).get('override'):
+            row['note'] = '使用了 --allow-modified-tool'
+        result.append(row)
+    return result
+
+
 def steps(root, task, source_digest, context=None, task_arg=None, profile=None, current=None,
           task_identity=None, material_group=None, review_inputs=None):
     rows = records(root, task['id'])
@@ -73,43 +97,33 @@ def steps(root, task, source_digest, context=None, task_arg=None, profile=None, 
                 if c.get('command') in ('start', 'prepare') and r and not r.get('continued')
                 and (_artifact_value(root, r) or {}).get('kind') == 'prepared-context']
     beginning = max(prepared, default='')
-    result, previous_done = [], True
-    paths = {}
-    latest_done = {}
+    active = [(c, r) for c, r in rows if STEPS[0][2](c) or c.get('started_at', '') >= beginning]
+    selected, latest_done, paths = {}, {}, {}
     for key, label, match in STEPS:
-        mine = [(c, r) for c, r in rows if match(c)]
-        if key != 'prepare':
-            mine = [(c, r) for c, r in mine if c.get('started_at', '') >= beginning]
+        mine = [(c, r) for c, r in active if match(c)]
         done = [(c, r) for c, r in mine if r and r.get('ok')]
-        # Prefer results produced by an unmodified tool installation.
         trusted = [(c, r) for c, r in done if not (_artifact_value(root, r) or {}).get('tool', {}).get('override')]
-        state, evidence = 'pending', None
-        if done:
-            claim, response = (trusted or done)[-1]
-            latest_done[key] = claim.get('started_at', '')
-            evidence = (response.get('context' if key == 'prepare' else 'artifact') or response.get('artifact') or {}).get('path')
-            paths[key] = evidence
-            value = _artifact_value(root, response)
-            stale = source_stale(root, value, source_digest, profile)
-            state = 'stale' if stale else 'done-with-override' if not trusted else 'done'
+        chosen = (trusted or done)[-1] if done else None
+        if chosen:
+            latest_done[key] = chosen[0].get('started_at', '')
+            paths[key] = record_evidence(key, chosen[1])
         last = mine[-1] if mine else None
         if last and not (last[1] and last[1].get('ok')) and last[0].get('started_at', '') > latest_done.get(key, ''):
-            # The newest attempt did not finish well; earlier success no longer describes the current state.
-            state = 'running-or-interrupted' if not last[1] else 'failed'
-            evidence = (last[1] or {}).get('request_directory') or last[0].get('started_at')
-        row = {'id': key, 'label': label, 'state': state, 'evidence': evidence}
-        if state == 'failed' and last[1].get('next_action'):
-            row['repair'] = last[1]['next_action']  # Rerunning the step that just failed would only fail again.
-        result.append(row)
-    # A later step that succeeded after an earlier failure shows that failure was superseded.
+            chosen = last
+        if chosen:
+            selected[key] = chosen
+    result = recorded_steps(root, list(selected.values()))
+    for row in result:
+        if row['id'] in selected:
+            response = selected[row['id']][1]
+            if row['state'] == 'done' and source_stale(root, _artifact_value(root, response), source_digest, profile):
+                row['state'] = 'stale'
+            if row['state'] == 'failed' and response.get('next_action'):
+                row['repair'] = response['next_action']
     for i, row in enumerate(result):
         later = [latest_done.get(other['id'], '') for other in result[i + 1:]]
         if row['state'] == 'failed' and later and max(later) > (rows_started(rows, STEPS[i][2]) or ''):
             row['state'] = 'superseded'
-    for row in result:
-        if row['state'] == 'done-with-override':
-            row['state'] = 'done'
-            row['note'] = 'produced with --allow-modified-tool'
     import reviews
     import review_history
     review_state = None
@@ -172,5 +186,5 @@ def render(value):
     if value['next_step']:
         lines += ['', '下一步：' + value['next_step']['label'], value['next_step']['next_command']]
     else:
-        lines += ['', '已交付；关闭需要授权，工具不执行关闭']
+        lines += ['', value.get('completion_summary', '已交付；关闭需要授权，工具不执行关闭')]
     return lines

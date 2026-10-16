@@ -36,7 +36,7 @@
 
 ## 配置 `.tw/config.json`
 
-`tw init` 生成 `format`、`data_version`、`project`。其余可选字段：
+`tw init [--source <来源>]` 预览，`--source` 可重复；概览优先采用指定来源，其次取 `README.md`。预览列出所需的 `--source`，补齐后用 `--apply` 写入。命令生成 `format`、`data_version`、`project`。其余可选字段：
 
 ```json
 {

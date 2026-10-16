@@ -180,7 +180,7 @@ tw team review --root "$PROJECT" --task "$TASK_ID" --submit --file <评审.md>
 tw team review --root "$PROJECT" --task "$TASK_ID" --from-platform
 ```
 
-`--from-platform` 经项目平台脚本的 `task` 操作，选出含绑定区的最新 `kind: review` 条目，
+`--from-platform` 经项目平台脚本的 `task` 操作，按 `updated_at` 选出含绑定区的最新 `kind: review` 条目，
 将其原文走与 `--submit` 相同的绑定比对、逐项复核、问题历史和转换流程。与 `--file`、
 `--submit` 二选一，不能混用来源。绑定或来源已变时拒绝，需重新生成复核稿。
 评审 JSON 增加 `platform_author`、`platform_url`，只作记录与后续原文核对，不限制平台账号；验收仍核对
@@ -189,7 +189,7 @@ Markdown 姓名不能是实施负责人；以后复用也核对平台作者和�
 
 `review.md` 是可编辑表；绑定未变的工作稿保留并报告填写进度。评审人核对代码、需求和原始结果，填写姓名、知识冲突处置（是/否）、各轴及验收的结论（通过/不通过）和理由。可补证据，每行一个仓内路径，工具计算指纹及运行引用。自动验收的“用例”可选，每行一个或用 `、` 分隔；方案与评审均未写时，评审稿及收尾注明“未指明用例，证据为整项检查通过”。人工观察各字段由人填写，源码引用不能证明执行。
 
-绑定区使用隐藏的 `tw-record` HTML 注释，包含任务、任务与源码指纹、校验策略、章节和运行；它与工具填写的结果、风险列表及变化说明均不可改动。提交只检查格式完整和绑定有效，拒绝时指出行号或小节；“不通过”、知识冲突未处理或含 open 阻塞问题的完整评审仍保存。独立性、实际检查与通过条件由 accept/deliver 核查，不因此放宽。成功后原文 `review.md`、现有格式的 `review.json` 与 `review-source.json` 保存到本次请求目录，登记为当前评审。下一条命令为 `deliver --task <身份> --reason <理由>`；需要更新知识则先 `accept --task <身份>`，写知识后再交付。清理保留引用的原文、JSON、源码指纹、运行和任务目录的未提交表。
+绑定区使用隐藏的 `tw-record` HTML 注释，包含任务、任务与源码指纹、校验策略、章节和运行；它与工具填写的结果、风险列表及变化说明均不可改动。提交只检查格式完整和绑定有效，拒绝时指出行号或小节；“不通过”、知识冲突未处理或含 open 阻塞问题的完整评审仍保存。独立性、实际检查与通过条件由 accept/deliver 核查，不因此放宽。成功后原文 `review.md`、现有格式的 `review.json` 与 `review-source.json` 保存到本次请求目录，登记为当前评审。下一条命令为 `deliver --task <身份> --reason <理由>`。清理保留引用的原文、JSON、源码指纹、运行和任务目录的未提交表。
 
 问题按 `### 问题 Q1` 分节，以 `- 字段：值` 填写编号、负责人、影响范围、阻塞阶段、状态及摘要。已知问题身份不得改动或删除；新问题可新增同格式小节。状态为 open、resolved、accepted、deferred；非 open 要填写处置理由与处置证据，接受或延期还需确认人，延期须含跟进任务与范围调整，可附确认依据。完整字段由已知问题自动展开；没有已知问题时可按下表添加。
 
@@ -235,9 +235,9 @@ tw team deliver --root "$PROJECT" --task "$TASK_ID" --reason <不需要更新知
 
 `approval-draft` 的姓名、说明、模式和提交号参数替代 `--record`，两种输入二选一；`--sections` 可覆盖记录的 `section_ids`。CLI 的 plan 对应记录的 design 模式。批准输入仍为 JSON；方案只读 Markdown。
 
-`deliver` 顺序调用原来的 `accept`、`delivery-template`、`verify`，各步保留请求和材料并更新 `current.json`。先核对已有验收是否仍绑定当前任务、章节、源码和材料；可用则复用，否则实际重新验收。报告列出相对任务 base 的全部知识变化；没有变化必须提供 `--reason`。要改知识时仍先独立 `accept`，写完知识后 `deliver` 复用该验收。绑定和知识处置均有效的报告也可复用；已有理由不必再输入。
+`deliver` 依次调用 `accept`、`delivery-template`、`verify`，保留各步请求、材料并更新 `current.json`。已有验收仍绑定当前任务、章节、源码和材料时复用，其余重新验收。报告列全相对任务 base 的知识变化；无变化时需 `--reason`。更新知识先单独 `accept`，写完后交付复用验收。绑定和知识处置有效的报告直接复用已有理由。
 
-没有已提交评审且项目配置了平台时，`deliver` 先执行 `review --from-platform`；导入失败停在 `review` 步骤，已有提交不自动替换。本地项目仍给出 review.md 路径和提交命令。评审不通过时，accept/deliver 汇总规范、需求、验收项及相关阻塞问题和理由，并给出修复后重跑、复核命令。任何一步失败即停止，结果的 `steps`、`stopped_at` 和 `next_action` 给出已完成步骤、原因及下一条命令；最终输出保留 `delivery_complete`、`closable`、`summary_markdown` 及平台任务的 `close_note`。中断后用默认新请求编号或显式新编号继续，已登记且仍有效的验收和报告不重复生成；同一成功请求的同组重试仍幂等。平台核查、独立性、知识完整性及关闭授权不变，不执行发布或关闭。
+平台任务每次 `deliver` 比较含绑定区的最新评审 `updated_at` 与本地登记时间，采用较新者；平台较新时按 `review --from-platform` 登记后继续，失败停在 `review` 并给出原因与下一步，本地较新或同一份则沿用。本地文件记登记时间，平台导入记地址和 `updated_at`。本地任务采用最后提交，待提交时给出 review.md 路径与命令。评审未通过时汇总各结论、阻塞问题与理由，给出重跑和复核命令。失败即停止，`steps`、`stopped_at`、`next_action` 给出步骤、原因和下一步；结果含 `delivery_complete`、`closable`、`summary_markdown` 及平台 `close_note`。中断后用新请求编号继续，同组成功请求重试保持幂等。成员按授权发布、关闭。
 
 ```bash
 tw team accept --root "$PROJECT" --task "$TASK_ID" \
@@ -360,11 +360,11 @@ tw team status --root "$PROJECT" --task "$TASK_ID" --format text
 tw team metrics --root "$PROJECT" [--task "$TASK"] [--since 2026-10-01] [--format text]
 ```
 
-`status` 读取当前组和请求记录，列出六步状态及 `next_step`。只把核实有效的验收、交付记录放入 `verified_records`（键为 `acceptance`、`delivery`，值含 path/sha256），不返回恒为 false 的 business_accepted、delivery_complete、closable 等判断。它不执行检查或环境命令，不能代替新的业务验收。
+`status` 先确定阶段，`task_phase` 为 `closed`（已关闭）或 `in-progress`（进行中）。平台 `task.state` 为 `closed` 时报告六步的最后记录，结果取自记录本身；概要和 `next_action` 为“任务已关闭”，`next_step` 为 null。其余任务按当前材料核对，返回步骤及 `next_step`，有效验收、交付记录列入 `verified_records`（键为 `acceptance`、`delivery`，值含 path/sha256）。`status` 只读取记录，业务结论以新的 accept 为准。
 
-步骤为 `done`、`pending`、`stale`、`failed`、`running-or-interrupted` 或 `not-recorded`；只有成功提交的评审算完成。已提交且绑定有效的评审后，验收、报告、最终核查均指向 `deliver`。平台方案/批准更新、显式传入不同内容的方案、源码或配置绑定变化时，受影响步骤过期；过期记录不列为有效。不同内容的显式方案不会被 status 悄然登记，须重新 start。相同内容换路径仍可经核对登记。
+评审在成功提交后计为完成。步骤为 `done`、`pending`、`stale`、`failed`、`running-or-interrupted` 或 `not-recorded`。进行中任务采用有效评审时，后续指向 `deliver`。方案、批准、源码或配置绑定变化时，受影响步骤过期。不同内容的显式方案须重新 start，相同内容换路径仍可经核对登记。
 
-全部完成显示“已交付；关闭需要授权，工具不执行关闭”。`publication` 列出平台收尾或交接的发布状态、类型及评论地址，本地草稿不能证明发布。关闭条件及报告中的 `close_authorization: {confirmed_by, reference}` 见[关闭步骤](team-delivery.md#状态与关闭-issue)，工具只报告 closable。
+进行中任务的步骤全部完成时显示“已交付；关闭需要授权，工具不执行关闭”。各阶段的 `publication` 均按平台记录列出收尾或交接的发布状态、类型及评论地址。关闭条件及报告中的 `close_authorization: {confirmed_by, reference}` 见[关闭步骤](team-delivery.md#状态与关闭-issue)，工具只报告 closable。
 
 会话中断后先查看 status；`rules_changed` 表示开工后团队规则文本有变化。运行记录仍按内容、配置及声明的提交敏感性核对；使用修改版工具的证据有明确标记。
 

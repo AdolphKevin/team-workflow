@@ -57,6 +57,22 @@ class Validation(unittest.TestCase):
         for expected in ('不使用字段：future_use', '缺少必填字段：source', '缺少必填字段：verified', 'scope 必须是非空字符串数组'):
             self.assertIn(expected, joined)
 
+    def test_each_empty_or_mistyped_field_has_one_problem(self):
+        from tw_fixtures import entry
+        fields = {'scope': ['self:a'], 'source': ['s'], 'verified': {'self': {'commit': None, 'date': '2026-10-16'}}}
+        for key in ('scope', 'source', 'verified', 'title'):
+            for value in (None, '', [], {}):
+                with self.subTest(key=key, value=value):
+                    values = {'title': '规则', **fields, key: value}
+                    errors, _ = self.validate('rule', 'rules/a.md', entry(values.pop('title'), '完整正文。', **values))
+                    matching = [message for message in errors if key in message]
+                    self.assertEqual(matching, ['缺少必填字段：' + key])
+        for key in ('scope', 'source'):
+            for value in ('s', 3, [''], [3]):
+                with self.subTest(key=key, value=value):
+                    errors, _ = self.validate('rule', 'rules/a.md', entry('规则', '完整正文。', **{**fields, key: value}))
+                    self.assertEqual([e for e in errors if key in e], [key + ' 必须是非空字符串数组'])
+
     def test_title_heading_file_name_and_status(self):
         errors, _ = self.validate('decision', 'decisions/bad_name.md',
                                   '---\ntitle: "决策"\nscope: ["self:a"]\nsource: ["s"]\nstatus: "superseded"\n---\n# 另一个标题\n')

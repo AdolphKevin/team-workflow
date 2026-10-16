@@ -53,15 +53,52 @@ def source_path(args, root, task_id):
     return (root / path).resolve() if not path.is_absolute() else path.resolve()
 
 
-def platform_source(root, task_id):
+def latest_platform_source(root, task_id):
     from tw_runtime.team import platform_script
     value = platform_script.task(root, task_id)
     rows = [row for row in value['items'] if row['kind'] == 'review' and BIND_START in row['body']]
-    if not rows:
+    return max(rows, key=lambda row: platform_script.timestamp(row['updated_at']), default=None)
+
+
+def platform_source(root, task_id):
+    item = latest_platform_source(root, task_id)
+    if item is None:
         raise ReviewError('平台评审', 1, '没有含评审绑定区的 review 条目；请将填好的完整 Markdown 作为变更请求评审提交。')
-    item = rows[-1]
     _binding(root, task_id, item['body'], current_only=True)
     return item
+
+
+def platform_is_newer(root, task_id, review_ref):
+    """按提交时间选择评审；绑定核对由登记入口完成。"""
+    from tw_runtime.team import platform_script
+    item = latest_platform_source(root, task_id)
+    if not review_ref:
+        return True  # 登记入口会给出缺少平台评审的具体原因。
+    if item is None:
+        return False
+    state = _state(root, task_id)
+    entry = next((row for row in state['submitted'].values()
+                  if row['review'] == review_ref), {})
+    submitted_at = entry.get('submitted_at')
+    if not submitted_at:
+        # 旧登记沿用原始提交响应的完成时间；原评审与平台条目相同时可还原平台时间。
+        review = read(artifact_valid(root, review_ref))
+        markdown = entry.get('markdown')
+        if (review.get('platform_url') == item['url'] and markdown
+                and markdown['sha256'] == hashlib.sha256(item['body'].encode('utf-8')).hexdigest()):
+            submitted_at = item['updated_at']
+        else:
+            from checklist import records
+            submitted_at = next((response.get('finished_at') or claim.get('started_at')
+                                 for claim, response in reversed(records(root, task_id))
+                                 if response and response.get('artifact') == review_ref
+                                 and (response.get('finished_at') or claim.get('started_at'))), None)
+        if not submitted_at:
+            error = Invalid('评审登记记录缺少提交时间：' + review_ref['path'] + '；请重新登记该评审。')
+            option = '--from-platform' if review.get('platform_url') else '--submit'
+            error.next_action = 'tw team review --task ' + shlex.quote(task_id) + ' ' + option
+            raise error
+    return platform_script.timestamp(item['updated_at']) > platform_script.timestamp(submitted_at)
 
 
 def source_text(args, root, task_id):
@@ -744,6 +781,9 @@ def submit(args, root, profile, task, request):
               'review_file': str(source), 'summary': '评审已提交；业务验收仍由 accept 核查。',
               'next_action': 'tw team deliver --task ' + shlex.quote(task['id']) + ' --reason <不需要更新知识的理由>',
               'knowledge_next_action': '要更新知识时先验收：tw team accept --task ' + shlex.quote(task['id'])}
+    result['submitted_at'] = item['updated_at'] if item else now()
+    if item:
+        result['platform_review'] = {key: item[key] for key in ('url', 'updated_at')}
     if approved is not None:
         result.update(approval=request.publish('approval.json', approved), approval_runs=refs)
     elif approval_choice == '是' and self_review:
@@ -762,7 +802,10 @@ def mark_submitted(root, task_id, result):
     original = (original_path.relative_to(root).as_posix() if original_path.is_relative_to(root) else str(original_path))
     entry = {'review': result['artifact'], 'markdown': result['review_markdown'], 'source': result['review_source'],
              'input_markdown': original if not result['review_file'].startswith(('http://', 'https://')) else None,
-             'binding': state['generations'][result['draft_id']], 'default_sha': marker}
+             'binding': state['generations'][result['draft_id']], 'default_sha': marker,
+             'submitted_at': result['submitted_at']}
+    if result.get('platform_review'):
+        entry['platform_review'] = result['platform_review']
     if result.get('approval'):
         entry['approval'] = result['approval']
     state['submitted'][result['draft_id']] = entry

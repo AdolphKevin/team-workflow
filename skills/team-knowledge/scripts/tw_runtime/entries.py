@@ -178,9 +178,9 @@ def validate(entry):
     for key in values:
         if key not in ALLOWED[entry.kind]:
             errors.append(f'{entry.kind} 不使用字段：{key}')
-    for key in sorted(REQUIRED[entry.kind]):
-        if values.get(key) in (None, '', [], {}):
-            errors.append(f'缺少必填字段：{key}')
+    missing = {key for key in REQUIRED[entry.kind] if values.get(key) in (None, '', [], {})}
+    errors.extend(f'缺少必填字段：{key}' for key in sorted(missing))
+    values = {key: value for key, value in values.items() if key not in missing}
     if 'title' in values and not entry.title:
         errors.append('title 必须是非空字符串')
     for key in LIST_FIELDS:
@@ -189,7 +189,7 @@ def validate(entry):
             errors.append(f'{key} 必须是非空字符串数组')
     if 'owner' in values and not (isinstance(values['owner'], str) and values['owner'].strip()):
         errors.append('owner 必须是非空字符串')
-    if entry.kind == 'decision' and values.get('status') not in ('accepted', 'rejected'):
+    if entry.kind == 'decision' and 'status' in values and values['status'] not in ('accepted', 'rejected'):
         errors.append('decision 的 status 只能是 accepted 或 rejected')
     if 'verified' in values:
         errors.extend(verified_problems(values['verified']))

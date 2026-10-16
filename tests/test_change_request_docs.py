@@ -7,6 +7,13 @@ SKILL = ROOT / 'skills/team-workflow'
 
 
 class ChangeRequestDocs(unittest.TestCase):
+    def test_status_records_and_successfully_submitted_reviews_are_documented(self):
+        for name in ('references/contracts.md', 'references/team-delivery.md'):
+            text = (SKILL / name).read_text()
+            for rule in ('业务结论以新的 accept 为准', '评审在成功提交后计为完成'):
+                with self.subTest(name=name, rule=rule):
+                    self.assertTrue(rule in text, f'{name}：缺少约定“{rule}”')
+
     def test_close_note_guidance_covers_one_platform_owner_and_a_directed_agent_within_existing_length(self):
         lengths = []
         for name in ('SKILL.md', 'references/team-delivery.md', 'references/contracts.md', 'references/coordination.md'):

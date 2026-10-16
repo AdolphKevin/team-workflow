@@ -288,7 +288,8 @@ def dispatch(args, root):
             selected_design = design_files.read(local(root, report['design']))
     if selected_design is not None:
         task = task_inputs.expand(task, selected_design)
-    task_valid(task, profile, root, written=selected_design is None and 'expectation' not in task['acceptance'][0])
+    if args.command != 'status' or task_phase(platform) != 'closed':
+        task_valid(task, profile, root, written=selected_design is None and 'expectation' not in task['acceptance'][0])
     if platform:
         if args.command == 'status' and task_inputs.written(platform['task']) != task_inputs.written(task):
             args.material_selection.setdefault('stale_roles', []).append('task')
@@ -299,7 +300,7 @@ def dispatch(args, root):
         from validation_session import active
         running = active(root)
         value['validation_active'] = running
-        if running:
+        if running and value['task_phase'] != 'closed':
             value.update(implementation_ready=False,
                          summary='共享目录正在执行验收检查；源码和生成输入须保持不变。',
                          next_action='Wait for the active validation to finish before editing or changing checkouts.')
@@ -757,6 +758,10 @@ def continuation_status_inputs(args, root, task):
     return current
 
 
+def task_phase(platform):
+    return 'closed' if platform and platform['task_state'] == 'closed' else 'in-progress'
+
+
 def task_steps(args, root, profile, task):
     import checklist
     from common import rules_digest
@@ -770,10 +775,18 @@ def task_steps(args, root, profile, task):
 
 
 def status(args, root, profile, task, platform=None):
-    progress = task_steps(args, root, profile, task)
-    value = _status(args, root, profile, task, platform)
     import checklist
     import status_records
+    phase = task_phase(platform)
+    if phase == 'closed':
+        progress = {'steps': checklist.recorded_steps(root, checklist.records(root, task['id'])),
+                    'next_step': None, 'finished': True, 'completion_summary': '任务已关闭'}
+        return {'ok': True, 'task_phase': phase, 'summary': '任务已关闭', 'next_action': '任务已关闭',
+                'steps': progress['steps'], 'next_step': None, 'step_lines': checklist.render(progress),
+                'publication': status_records.publication(platform), 'warnings': platform.get('warnings', [])}
+    progress = task_steps(args, root, profile, task)
+    value = _status(args, root, profile, task, platform)
+    value['task_phase'] = phase
     facts = status_records.inspect(args, root, profile, task, progress, value)
     for row in progress['steps']:
         reason = facts['stale_steps'].get(row['id'])

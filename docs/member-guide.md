@@ -19,6 +19,8 @@
 
 `.tw/local/` 按检出目录隔离，被 Git 忽略。各处用途如下：
 
+工作区文件清单包含已跟踪文件及仓库规则以外的未跟踪文件，仓库规则来自各目录的 `.gitignore` 和本检出目录的 `.git/info/exclude`。本机文件（如 `.claude/settings.local.json`）加入项目 `.gitignore`；改动范围列出的项目文件纳入任务范围。此前只靠全局规则忽略本机文件的进行中任务，按新清单重跑一次检查。
+
 | 位置（位于 `.tw/local/` 下） | 用途 |
 | --- | --- |
 | `tasks/` | 每项任务的上下文、方案与批准副本、检查输出、评审及交付材料 |
@@ -67,7 +69,7 @@
 
 要改知识时，提交后先 `accept --task <身份>`；通过后更新知识并运行 `tw check`，再 `deliver --task <身份>`。无知识改动时给 --reason 即可。显式 `--context`、`--run`、`--review`、`--report` 等路径保留，也可用 `review --submit --file <路径>` 提交别处的 Markdown。
 
-`status --task <身份>` 列出当前有效的验收和交付记录、过期步骤与下一条命令。最终交付完成后，关闭 Issue 还需收尾说明或交接已发布，以及报告中的具名关闭授权；工具不执行关闭。详见[交付与关闭](../skills/team-workflow/references/team-delivery.md)。
+`status --task <身份>` 先确定任务阶段：已关闭的平台任务显示各步骤最后记录，概要为“任务已关闭”，下一步为空；进行中任务列出当前有效的验收和交付记录、过期步骤与下一条命令。最终交付完成后，关闭 Issue 还需收尾说明或交接已发布，以及报告中的具名关闭授权；工具不执行关闭。详见[交付与关闭](../skills/team-workflow/references/team-delivery.md)。
 
 除了照常看代码，再检查以下几点：
 

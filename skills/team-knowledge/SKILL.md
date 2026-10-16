@@ -27,7 +27,7 @@ description: 项目知识入口。开始需求、修复、重构或评审前，�
 
 ## 其他场景
 
-- 首次使用：`tw init` 预览，`tw init --apply --guidance` 写入，再填写 `overview.md`。
+- 首次使用：`tw init` 预览，`tw init --apply --guidance` 写入，再填写 `overview.md`。概览来源优先取可重复的 `--source`，其次取 `README.md`；预览列出所需来源，补齐后写入。
 - 项目里还有 `.codestable/` 或 `.team-workflow*`：按[迁移指南](references/migration.md)由你整理，不使用脚本。
 - 用户要求找回历史教训：按[找回历史教训](references/lessons-from-history.md)。
 - 健康报告：`tw audit`。brief、read、check、audit 都不写文件。

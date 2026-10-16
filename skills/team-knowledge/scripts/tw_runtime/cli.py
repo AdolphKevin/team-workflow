@@ -21,6 +21,7 @@ def parser():
     p = sub.add_parser('init', help='预览或建立最小的 .tw/ 布局')
     p.add_argument('--apply', action='store_true', help='实际写入；不加时只预览')
     p.add_argument('--guidance', action='store_true', help='同时维护 AGENTS.md 的知识指引块和 CLAUDE.md 的引用')
+    p.add_argument('--source', action='append', default=[], help='概览来源，可重复；默认取 README.md')
     p.add_argument('--format', choices=('text', 'json'), default='text')
 
     p = sub.add_parser('brief', parents=[shared], help='读取与任务相关的知识（只读）')
@@ -101,7 +102,7 @@ def main(argv=None):
             return workflow.main(argv)
         if args.command == 'init':
             project = Project(root, require_config=False)
-            result = init.run(project.root, apply=args.apply, guidance=args.guidance)
+            result = init.run(project.root, apply=args.apply, guidance=args.guidance, sources=args.source)
             emit(result, init.render(result), args.format)
             return 0
         if args.command == 'version':

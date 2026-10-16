@@ -356,6 +356,7 @@ def load(url, issue=None, root=None):
                 != design_files.display(latest['markdown'], latest['record']['design'], latest['source'],
                                         root=platform_read.project_root(root)) else [])
     return {'data_version': 1, 'kind': 'platform-task', 'ok': not gaps, 'issue': url,
+            'task_state': issue.get('state', 'open'),
             'assurance': 'continuation-only', 'delivery': 'not-evaluated',
             'known_issues': list(known.values()), 'warnings': warnings,
             'task': task, 'source': state['source'], 'parent': parent,

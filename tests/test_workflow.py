@@ -64,7 +64,7 @@ class WorkflowCases(unittest.TestCase):
 
         from tw_runtime import init
         from tw_fixtures import entry
-        init.run(self.root, apply=True)
+        init.run(self.root, apply=True, sources=['self:AGENTS.md'])
         (self.root / '.tw/overview.md').write_text(entry('算术服务', '通过 app.add 计算加法。', source=['self:AGENTS.md']))
         write_config(self.root, self.profile)
         self.git('add', '.tw')

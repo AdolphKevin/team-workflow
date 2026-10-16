@@ -5,6 +5,7 @@ import re
 from . import KB, Invalid, entries, frontmatter, gitutil, globs, require
 
 DIRS = {'rule': 'rules', 'decision': 'decisions', 'lesson': 'lessons'}
+SOURCE_REQUIRED = '至少需要一个 --source（Issue、PR、提交链接或 仓库:原文路径）'
 BODIES = {
     'rule': '（待填写：必须保持的行为，条件与例外写在一起）\n\n## 依据\n（待填写：业务来源）\n',
     'decision': '（待填写：背景与决定）\n\n## 备选\n- （待填写：真实备选及不采用的理由）\n\n## 后果\n（待填写）\n',
@@ -18,7 +19,7 @@ def run(root, kind, slug, title, scopes, sources, tags=(), status='accepted', ve
     require(re.fullmatch(entries.SLUG, slug or ''), 'slug 只能用小写字母、数字和连字符')
     require(title and title.strip(), '需要 --title')
     require(scopes, '至少需要一个 --scope（如 self:internal/biz/**）')
-    require(sources, '至少需要一个 --source（Issue、PR、提交链接或 仓库:原文路径）')
+    require(sources, SOURCE_REQUIRED)
     for value in scopes:
         issue = globs.split(value)[2]
         require(not issue, f'--scope {value}：{issue}')

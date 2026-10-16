@@ -159,7 +159,9 @@ def deliver(args, root, profile, task, request):
         args.reason = read(pending).get('reason')
     elif args.reason is not None:
         write(pending, {'data_version': 1, 'kind': 'pending-delivery-reason', 'task_id': task['id'], 'reason': args.reason})
-    if not group.get('review') and profile.get('platform') and platform_task(root, task['id']):
+    import reviews
+    if (profile.get('platform') and platform_task(root, task['id'])
+            and reviews.platform_is_newer(root, task['id'], group.get('review'))):
         reviewed = execute('review', 'review')
         append('review', reviewed)
         if not reviewed.get('ok'):

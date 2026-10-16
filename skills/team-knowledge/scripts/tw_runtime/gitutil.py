@@ -8,8 +8,13 @@ from urllib.parse import urlsplit
 from . import Invalid
 
 
+def command(root, *args):
+    """工作区的忽略规则取自本检出目录。"""
+    return ['git', '-C', str(root), '-c', 'core.excludesFile=', *args]
+
+
 def run(root, *args, check=True, stdin=None):
-    result = subprocess.run(['git', '-C', str(root), '-c', 'core.quotepath=off', *args], input=stdin,
+    result = subprocess.run(command(root, '-c', 'core.quotepath=off', *args), input=stdin,
                             capture_output=True, text=True, encoding='utf-8', errors='replace')
     if check and result.returncode != 0:
         raise Invalid(f"git {args[0]} 失败：{result.stderr.strip() or result.returncode}")

@@ -113,6 +113,34 @@ class TaskProgress(unittest.TestCase):
         code, stale = self.cli('status', '--context', context)
         self.assertEqual({row['id']: row['state'] for row in stale['steps']}['acceptance'], 'stale')
 
+    def test_scope_problem_names_globally_ignored_file_and_both_resolutions(self):
+        import os
+        config = self.root / '.tw/local/xdg'
+        (config / 'git').mkdir(parents=True)
+        (config / 'git/ignore').write_text('global.local\n')
+        (self.root / 'global.local').write_text('本机设置\n')
+        with patch.dict(os.environ, XDG_CONFIG_HOME=str(config), GIT_CONFIG_GLOBAL='/dev/null'):
+            self.setup_task()
+            code, result = self.cli('accept', '--task', self.name('task'), '--report', self.name('report'))
+        self.assertEqual(code, 1, result)
+        self.assertIn('global.local', result['problem'])
+        self.assertIn('本机文件加入项目 .gitignore', result['problem'])
+        self.assertIn('项目文件纳入任务范围', result['problem'])
+
+    def test_scope_problem_lists_first_ten_files_and_total(self):
+        names = [f'outside-{index:02d}.local' for index in range(12)]
+        for name in names:
+            (self.root / name).write_text('本机设置\n')
+        self.setup_task()
+        code, result = self.cli('accept', '--task', self.name('task'), '--report', self.name('report'))
+        self.assertEqual(code, 1, result)
+        for name in names[:10]:
+            self.assertIn(name, result['problem'])
+        for name in names[10:]:
+            self.assertNotIn(name, result['problem'])
+        self.assertIn('等 12 个文件', result['problem'])
+        self.assertIn('本机文件加入项目 .gitignore；项目文件纳入任务范围', result['problem'])
+
     def test_run_names_checks_whose_inputs_changed_while_they_ran(self):
         self.check("from pathlib import Path; Path('app.py').write_text(Path('app.py').read_text() + '# touched')")
         fixtures.write_config(self.root, self.profile)

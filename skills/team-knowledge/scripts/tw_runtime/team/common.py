@@ -9,7 +9,7 @@ import tempfile
 from contextvars import ContextVar
 from datetime import datetime, timezone
 
-from tw_runtime import DATA_VERSION, VERSION, Invalid as RuntimeInvalid, install, repo_paths
+from tw_runtime import DATA_VERSION, VERSION, Invalid as RuntimeInvalid, gitutil, install, repo_paths
 from tw_runtime.project import CONFIG, MAPPING, TEAM_KEYS, config_problems, user_mapping_path
 from tw_runtime.project import location_settings as project_locations
 
@@ -168,7 +168,7 @@ def git(root, *args, input=None, local_only=False):
         environment = {**os.environ, 'GIT_OPTIONAL_LOCKS': '0'}
         if local_only:
             environment['GIT_NO_LAZY_FETCH'] = '1'
-        p = subprocess.run(['git', '-C', str(root), *args], capture_output=True, timeout=30, input=input,
+        p = subprocess.run(gitutil.command(root, *args), capture_output=True, timeout=30, input=input,
                            env=environment)
         require(p.returncode == 0, 'Cannot read Git state: ' + p.stderr.decode(errors='replace')[:300])
         return p.stdout

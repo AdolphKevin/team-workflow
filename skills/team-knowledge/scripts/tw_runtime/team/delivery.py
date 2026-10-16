@@ -58,8 +58,10 @@ def design_problem(status):
     parts = list(status.get('gaps', []))
     scope = status.get('scope', {})
     if scope.get('unmapped'):
-        parts.append('changed files outside every task section scope (add them, tests included, to a task scope): '
-                     + ', '.join(scope['unmapped'][:10]))
+        names = scope['unmapped']
+        parts.append('请为这些文件确定归属：' + '、'.join(names[:10])
+                     + (f'等 {len(names)} 个文件' if len(names) > 10 else '')
+                     + '；本机文件加入项目 .gitignore；项目文件纳入任务范围')
     if scope.get('outside_selection'):
         parts.append('changed files belong to sections not selected by this task: ' + ', '.join(scope['outside_selection'][:10]))
     for key in ('missing', 'stale'):

@@ -5,7 +5,7 @@
 ## 步骤
 
 1. **准备**：在新分支上进行，工作区干净；在途的团队任务先完成或明确放弃；本仓所属产品组已换装新技能，并卸载 `cs`、`cs-analysis`。高风险结论的守护测试需要数据库等环境时，先确认迁移代理能运行这些测试；不能运行时，由主代理在可运行的环境中执行，把原始结果交给迁移代理。
-2. **初始化**：`tw init --apply`。把 `.team-workflow.json` 的检查配置整理进 `.tw/config.json`，原文登记整理进 `documents`。本机跨仓路径可继续写进 `.tw/local/repositories.json`，或按项目情况提升到用户级默认值；两层格式与优先级见[写作规范](writing.md#配置-twconfigjson)，工具不自动迁移。
+2. **初始化**：`tw init` 预览，来源优先取可重复的 `--source`，其次取 `README.md`；补齐预览列出的来源后加 `--apply` 写入。把 `.team-workflow.json` 的检查配置整理进 `.tw/config.json`，原文登记整理进 `documents`。本机跨仓路径可继续写进 `.tw/local/repositories.json`，或按项目情况提升到用户级默认值；两层格式与优先级见[写作规范](writing.md#配置-twconfigjson)，工具只读取配置。
 3. **整理知识**：直接阅读旧的当前卡片、`PROJECT.md`、分类摘要、documents 登记和被取代的卡片。逐条按下文核实后，用新格式和新的表述写成 rule、decision、lesson、glossary、overview。
    - 历史决策按现行设计重写；被取代的卡片及取代理由、曾被接受但已被代码否定的结论，写进对应决策的“放弃过的做法”。
    - 跨仓重复的内容只写在契约提供方的仓库，其他仓用 `related` 引用。
