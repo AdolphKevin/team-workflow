@@ -1,6 +1,7 @@
 """Select a task's most recent prepared context and compare its actual preparation inputs."""
 import design_files
 import task_inputs
+import repairs
 from pathlib import Path
 
 from common import Invalid, artifact, artifact_valid, digest, read, require
@@ -43,7 +44,7 @@ def select(args, root, profile):
     context_task = None
     if supplied_context:
         require(supplied_context.get('data_version') == 1 and supplied_context.get('kind') == 'prepared-context',
-                'Expected a prepared context; run tw team start --task <task.json>')
+                '所选上下文的记录类型或版本与准备上下文不符', next_action=repairs.command(args, 'start'))
         context_task = read(artifact_valid(root, supplied_context['task']))
     task_id = (args.issue or (supplied_task or {}).get('id') or
                (str(args.task) if args.task and not file_task else None) or (context_task or {}).get('id'))
@@ -61,9 +62,9 @@ def select(args, root, profile):
                 raise
     if supplied_context:
         require(context_task['id'] == task_id,
-                'Context belongs to another task; run tw team start --task <task.json> --design <design.md> for this task')
+                '所选准备上下文属于另一个任务', next_action=repairs.command(args, 'start', '--design <方案文件>'))
         require(not previous_ref or previous_ref == explicit['context'],
-                'This context was superseded; run tw team start --task ' + task_id)
+                '所选准备上下文已被新上下文取代', next_action=repairs.command(args, 'start'))
         previous_ref, previous = explicit['context'], supplied_context
     platform, platform_gap = None, None
     if args.issue:
@@ -76,7 +77,7 @@ def select(args, root, profile):
             platform_gap = 'Cannot read platform task: ' + str(exc)
     task = supplied_task or (platform or {}).get('task') or (
         read(artifact_valid(root, previous['task'])) if previous else None)
-    require(task is not None, 'No prepared context for this identity; run tw team start --task <task.json> --design <design.md>')
+    require(task is not None, '当前任务身份尚缺准备上下文', next_action=repairs.command(args, 'start', '--design <方案文件>'))
     design = (design_files.read(local(root, args.design)) if args.design else (platform or {}).get('design') or
               (read(artifact_valid(root, previous['design'])) if previous else None))
     if design is None:
@@ -136,11 +137,11 @@ def resolve_accept_context(args, root):
     ref, context = latest_context(root, task_id)
     if ref is None and args.report and supplied:
         return  # Existing complete reports keep the original explicit-task entry.
-    require(ref is not None, 'accept needs a prepared context; run tw team start --task <task.json> --design <design.md>')
+    require(ref is not None, '业务验收尚缺本任务的准备上下文', next_action=repairs.command(args, 'start', '--design <方案文件>'))
     if supplied:
         captured = read(artifact_valid(root, context['task']))
         task_inputs.validate_written(supplied, local(root, args.task).relative_to(root).as_posix())
         same = supplied == task_inputs.written(captured)
-        require(same, 'Task content changed since preparation; run tw team start with this task file before acceptance')
+        require(same, '任务内容与准备时的材料不同', next_action=repairs.command(args, 'start'))
     args.context = Path(ref['path'])
     args.task = None

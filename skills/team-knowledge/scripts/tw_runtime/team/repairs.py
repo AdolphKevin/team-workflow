@@ -42,11 +42,15 @@ def repeat_command(args):
 
 
 CODE_ACTIONS = {
+    Code.PROJECT_UNINITIALIZED: lambda args, checks: '先预览项目初始化：tw init --root '
+        + shlex.quote(str(args.root.resolve())) + '；确认预览后写入：tw init --root '
+        + shlex.quote(str(args.root.resolve())) + ' --apply',
     Code.CHECK_CONFIG: lambda args, checks: '修正 .tw/config.json 中的 checks 登记，再运行原命令。',
     Code.CHECK_RESULT: lambda args, checks: '重跑检查，重新取得原始结果：' + rerun_command(args, checks),
     Code.APPROVAL_COMMIT: lambda args, checks: '把批准时的提交取到本地，再运行原命令。',
     Code.APPROVAL_SOURCE: lambda args, checks: '修正批准源码中的文件链接，以修正后的提交重新运行检查与评审，再取得当前材料的批准。',
     Code.ACCEPTANCE_STALE: lambda args, checks: '用当前材料重新验收：' + command(args, 'accept'),
+    Code.ACCEPTANCE_MISSING: lambda args, checks: '先取得本任务的业务验收记录，再填写交付报告的 acceptance：' + command(args, 'accept'),
     Code.PLATFORM_CHANGED: lambda args, checks: '保留材料参数，以新请求重新核查平台记录：' + repeat_command(args),
     Code.BRIEF_INPUT: lambda args, checks: '生成本任务的知识简报：' + command(args, 'brief'),
     Code.DESIGN_HISTORY: lambda args, checks: '补齐方案历史后重新开工：' + command(args, 'start', '--design-history <历史方案文件>'),
@@ -91,6 +95,9 @@ def action(args, existing=None, error_code=None, checks=None):
                     + '；在新副本中补齐 confirmed_by 和 reference，再执行：'
                     + command(args, 'verify', '--report ' + shlex.quote(str(target))))
     if args.command == 'review' and error_code in (Code.REVIEW_BINDING_STALE, Code.REVIEW_FILE_UNREADABLE, Code.REVIEW_RUN_INCOMPLETE):
+        if getattr(args, 'from_platform', False):
+            import reviews
+            return reviews.publication_action(args.root.resolve(), str(identity), recheck=True)
         return '先核对当前运行并生成复核稿：' + command(args, 'run') + '；' + command(args, 'review')
     if args.command == 'run' and checks:
         return (old + '；' if old else '') + '修复后重跑：' + rerun_command(args, checks)

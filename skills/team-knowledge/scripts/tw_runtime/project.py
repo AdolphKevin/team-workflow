@@ -226,7 +226,7 @@ class Project:
         elif require_config:
             legacy = legacy_paths(self.root)
             hint = (f'；项目里还有 {"、".join(legacy)}，按 team-knowledge 的 references/migration.md 迁移' if legacy else '')
-            raise Invalid(f'{self.root} 尚未初始化 {KB}/，先运行 `tw init --apply`{hint}')
+            raise Invalid(f'{self.root} 的项目知识 {KB}/ 尚待初始化{hint}')
         self.overrides = dict(parse_mapping(repositories))
         self._entries = None
         self._shared = None

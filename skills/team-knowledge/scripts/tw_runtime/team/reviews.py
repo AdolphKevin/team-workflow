@@ -34,19 +34,31 @@ class ReviewError(Invalid):
 class ReviewNotSubmitted(Invalid):
     error_code = Code.REVIEW_NOT_SUBMITTED
 
-    def __init__(self, root, task, missing_run=False):
+    def __init__(self, root, task, missing_run=False, *, platform=False):
         path = locations(root, task['id'])[0]
         self.review_file = path.relative_to(root).as_posix()
         selected = '--task ' + shlex.quote(task['id'])
         self.next_action = (('先生成草稿：tw team run ' + selected + '；' if missing_run or not path.exists() else '')
                             + '填写后提交：tw team review ' + selected + ' --submit')
-        super().__init__('尚未提交评审；请填写 ' + self.review_file + ' 后提交。'
-                         + ('还没有运行记录（--run），请先执行检查。' if missing_run else ''))
+        if platform:
+            self.next_action = publication_action(root, task['id'], self.review_file)
+        super().__init__('尚未提交评审，评审文件：' + self.review_file
+                         + ('；本任务尚缺运行记录。' if missing_run else ''))
 
 
 def locations(root, task_id):
     base = directory(root, task_id).parent.parent
     return base / 'review.md', base / 'reviews' / 'editor.json'
+
+
+def publication_action(root, task_id, review_file=None, *, recheck=False):
+    """平台评审统一指向实际 Markdown、发布动作与继续交付。"""
+    path = review_file or locations(root, task_id)[0].relative_to(root).as_posix()
+    options = '--task ' + shlex.quote(task_id) + ' --root ' + shlex.quote(str(root))
+    prepare = ('先核对当前运行并生成复核稿：tw team run ' + options
+               + '；tw team review ' + options + '；') if recheck else ''
+    return (prepare + '逐项核对并填写 ' + shlex.quote(str(path))
+            + '，作为变更请求评审发布，再运行：tw team deliver ' + options)
 
 
 def source_path(args, root, task_id):
@@ -64,7 +76,7 @@ def latest_platform_source(root, task_id):
 def platform_source(root, task_id):
     item = latest_platform_source(root, task_id)
     if item is None:
-        raise ReviewError('平台评审', 1, '没有含评审绑定区的 review 条目；请将填好的完整 Markdown 作为变更请求评审提交。')
+        raise ReviewNotSubmitted(root, {'id': task_id}, platform=True)
     _binding(root, task_id, item['body'], current_only=True)
     return item
 
@@ -714,10 +726,11 @@ def _binding(root, task_id, text, *, current_only=False):
         if ref is None:
             raise ValueError('该草稿不属于本任务')
         if current_only and ref != state['current']:
-            raise ValueError('平台评审对应的草稿不是当前本地草稿')
+            raise Invalid('平台评审绑定的是此前的草稿', error_code=Code.REVIEW_BINDING_STALE)
         return read(artifact_valid(root, ref))
     except (Invalid, ValueError, TypeError, KeyError) as exc:
-        raise ReviewError('绑定', normalized[:left].count('\n') + 1, '无法核对工具绑定：' + str(exc) + '；请重新生成复核稿。') from exc
+        raise ReviewError('绑定', normalized[:left].count('\n') + 1, '工具绑定核对有误：' + str(exc),
+                          error_code=Code.REVIEW_BINDING_STALE if getattr(exc, 'error_code', None) == Code.REVIEW_BINDING_STALE else None) from exc
 
 
 def require_current_runs(root, profile, bindings):
@@ -747,7 +760,7 @@ def submit(args, root, profile, task, request):
     require_rechecks(value, sections)
     fresh, design, status, execution = snapshot(args, root, profile, task, value['bindings']['draft_id'], allow_incomplete=True)
     if not _usable_draft(value, fresh):
-        raise ReviewError('绑定', 1, '任务、方案、批准状态、源码、策略、章节或运行已变化；请保留原草稿后重新生成复核稿：tw team review --task <身份>。', error_code=Code.REVIEW_BINDING_STALE)
+        raise ReviewError('绑定', 1, '评审绑定的任务、方案、批准状态、源码、策略、章节或运行与当前材料不同。', error_code=Code.REVIEW_BINDING_STALE)
     require_current_runs(root, profile, fresh['bindings'])
     review = compile_review(root, value, sections)
     if item:

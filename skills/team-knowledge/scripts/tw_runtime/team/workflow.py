@@ -172,6 +172,13 @@ def _terminated(signum, frame):
 
 def emit(result, fmt):
     import commands
+    def public(value):
+        if isinstance(value, dict):
+            return {key: public(item) for key, item in value.items() if key != 'source_next_action'}
+        if isinstance(value, list):
+            return [public(item) for item in value]
+        return value
+    result = public(result)
     print(commands.readable(result) if fmt == 'text' else json.dumps(result, ensure_ascii=False, indent=2))
 
 

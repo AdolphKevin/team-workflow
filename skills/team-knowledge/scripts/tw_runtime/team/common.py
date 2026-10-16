@@ -296,6 +296,8 @@ def accounts(values):
 
 def load_profile(root, check_context=True):
     """Read the single project config and adapt its name for existing team logic."""
+    require((Path(root) / CONFIG).exists(), '项目尚待初始化：缺少 .tw/config.json',
+            error_code=Code.PROJECT_UNINITIALIZED)
     config = read(Path(root) / CONFIG)
     problems = config_problems(config)
     require(not problems, '；'.join(problems))

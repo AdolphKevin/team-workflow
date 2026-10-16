@@ -308,7 +308,9 @@ class BusinessEvidence(unittest.TestCase):
             code = workflow.main(['review', '--root', str(self.root),
                                   '--task', self.name('task'), '--design', self.name('design')])
         self.assertEqual(code, 1)
-        self.assertIn('Missing --brief', json.loads(output.getvalue())['problem'])
+        result = json.loads(output.getvalue())
+        self.assertEqual(result['error_code'], 'knowledge-brief-incomplete')
+        self.assertIn('--brief', result['problem'])
 
     def test_shared_reference_cannot_be_a_json_pass_without_original_outputs(self):
         self.setup_task()

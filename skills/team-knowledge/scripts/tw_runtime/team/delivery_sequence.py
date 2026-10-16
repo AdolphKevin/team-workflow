@@ -1,5 +1,6 @@
 """Sequential composition of the existing acceptance, report, and final verification commands."""
 import copy
+import repairs
 import hashlib
 import shlex
 
@@ -150,7 +151,8 @@ def deliver(args, root, profile, task, request):
         return value
 
     group = materials.load(root, task['id'])
-    require(group is not None, '请先运行 tw team start --task <任务文件> --design <方案文件>')
+    require(group is not None, '当前任务尚缺开工材料组',
+            next_action=repairs.command(args, 'start', '--design <方案文件>'))
     # An interrupted deliver continues with the reason it was given; an explicit new reason replaces it.
     pending = materials.path(root, task['id']).parent / 'deliver-reason.json'
     if args.reason is None and pending.is_file():

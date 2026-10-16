@@ -1,9 +1,9 @@
 ---
 title: "报错措辞决定了下一步和问题位置"
-scope: ["self:skills/team-knowledge/scripts/tw_runtime/team/**", "self:tests/test_error_routing.py", "self:tests/test_gap_routing.py", "self:tests/test_error_categories.py"]
+scope: ["self:skills/team-knowledge/scripts/tw_runtime/team/**", "self:tests/test_error_routing.py", "self:tests/test_gap_routing.py", "self:tests/test_error_categories.py", "self:tests/test_trial_rework.py", "self:skills/team-knowledge/scripts/tw_runtime/check.py", "self:skills/team-knowledge/scripts/tw_runtime/project.py"]
 source: ["self:docs/proposals/2026-10-16-issue5-leftovers.md"]
-verified: {"self": {"commit": "7f7f1f531a844d9708d16eb9990d9175e5875c16", "date": "2026-10-16"}}
-guards: ["self:tests/test_error_routing.py#test_error_codes_choose_same_repair_for_arbitrary_messages", "self:tests/test_error_routing.py#test_review_format_errors_keep_section_when_reason_changes", "self:tests/test_error_routing.py#test_design_line_uses_structured_key_with_arbitrary_reason", "self:tests/test_gap_routing.py#test_handoff_conflict_and_requirements_use_codes_with_arbitrary_message", "self:tests/test_error_categories.py#test_generic_object_errors_are_independent_of_field_words", "self:tests/test_error_categories.py#test_original_check_report_failure_requires_rerun"]
+verified: {"self": {"commit": "210ad28223bfc2b82dc050950edb57b3e53ba9fb", "date": "2026-10-16"}}
+guards: ["self:tests/test_error_routing.py#test_error_codes_choose_same_repair_for_arbitrary_messages", "self:tests/test_error_routing.py#test_review_format_errors_keep_section_when_reason_changes", "self:tests/test_error_routing.py#test_design_line_uses_structured_key_with_arbitrary_reason", "self:tests/test_gap_routing.py#test_handoff_conflict_and_requirements_use_codes_with_arbitrary_message", "self:tests/test_error_categories.py#test_generic_object_errors_are_independent_of_field_words", "self:tests/test_error_categories.py#test_original_check_report_failure_requires_rerun", "self:tests/test_trial_rework.py#test_t2_unshared_approval_points_to_publishing_the_review", "self:tests/test_trial_rework.py#test_t3_older_platform_draft_uses_binding_recovery", "self:tests/test_trial_rework.py#test_t6_project_text_reports_its_configuration_and_knowledge_errors", "self:tests/test_trial_rework.py#test_t7_internal_recovery_data_stays_out_of_error_json", "self:tests/test_trial_rework.py#test_t8_material_gap_keeps_commands_in_next_action"]
 tags: ["错误代码", "下一步", "问题位置", "报错措辞"]
 ---
 # 报错措辞决定了下一步和问题位置
@@ -13,6 +13,8 @@ tags: ["错误代码", "下一步", "问题位置", "报错措辞"]
 根因：错误只传递显示文字，恢复命令和位置需要从文字片段反推。首次修复还沿用了旧文字中的词和字段名子串，把检查报告误归为交付报告，把本地提交对象缺失误归为批准缺失。批准源码链接有误与本地提交对象缺失也需要分别处理：前者修正源码并重新检查和评审，后者补齐本地对象。
 
 修复与防护：按[工具约定](../../skills/team-workflow/references/contracts.md)选择下一步；错误来源按失败的对象与原因给出代码、位置和明确的操作指引；通用对象校验由调用方指定类别。检查解码与材料汇总继续传递该类别。守护测试对同一错误使用两段任意说明，核对修复命令、小节和行号一致。
+
+独立试用的补充防护：平台批准尚待共享、平台评审尚待提交、旧草稿绑定、项目尚待初始化分别按实际原因恢复；恢复指引列出实际材料路径。问题描述与命令分别保存；命令结果由产生它的命令汇总自身问题，输出出口保留原有公开字段。
 
 发现方法：只替换报错说明，保留错误代码和位置，比较下一步与定位结果。
 

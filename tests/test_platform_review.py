@@ -284,7 +284,8 @@ class PlatformReview(unittest.TestCase):
                 self.post(changed)
                 code, refused = self.command('review', '--task', self.url, '--from-platform')
                 self.assertEqual(code, 1, refused)
-                self.assertIn('重新生成复核稿', refused['problem'])
+                self.assertEqual(refused['error_code'], 'review-incomplete')
+                self.assertEqual(refused['section'], '绑定')
                 self.assertIsNone(self.current()['review'])
 
     def test_platform_review_must_use_the_current_local_draft_even_when_source_is_identical(self):
@@ -296,7 +297,8 @@ class PlatformReview(unittest.TestCase):
         self.assertNotEqual(self.draft_path().read_text(), source)
         code, refused = self.command('review', '--task', self.url, '--from-platform')
         self.assertEqual(code, 1, refused)
-        self.assertIn('重新生成复核稿', refused['problem'])
+        self.assertEqual(refused['error_code'], 'review-binding-stale')
+        self.assertIn('tw team review', refused['next_action'])
         self.assertIsNone(self.current()['review'])
 
     def test_source_change_rejects_platform_markdown_and_retains_existing_name_check(self):
@@ -311,7 +313,8 @@ class PlatformReview(unittest.TestCase):
         self.post(source)
         code, refused = self.command('review', '--task', self.url, '--from-platform')
         self.assertEqual(code, 1, refused)
-        self.assertIn('重新生成复核稿', refused['problem'])
+        self.assertEqual(refused['error_code'], 'review-binding-stale')
+        self.assertIn('tw team review', refused['next_action'])
 
     def test_platform_rechecks_and_issue_history_follow_local_submission_rules(self):
         source = self.prepare()
@@ -381,7 +384,8 @@ class PlatformReview(unittest.TestCase):
         self.assertEqual(code, 1, refused)
         self.assertEqual(refused['stopped_at'], 'review')
         self.assertEqual([row['step'] for row in refused['steps']], ['review'])
-        self.assertIn('review 条目', refused['problem'])
+        self.assertEqual(refused['steps'][0]['result']['error_code'], 'review-not-submitted')
+        self.assertIn(self.draft_path().relative_to(self.root).as_posix(), refused['next_action'])
         self.assertIsNone(self.current()['review'])
 
 

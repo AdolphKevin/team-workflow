@@ -116,7 +116,8 @@ class StartAccept(unittest.TestCase):
         self.assertEqual(again['context'], first['context'])
         code, refused = self.command('accept', '--task', self.task['id'])
         self.assertEqual(code, 1, refused)
-        self.assertIn('--run', refused['problem'])
+        self.assertEqual(refused['error_code'], 'review-not-submitted')
+        self.assertIn('tw team run', refused['next_action'])
 
     def test_id_only_acceptance_is_saved_and_bound_as_the_completed_task(self):
         self.setup_task()

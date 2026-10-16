@@ -51,7 +51,7 @@ class ErrorRouting(unittest.TestCase):
     def test_source_action_has_priority_over_command_default(self):
         for code in ('invalid-or-incomplete-input', 'review-incomplete', 'review-not-submitted',
                      'review-not-passed', 'tool-modified', 'import-incomplete',
-                     'task-input-invalid', 'design-input-invalid', 'design-markdown-invalid',
+                     'task-input-invalid', 'design-input-invalid', 'design-markdown-invalid', 'approval-not-shared',
                      'review-materials-incomplete', 'source-stale', 'run-binding-stale'):
             for message in ('approval report implementation owner', 'Request ID source 已过期'):
                 with self.subTest(code=code, message=message):

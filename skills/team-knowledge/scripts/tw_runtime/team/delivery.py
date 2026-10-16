@@ -252,7 +252,10 @@ def verify(root, profile, task, report, phase='delivery', _seen=None, live=None)
         require(platform_state['design'] == design, 'Local design differs from the shared plan')
         import reviews
         published = reviews.published_approval(root, task['id'], review)
-        require(all(a in platform_state['approvals'] or a == published for a in approvals), 'Approval has not been shared on the task', error_code=Code.APPROVAL_INCOMPLETE)
+        require(all(a in platform_state['approvals'] or a == published for a in approvals), '批准记录尚待在平台任务上共享',
+                error_code=Code.APPROVAL_NOT_SHARED,
+                next_action=reviews.publication_action(root, task['id'],
+                    reviews.case_repair(root, task['id'], artifact(root, inside(root, report['review'])))['review_file']))
     from contracts import unsourced
     missing = unsourced(task, design)
     require(not missing, 'Acceptance scenario needs confirmed business sources: ' + ', '.join(missing))
@@ -341,7 +344,7 @@ def verify(root, profile, task, report, phase='delivery', _seen=None, live=None)
                                        + shlex.quote(task['id']) + ' --report <修正后的报告路径>')
                 raise invalid from exc
         require(bool(report.get('acceptance')),
-                '最终交付需要业务验收记录：先运行 tw team accept，再把产物路径写进交付报告的 acceptance', error_code=Code.REPORT_INCOMPLETE)
+                '交付报告的 acceptance 尚缺业务验收记录', error_code=Code.ACCEPTANCE_MISSING)
         acceptance_path = inside(root, report['acceptance'])
         accepted = read(acceptance_path)
         require(accepted.get('data_version') == RECORD_SCHEMA and accepted.get('kind') == 'acceptance'

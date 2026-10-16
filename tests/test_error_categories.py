@@ -84,6 +84,7 @@ class ErrorCategories(unittest.TestCase):
 
     def test_specific_categories_keep_recovery_with_arbitrary_messages(self):
         rows = [('check-config-invalid', '.tw/config.json'), ('check-result-invalid', 'tw team run'),
+                ('project-not-initialized', 'tw init'), ('acceptance-record-missing', 'tw team accept'),
                 ('approval-commit-unavailable', '提交取到本地'), ('approved-source-invalid', '修正批准源码中的文件链接'),
                 ('acceptance-stale', 'tw team accept'),
                 ('platform-records-changed', 'tw team verify'), ('knowledge-brief-incomplete', 'tw team brief'),

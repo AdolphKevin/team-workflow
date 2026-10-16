@@ -29,13 +29,13 @@ LABELS = {'context': '准备上下文', 'task': '任务', 'design': '方案', 'b
 class MaterialGap(Invalid):
     error_code = Code.CURRENT_MATERIALS
 
-    def __init__(self, role, detail, task_id):
+    def __init__(self, role, detail, task_id, *, next_action=None):
         option = OPTIONS.get(role)
         repair = ('显式指定 --' + option.replace('_', '-') + ' <材料路径>，或' if option else '')
         self.next_action = repair + '重新开工：tw team start --task <任务文件> --design <方案文件>'
         if str(task_id).startswith(('http://', 'https://')):
             self.next_action += '；平台任务用 tw team start --issue ' + shlex.quote(task_id)
-        super().__init__(f'{LABELS.get(role, role)}（{role}）{detail}。{self.next_action}')
+        super().__init__(f'{LABELS.get(role, role)}（{role}）{detail}。', next_action=next_action)
 
 
 def path(root, task_id):
@@ -271,8 +271,8 @@ def report_matches(args, root, report):
         refs = value.get('selected_runs') if key == 'runs' and value.get('selected_runs') is not None else value[key]
         expected = [r['path'] for r in refs] if key in ARRAY else refs['path'] if refs else None
         if report.get(field, [] if key in ARRAY else None) != expected:
-            raise MaterialGap('delivery_report', '引用的 ' + key + ' 与当前组不同；请运行 tw team delivery-template --task '
-                              + shlex.quote(value['task_id']), value['task_id'])
+            raise MaterialGap('delivery_report', '引用的 ' + key + ' 与当前组不同', value['task_id'],
+                              next_action='按当前材料生成交付报告：tw team delivery-template --task ' + shlex.quote(value['task_id']))
 
 
 def select_runs(value, refs):
@@ -280,6 +280,25 @@ def select_runs(value, refs):
         if ref not in value['runs']:
             value['runs'].append(ref)
     value['selected_runs'] = refs
+
+
+def select_review(root, value, ref, approval=None):
+    """评审携带自己的合并批准；方案批准继续保留。"""
+    from checklist import records
+    previous = value.get('review')
+    if previous != ref:
+        for _, response in records(root, value['task_id']):
+            if response and response.get('artifact') == previous and response.get('review_submitted'):
+                old = response.get('approval')
+                value['approvals'] = [item for item in value['approvals'] if item != old]
+        value['review_markdown'] = None
+        value['review_source'] = None
+    if approval is None:
+        approval = next((response.get('approval') for _, response in records(root, value['task_id'])
+                         if response and response.get('artifact') == ref and response.get('review_submitted')), None)
+    value['review'] = ref
+    if approval and approval not in value['approvals']:
+        value['approvals'].append(approval)
 
 
 def apply_explicit(args, root, value):
@@ -292,24 +311,22 @@ def apply_explicit(args, root, value):
         refs = [artifact(root, local(root, v)) for v in raw] if key in ARRAY else artifact(root, local(root, raw))
         if key == 'runs':
             select_runs(value, refs)
+        elif key == 'review':
+            select_review(root, value, refs)
         else:
-            if key == 'review' and refs != value.get('review'):
-                value['review_markdown'] = None
-                value['review_source'] = None
             value[key] = refs
 
 
 def capture_report(root, value, report):
     from commands import local
-    for key, field in [('design', 'design'), ('brief', 'brief'), ('review', 'review'), ('acceptance', 'acceptance')]:
+    for key, field in [('design', 'design'), ('brief', 'brief'), ('acceptance', 'acceptance')]:
         if report.get(field):
             ref = artifact(root, local(root, report[field]))
-            if key == 'review' and ref != value.get('review'):
-                value['review_markdown'] = None
-                value['review_source'] = None
             value[key] = ref
     for key in ('approvals', 'design_history'):
         value[key] = [artifact(root, local(root, p)) for p in report.get(key, [])]
+    if report.get('review'):
+        select_review(root, value, artifact(root, local(root, report['review'])))
     select_runs(value, [artifact(root, local(root, p)) for p in report['runs']])
 
 
@@ -376,12 +393,10 @@ def finish(args, root, task, result, request):
                     updated['runs'].append(result['artifact'])
                 updated['selected_runs'] = None
             elif args.command == 'review' and result.get('review_submitted'):
-                updated['review'] = result['artifact']
+                select_review(root, updated, result['artifact'], result.get('approval'))
                 updated['review_markdown'] = result['review_markdown']
                 updated['review_source'] = result['review_source']
                 if result.get('approval'):
-                    updated['approvals'] = [ref for ref in updated['approvals'] if ref['sha256'] != result['approval']['sha256']]
-                    updated['approvals'].append(result['approval'])
                     select_runs(updated, result['approval_runs'])
             elif args.command == 'accept':
                 accepted = read(root / result['artifact']['path'])

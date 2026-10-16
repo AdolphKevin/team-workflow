@@ -2,6 +2,16 @@
 
 本页只保留当前候选版的验证结果；更早版本的记录见 Git 历史。
 
+## Issue #5 遗留问题的根因修复 第 1、2 段的独立试用（未发布，2026-10-16）
+
+未参与实现的代理只按技能文档，在 `210ad28` 的隔离副本中用真实命令和按 `references/platform.md` 自写的本地平台脚本试用 E2、E4、E7（143 份命令记录在 `/tmp/wb-redesign/issue5-leftovers/trial/evidence/`）。E7 通过。E4 基本通过：`tw team project --format text` 只显示兜底句，部分错误 JSON 多出内部字段 `source_next_action`。E2 部分通过：四种情况下评审的选择都符合规则，但平台评审替换本地评审后，旧评审生成的合并批准仍在材料中，业务验收报“批准未共享”，照提示提交只会循环；批准未共享、平台评审绑定旧草稿、平台没有评审三种情况的下一步都指向“修正 Markdown”或本地提交；未初始化项目的下一步是同样会失败的 `start`；问题文字里夹着命令和 `<身份>` 占位符。Claude 核对证据属实。
+
+返工（Codex）：合并批准跟随它所属的评审，替换评审时旧的合并批准退出材料组；新增 `approval-not-shared`、`project-not-initialized`、`acceptance-record-missing`，平台评审绑定旧草稿归为 `review-binding-stale`，平台没有评审归为 `review-not-submitted`，下一步给出 review.md 的实际路径与“作为变更请求评审发布，再运行 deliver”；未完成的结果由命令自己汇总问题文字；JSON 只输出公开字段；问题文字只描述问题，命令只在下一步里。各项先运行失败测试再实现。
+
+Claude 审核：亲自重跑全量 782 项通过、发布检查与 `tw check` 通过；用试用者原有的项目与平台数据重放：绑定旧草稿的平台评审停在“平台评审”，下一步为核对运行、生成复核稿、逐项核对并发布；没有评审时写明 review.md 路径与发布后运行 deliver；未初始化仓库的 `status`、`project` 都指向 `tw init` 预览与 `--apply`，`project` 文字输出列出各项问题；错误 JSON 为原有的六个字段。合并批准的替换与批准未共享两项由试用者在新提交上复验。
+
+试用中记下的原有问题（改动前已存在，不在本方案范围）：简单任务的 `start`、`issue-draft` 下一步为 `approval-draft`，与“简单任务开发后合并评审”的文档不一致；`run` 报检查期间输入变化时不列出文件；`init` 预览缺少 `--source` 写法示例，`--source app.py`（不带 `self:`）照常接受；文字输出露出内部结构（如 `-：`、`ok：True`），首行有时为英文；方案模板中“检查：”的填法不清楚；平台脚本出错时只显示标准错误首行，文档未写明 `issue-draft` 要求 Issue 已在平台上。试用中看到的英文提示归第 3 段。
+
 ## Issue #5 遗留问题的根因修复 第 2 段（未发布，2026-10-16）
 
 依据[根因修复](proposals/2026-10-16-issue5-leftovers.md)第 2.4、2.5 节。

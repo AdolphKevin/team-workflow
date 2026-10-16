@@ -3,6 +3,7 @@
 
 class Code:
     INVALID = 'invalid-or-incomplete-input'
+    PROJECT_UNINITIALIZED = 'project-not-initialized'
     CURRENT_MATERIALS = 'current-materials-incomplete'
     REVIEW_INCOMPLETE = 'review-incomplete'
     REVIEW_NOT_SUBMITTED = 'review-not-submitted'
@@ -21,6 +22,7 @@ class Code:
     VALIDATION_ACTIVE = 'validation-active'
     REQUEST_CONFLICT = 'request-conflict'
     APPROVAL_INCOMPLETE = 'approval-incomplete'
+    APPROVAL_NOT_SHARED = 'approval-not-shared'
     REPORT_INCOMPLETE = 'report-incomplete'
     SOURCE_STALE = 'source-stale'
     RUN_BINDING_STALE = 'run-binding-stale'
@@ -37,6 +39,7 @@ class Code:
     APPROVAL_COMMIT = 'approval-commit-unavailable'
     APPROVAL_SOURCE = 'approved-source-invalid'
     ACCEPTANCE_STALE = 'acceptance-stale'
+    ACCEPTANCE_MISSING = 'acceptance-record-missing'
     PLATFORM_CHANGED = 'platform-records-changed'
     BRIEF_INPUT = 'knowledge-brief-incomplete'
     DESIGN_HISTORY = 'design-history-incomplete'

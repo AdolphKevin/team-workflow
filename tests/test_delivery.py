@@ -137,8 +137,9 @@ class DeliveryCases(unittest.TestCase):
         self.assertTrue(result['business_accepted'])
         self.assertFalse(result['delivery_complete'])
         self.assertFalse(result['closable'])
-        with self.assertRaisesRegex(Invalid, '最终交付需要业务验收记录'):
+        with self.assertRaises(Invalid) as raised:
             delivery.verify(self.root, self.profile, self.task, self.report)
+        self.assertEqual(raised.exception.error_code, 'acceptance-record-missing')
         self.write('acceptance', result)
         self.report['acceptance'] = self.name('acceptance')
         with self.assertRaisesRegex(Invalid, '知识处置'):

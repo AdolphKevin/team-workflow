@@ -4,6 +4,7 @@ import json
 from error_codes import Code, check_error_code
 import shlex
 import copy
+import repairs
 import task_inputs
 from pathlib import Path
 
@@ -124,9 +125,8 @@ def references(root, values):
 
 
 def report_input(args, root, task, include_knowledge=True):
-    import repairs
     for name in ('design', 'brief'):
-        require(getattr(args, name) is not None, 'Missing --' + name + '; supply the existing artifact or use tw team start with current approvals and --context',
+        require(getattr(args, name) is not None, '所需材料尚待指定：--' + name,
                 error_code={'design': Code.DESIGN_INPUT, 'brief': Code.BRIEF_INPUT}[name],
                 next_action=('补齐方案后重新开工：' + repairs.command(args, 'start', '--design <方案文件>')
                              if name == 'design' else None))
@@ -177,7 +177,8 @@ def cached_predecessors(args, root, profile):
         proof = value['acceptance']
         require(proof.get('kind') == 'acceptance' and proof.get('business_accepted') is True,
                 'Prepared predecessor was not accepted')
-        require(proof['source_digest'] == validation.source_digest(root, profile), 'Predecessor source changed; run tw team start again')
+        require(proof['source_digest'] == validation.source_digest(root, profile), '前置任务的源码与当前源码不同',
+                next_action=repairs.command(args, 'start'))
         for item in proof['materials']:
             artifact_valid(root, item)
         completed.append(value['section'])
@@ -192,7 +193,6 @@ def approval_recovery(args, value, status):
     code = status.get('error_code')
     if code not in APPROVAL_RECOVERY_LABELS:
         return False
-    import repairs
     value.update(error_code=code, next_action=repairs.action(args, error_code=code))
     if value.get('next_step'):
         value['next_step'].update(label=APPROVAL_RECOVERY_LABELS[code], next_command=value['next_action'])
@@ -253,7 +253,8 @@ def dispatch(args, root):
         from common import artifact_valid
         context = read(local(root, args.context))
         require(context.get('data_version') == RECORD_SCHEMA and context.get('kind') == 'prepared-context',
-                f'Expected a schema {RECORD_SCHEMA} prepared context; run tw team start again')
+                f'准备上下文需要采用数据版本 {RECORD_SCHEMA}',
+                next_action=repairs.command(args, 'start'))
         for key in ('task', 'design', 'brief'):
             if getattr(args, key) is None:
                 setattr(args, key, artifact_valid(root, context[key]))
@@ -317,7 +318,6 @@ def dispatch(args, root):
             ref = request.publish('import.json', record, args.out) if args.out else artifact(root, path)
             return request.finish({'ok': True, 'artifact': ref, 'scope': 'execution-only'})
         except (Invalid, OSError, ValueError, TypeError, KeyError) as exc:
-            import repairs
             code = getattr(exc, 'error_code', Code.INVALID)
             return request.finish(repairs.annotate(args, {'ok': False, 'problem': str(exc),
                                    'error_code': code if code != Code.INVALID else Code.IMPORT_INCOMPLETE,
@@ -433,12 +433,10 @@ def dispatch(args, root):
             return request.finish(result)
         return materials.finish(args, root, task, result, request)
     except (RuntimeInvalid, OSError, ValueError, TypeError, KeyError) as exc:
-        import repairs
         return request.finish(repairs.failure(args, exc,
                                **({'review_failures': exc.review_failures} if hasattr(exc, 'review_failures') else {}),
                                **({'review_file': exc.review_file} if hasattr(exc, 'review_file') else {})))
     except Exception as exc:
-        import repairs
         return request.finish(repairs.annotate(args, tool_defect(exc)))
 
 
@@ -706,7 +704,6 @@ def produce(args, root, profile, task, platform, request):
             import reviews
             result = reviews.from_run(args, root, profile, task, result, request)
         else:
-            import repairs
             repairs.annotate(args, result)
         return result
     if args.command == 'review':
@@ -731,7 +728,8 @@ def produce(args, root, profile, task, platform, request):
                 materials.report_matches(args, root, report)
         else:
             require(args.command == 'accept', 'verify needs --report <delivery.json>', error_code=Code.REPORT_INCOMPLETE)
-            require(args.context is not None, 'accept needs --context or --task with a prepared context; run tw team start')
+            require(args.context is not None, '业务验收尚缺本任务的准备上下文',
+                    next_action=repairs.command(args, 'start'))
             if args.review is None:
                 from reviews import ReviewNotSubmitted
                 raise ReviewNotSubmitted(root, task, missing_run=not bool(args.run))
@@ -884,7 +882,6 @@ def status(args, root, profile, task, platform=None):
     if facts['stale_materials']:
         value['summary'] = '方案或批准等材料已变化，请重新 start 后继续。'
         extra = '--design ' + shlex.quote(str(args.design)) if args.design and 'design' in (getattr(args, 'material_selection', None) or {}).get('explicit', {}) else ''
-        import repairs
         row = by_id['prepare']
         row['next_command'] = repairs.command(args, 'start', extra)
         value['next_action'] = row['next_command']
@@ -956,10 +953,12 @@ def project_report(root, home=None):
     from tw_runtime.project import Project
     import os
     config_errors, input_warnings = [], []
+    config_code = None
     try:
         profile = load_profile(root)
     except (Invalid, OSError, ValueError) as exc:
         config_errors.append(str(exc))
+        config_code = getattr(exc, 'error_code', None)
         profile = None
     if profile is not None:
         problems, input_warnings = external_repository_problems(root, profile)
@@ -977,4 +976,11 @@ def project_report(root, home=None):
                   f'另有 {len(installed["installation_problems"])} 个安装提示，见 warnings。' if installed['installation_problems'] else '')}
     if not installed['ok'] and not override:
         result.update(error_code=Code.TOOL_MODIFIED, problem='；'.join(installed['problems']))
+    elif config_code == Code.PROJECT_UNINITIALIZED:
+        result['error_code'] = config_code
+    problems = config_errors + [row['path'] + '：' + row['message'] for row in checked['errors']]
+    if not installed['ok'] and not override:
+        problems += installed['problems']
+    if problems:
+        result['problem'] = '；'.join(problems)
     return result
