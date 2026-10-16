@@ -1,10 +1,9 @@
 # 团队协作与交付
 
-从主技能开始或接手团队任务时使用本页。工具输入和字段见 [工具约定](contracts.md)。
-首次独立验收、有效回归、端到端链路、运行环境和交付记录，统一按
-[业务验收与质量改进标准](business-acceptance.md)执行。处理缺陷或每周复盘时也读取该标准
-第 7、8 节及其引用；记录使用[交付验收](../templates/business-delivery.md)、
-[缺陷复验与保护](../templates/defect-protection.md)、[每周质量复盘](../templates/weekly-quality-review.md)模板。
+团队任务使用本页，字段见[工具约定](contracts.md)。验收、回归、环境及记录按
+[业务验收标准](business-acceptance.md)；缺陷与复盘另读其第 7、8 节及引用。模板：
+[交付验收](../templates/business-delivery.md)、[缺陷保护](../templates/defect-protection.md)、
+[每周复盘](../templates/weekly-quality-review.md)。
 
 ## 开工前
 
@@ -14,16 +13,18 @@
 tw team approval-draft --task <任务文件> --design <方案> --reviewer <姓名> --confirmation <说明> --mode plan
 ```
 
-平台上的方案、批准和任务块按已有授权发布。首次修改源码或委派实施前运行 `start`，读简报并确认实施条件。有效批准和分派在范围内复用；新入口、跨服务责任或业务规则变化时重审受影响部分。
+方案、批准和任务块按已有授权发布。修改或委派前运行 `start`，阅读简报并核对实施条件。范围内复用有效批准和分派；新入口、跨服务责任或业务规则变化时重审受影响部分。
 
 中等、复杂任务先开描述为方案 Markdown 原文的草稿变更请求，评审通过后再写代码。这是团队约定，工具不强制；
-仍核对现有的实施条件。先提交方案文件，`design-draft` 生成 PR 原文与单独的发布评论；工具数据藏在 `tw-record` 注释中。批准评论同样可读；批准提交号用可选
+先提交方案文件，`design-draft` 生成方案展示与发布评论，数据藏在 `tw-record` 注释中；批准提交号用可选
 `approval-draft --revision <完整提交号>` 记录，核对规则见[分节方案](designs.md)。
+旧验证格式不可读时，用 `design-draft --issue <地址> --record <方案.md> --reconcile "<原因>"`
+发布当前格式，从第 1 版重启并重新批准；旧批准作废。批准冲突用 `approval-draft --issue <地址> --reconcile "<原因>"`。
 
 ## 四命令流程
 
 配置平台的简单任务可运行 `start`、`run`，评审人在变更请求上提交完整评审 Markdown 后
-运行 `deliver`；工具自动导入评审。本地流程保留四条命令：
+运行 `deliver`；工具自动导入评审。本地四条命令：
 
 ```bash
 tw team start --task <任务文件> --design <方案> [--approval <已有批准>]
@@ -33,7 +34,7 @@ tw team review --task <身份> --submit
 tw team deliver --task <身份> --reason <不需要更新知识的理由>
 ```
 
-身份为任务编号或完整 Issue 地址。`current.json` 固定记录材料；显式 `--context`、`--run`、`--review`、`--report` 等路径仍可使用。新上下文清空后续材料，接续保留；同一请求编号对应同一组输入，修改材料后用新编号。
+身份为任务编号或完整 Issue 地址。`current.json` 记录材料，仍可显式指定路径。新上下文清空后续材料，接续保留；修改输入后用新请求编号。
 
 `run` 在必需检查全部有可用的通过结果后自动准备评审稿，失败不生成，有效工作稿不覆盖。需要时仍可手动 `review`。失败、必要跳过、缺失用例不能通过业务验收；检查只证明其声明的范围。按业务验收标准保留原始结果、环境与独立执行证据，维护本机和 CI 入口。
 

@@ -23,6 +23,7 @@ def render(result, task, profile=None):
     observations = result.get('observations', {})
     lines += _lines([f'{row["id"]}：{row["expectation"]}'
                      + (f'（{len(observations.get(row["id"], []))} 条实际观察）' if observations.get(row['id']) else '')
+                     + ('；未指明用例，证据为整项检查通过' if row['id'] in result.get('unspecified_cases', []) else '')
                      for row in task.get('acceptance', [])], '没有登记验收场景')
     lines += ['', '**哪些检查实际运行并通过**']
     lines += _lines([f'{key}：{checks.get(key, {}).get("purpose", "项目检查")}' for key in result.get('checks', [])],

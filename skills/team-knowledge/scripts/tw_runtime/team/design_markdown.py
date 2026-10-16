@@ -136,12 +136,9 @@ def sources(value):
 
 
 def verification_text(value):
-    c = value['coverage']
-    return '；'.join(['自动' if value['method'] == 'automatic' else '人工',
-                     '层级 ' + c['level'], '入口 ' + listing(c['entrypoints'], outer=('；',)),
-                     '环境 ' + listing([c['environment']], '；'), '替身 ' + listing(c['substitutes'], outer=('；',)),
-                     '隔离 ' + c['isolation'], '隔离依据 ' + listing(c['isolation_evidence'], outer=('；',)),
-                     '用例 ' + listing(value['cases'], outer=('；',))])
+    return '；'.join(['自动' if value['method'] == 'automatic' else '人工'] +
+                    [label + ' ' + listing(value[key], outer=('；',))
+                     for label, key in (('用例', 'cases'), ('替身', 'substitutes')) if value[key]])
 
 
 def verification(value):
@@ -150,15 +147,17 @@ def verification(value):
     fields = {}
     for item in parts[1:]:
         label, sep, val = item.partition(' ')
+        require(label not in {'层级', '入口', '环境', '隔离', '隔离依据'},
+                '请改为“验证：自动；用例 <用例>；替身 <替身>”或“验证：人工”；覆盖范围写在 .tw/config.json 的 checks.<编号>.coverage')
         require(sep and label not in fields, '验证标签缺值或重复：' + label)
         fields[label] = val.strip()
-    require({'层级', '入口', '环境', '替身', '隔离'} <= fields.keys(), '验证缺少层级、入口、环境、替身或隔离')
-    require(fields.keys() <= {'层级', '入口', '环境', '替身', '隔离', '隔离依据', '用例'}, '未知验证标签')
-    return {'method': 'automatic' if parts[0] == '自动' else 'manual',
-            'coverage': {'level': fields['层级'], 'entrypoints': array(fields['入口'], outer=('；',)),
-                         'environment': unquote(fields['环境'], ('；',)), 'substitutes': array(fields['替身'], outer=('；',)),
-                         'isolation': fields['隔离'], 'isolation_evidence': array(fields.get('隔离依据', '无'), outer=('；',))},
-            'cases': array(fields.get('用例', '无'), outer=('；',))}
+    require(fields.keys() <= {'替身', '用例'}, '未知验证标签')
+    require(parts[0] != '人工' or not fields, '人工验证不能填写用例或替身；请写“验证：人工”')
+    result = {'method': 'automatic' if parts[0] == '自动' else 'manual',
+              'cases': array(fields.get('用例', '无'), outer=('；',)),
+              'substitutes': array(fields.get('替身', '无'), outer=('；',))}
+    strings(result['cases']); strings(result['substitutes'])
+    return result
 
 
 def cell(value):
@@ -282,7 +281,7 @@ def render(value):
 
 def load(raw):
     from designs import SECTION_TYPES, validate_design, validate_assessment, _path
-    from contracts import coverage, issue as validate_issue, material, sources as validate_sources
+    from contracts import issue as validate_issue, material, sources as validate_sources
     if raw.lstrip().startswith(('{', '[')):
         fail(1, 'JSON 方案已停用，请改写为 Markdown，格式见 references/designs.md')
     # Keep source positions; normalize only section bodies after extracting labels and tables.
@@ -448,10 +447,6 @@ def load(raw):
             if '依据' in labels:
                 scenario['sources'] = field('依据', sources)
             data.update(scenario=scenario, checks=field('检查', array), verification=field('验证', verification))
-            try:
-                coverage(data['verification']['coverage'])
-            except (Invalid, TypeError) as exc:
-                fail(labels['验证'][1], str(exc))
         elif kind == 'task':
             data = {key: field(name, array) for name, key in (('验收', 'acceptance'), ('范围', 'scope'), ('前置任务', 'blocked_by'))}
             if '评估' in labels:

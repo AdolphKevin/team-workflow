@@ -90,7 +90,8 @@ def select(args, root, profile):
     require(task is not None, 'No prepared context for this identity; run tw team start --task <task.json> --design <design.md>')
     design = (design_files.read(local(root, args.design)) if args.design else (platform or {}).get('design') or
               (read(artifact_valid(root, previous['design'])) if previous else None))
-    require(design is not None, 'start needs --design <design.md> or a shared plan')
+    require(design is not None, '；'.join((platform or {}).get('design_gaps', []))
+            or 'start needs --design <design.md> or a shared plan')
     # A platform task block is always fully specified and is never generated locally.
     if not args.issue:
         task = fill_acceptance(task, design)

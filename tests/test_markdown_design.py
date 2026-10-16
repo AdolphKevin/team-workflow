@@ -8,6 +8,42 @@ import designs
 
 
 class MarkdownDesignCases(unittest.TestCase):
+    def test_shared_fixtures_use_the_current_verification_shape(self):
+        for row in example()['sections']:
+            if row['type'] == 'acceptance':
+                self.assertEqual(row['data']['verification'],
+                                 {'method': 'automatic', 'cases': [], 'substitutes': []})
+
+    def test_verification_uses_only_method_cases_and_substitutes(self):
+        value = example()
+        for row in value['sections']:
+            if row['type'] == 'acceptance':
+                row['data']['verification'] = {'method': 'automatic', 'cases': [], 'substitutes': []}
+        automatic = value['sections'][3]['data']['verification']
+        automatic.update(cases=['Suite::a、b', 'quoted "case"', 'x；y'],
+                         substitutes=['记录器、缓存', ' 无 ', 'x；y'])
+        raw = designs.render(value)
+        self.assertEqual(designs.load(raw), value)
+        self.assertIn('- 验证：自动\n', raw)
+        for label in ('层级 journey', '入口 app.add', '环境 isolated-test', '隔离 isolated', '隔离依据 无'):
+            changed = raw.replace('- 验证：自动\n', '- 验证：自动；' + label + '\n')
+            number = next(i for i, line in enumerate(changed.splitlines(), 1) if line.endswith(label))
+            with self.subTest(label=label), self.assertRaisesRegex(Invalid, f'第 {number} 行.*验证：自动.*checks.*coverage'):
+                designs.load(changed)
+        manual = value['sections'][3]['data']
+        manual.update(checks=[], verification={'method': 'manual', 'cases': [], 'substitutes': []})
+        raw = designs.render(value)
+        self.assertIn('- 验证：人工\n', raw)
+        self.assertEqual(designs.load(raw), value)
+        for field in ('用例 无', '替身 无'):
+            changed = raw.replace('- 验证：人工', '- 验证：人工；' + field)
+            number = next(i for i, line in enumerate(changed.splitlines(), 1) if line.endswith(field))
+            with self.subTest(field=field), self.assertRaisesRegex(Invalid, f'第 {number} 行.*人工'):
+                designs.load(changed)
+        manual['verification']['coverage'] = {}
+        with self.assertRaisesRegex(Invalid, 'coverage'):
+            designs.validate_design(value)
+
     def test_m1_roundtrip_all_fields_and_section_types(self):
         values = [example(level) for level in ('simple', 'medium', 'complex')]
         full = example()
@@ -56,7 +92,7 @@ class MarkdownDesignCases(unittest.TestCase):
                  raw.replace('depends=api-1', 'depends=missing'),
                  raw.replace('id=api-1 type=interface', 'id=second-global type=global-scope'),
                  raw.replace('- 角色：caller\n', ''),
-                 raw.replace('层级 journey', '层级 bad'),
+                 raw.replace('- 验证：自动', '- 验证：自动；层级 journey', 1),
                  '{}']
         for text in cases:
             with self.subTest(text=text[:100]), self.assertRaisesRegex(Invalid, r'第 \d+ 行'):

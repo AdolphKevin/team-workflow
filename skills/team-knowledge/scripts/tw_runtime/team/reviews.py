@@ -200,7 +200,7 @@ def snapshot(args, root, profile, task, draft_id, allow_incomplete=False):
         from commands import local
         bindings['approval_plan'] = review_history.approval_plan(
             design, [design_files.read(local(root, path)) for path in args.design_history])
-    from contracts import match_coverage
+    from contracts import execution_environment
     sections = {row['id']: row for row in design['sections']}
     for row in task['acceptance']:
         key = row['id']
@@ -210,10 +210,17 @@ def snapshot(args, root, profile, task, draft_id, allow_incomplete=False):
             **{name: execution['results'].get(check, {}).get(name) for name in ('status', 'cases', 'exit_code')}}
             for check in section['data']['checks']}}
         if requirement['method'] == 'manual':
-            value['manual'][key] = requirement['coverage']
+            value['manual'][key] = True
             continue
-        observations, evidence, lines = [], [], []
+        observations, evidence = [], []
+        lines = ['- ' + gap for gap in execution_environment(profile, {**task, 'acceptance': [row]}, design)]
+        if not requirement['cases']:
+            lines.append('- 未指明用例，证据为整项检查通过')
         for check in section['data']['checks']:
+            coverage = profile['checks'][check].get('coverage')
+            if coverage:
+                lines.append(f'- 检查 {check} 的覆盖声明：层级 {coverage["level"]}；入口 {"、".join(coverage["entrypoints"])}'
+                             f'；环境 {coverage["environment"]}；替身 {"、".join(coverage["substitutes"]) or "无"}；隔离 {coverage["isolation"]}')
             result = execution['results'].get(check)
             if result is None:
                 lines.append('- 检查 ' + check + '：没有对应的运行结果。')
@@ -245,11 +252,6 @@ def snapshot(args, root, profile, task, draft_id, allow_incomplete=False):
                 if item['path'].endswith('/stdout.txt'):
                     content = artifact_valid(root, item).read_text(errors='replace')
                     lines += ['  - 原始输出摘录：'] + ['    ' + line for line in content[:4000].splitlines()]
-            try:
-                match_coverage(requirement['coverage'], profile['checks'][check]['coverage'])
-            except Invalid:
-                lines.append('  - 此检查的覆盖范围不足以独立证明该验收项。')
-                continue
             observations.append({'kind': 'execution', 'run': ref, 'check': check, 'cases': cases})
             if ref not in evidence:
                 evidence.append(ref)
@@ -285,6 +287,7 @@ def render(value):
         lines += ['## 验收 ' + key]
         if key in value['automatic']:
             lines += [_protected('results-' + key, value['generated']['results-' + key])]
+            lines += [filled('验收 ' + key, '用例')]
         else:
             lines += ['本项要求人工观察；工具未代填操作或结果。']
         name = '验收 ' + key
@@ -419,6 +422,8 @@ def compile_review(root, value, sections):
         row.update(_conclusion(sections, name))
         if key in value['automatic']:
             row.update(copy.deepcopy(value['automatic'][key]))
+            row['cases'] = [part.strip().removeprefix('- ').strip() for part in
+                            re.split('[、\n]', _value(sections, name, '用例', False)) if part.strip()]
         else:
             name = '人工观察 ' + key
             data = {field: _value(sections, name, field) for field in ('观察人', '时间', '操作', '结果', '数据', '证据文件')}
@@ -432,7 +437,7 @@ def compile_review(root, value, sections):
             row['evidence'] = refs
             row['observations'] = [{'kind': 'manual', 'observer': data['观察人'], 'at': data['时间'],
                 'steps': [line.strip().removeprefix('- ').strip() for line in data['操作'].splitlines() if line.strip()],
-                'result': data['结果'] + '\n数据：' + data['数据'], 'coverage': value['manual'][key], 'evidence': refs}]
+                'result': data['结果'] + '\n数据：' + data['数据'], 'evidence': refs}]
         for ref in row['evidence']:
             if ref not in defaults:
                 defaults.append(ref)
@@ -576,6 +581,10 @@ def generate(args, root, profile, task, request):
         if previous:
             candidate.update(previous_review=previous['review'], previous_markdown=previous['markdown'],
                              previous_source=previous.get('source'))
+        for key in candidate['automatic']:
+            if candidate.get('prefill', {}).get('验收 ' + key, {}).get('用例', '').strip():
+                name = 'results-' + key
+                candidate['generated'][name] = candidate['generated'][name].replace('- 未指明用例，证据为整项检查通过\n', '')
         draft_id = candidate['bindings']['draft_id']
         raw = render(candidate)
         candidate['template_sha256'] = hashlib.sha256(raw.encode('utf-8')).hexdigest()

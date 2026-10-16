@@ -76,7 +76,10 @@ def source(root, reference):
         raw = result.stdout.decode('utf-8')
     except UnicodeError as exc:
         raise Invalid('方案原文必须是 UTF-8 Markdown') from exc
-    design = designs.load(raw)
+    try:
+        design = designs.load(raw)
+    except Invalid as exc:
+        raise Invalid(str(exc) + '；已发布方案不可读，请用 design-draft --reconcile "<原因>" 发布对账记录，从第 1 版重新开始并重新批准') from exc
     require(design['id'] == reference['id'] and design['revision'] == reference['revision'], '方案引用身份或版本与原文不同')
     return design, raw
 
@@ -106,13 +109,29 @@ def publication(root, path, design):
     raw = result.stdout.decode('utf-8')
     reference = {'id': design['id'], 'revision': design['revision'], 'repository': repository_id(checkout),
                  'path': name, 'commit': revision, 'sha256': hashlib.sha256(result.stdout).hexdigest()}
-    return reference, display(raw, design, reference)
+    return reference, display(raw, design, reference, root=root)
 
 
 COMPLEXITY = {'simple': '简单', 'medium': '中等', 'complex': '复杂'}
 
 
-def display(raw, design, reference):
+def check_table(design, checks):
+    """Only declarations for referenced checks belong in the readable design display."""
+    from design_markdown import table
+    names = dict.fromkeys(key for row in design['sections'] if row['type'] == 'acceptance'
+                          for key in row['data']['checks'])
+    rows = []
+    for key in names:
+        if key not in checks:
+            continue
+        coverage = checks[key].get('coverage', {})
+        rows.append([key, coverage.get('level', '未声明'), '、'.join(coverage.get('entrypoints', [])) or '未声明',
+                     coverage.get('environment', '未声明'), '、'.join(coverage.get('substitutes', [])) or '无',
+                     coverage.get('isolation', '未声明')])
+    return ('## 本方案引用的检查\n\n' + table(('检查', '层级', '入口', '环境', '替身', '隔离'), rows) + '\n') if rows else ''
+
+
+def display(raw, design, reference, *, root):
     """The pull request shows the original body; front matter data becomes readable lines, never JSON."""
     body = raw.split('\n---\n', 1)[1].lstrip('\n') if raw.startswith('---\n') else raw
     assessment, roles = design['assessment'], design['roles']
@@ -125,4 +144,12 @@ def display(raw, design, reference):
         f"> 方案负责人：{roles['design_owner']} · 实施负责人：{roles['implementation_owner'] or '待定'}"
         f" · 验收负责人：{roles['acceptance_owner']}",
     ]
-    return '\n'.join(header) + '\n\n' + body
+    result = _git(_checkout(root, reference['repository']), 'show', reference['commit'] + ':.tw/config.json')
+    appendix = ''
+    if result.returncode == 0:
+        try:
+            checks = json.loads(result.stdout).get('checks', {})
+            appendix = check_table(design, checks)
+        except (ValueError, AttributeError, TypeError):
+            pass  # An absent or unreadable declaration supplies no display metadata.
+    return '\n'.join(header) + '\n\n' + body + ('\n' + appendix if appendix else '')

@@ -88,8 +88,8 @@ class MarkdownReadabilityCases(unittest.TestCase):
                 value = example()
                 data = value['sections'][3]['data']
                 data['scenario']['steps'] = values
-                data['verification']['coverage']['entrypoints'] = values
-                data['verification']['coverage']['environment'] = '；环境 "值"'
+                data['verification']['cases'] = values
+                data['verification']['substitutes'] = ['；替身 "值"']
                 self.assertEqual(designs.load(designs.render(value)), value)
 
     def test_r2_multiple_sources_keep_quoted_record_separators(self):
@@ -103,17 +103,17 @@ class MarkdownReadabilityCases(unittest.TestCase):
         value = example()
         data = value['sections'][3]['data']
         data['scenario']['sources'] = [{'ref': 'docs/"quoted".md', 'version': 'v[2]', 'confirmed_by': '用户 "甲"'}]
-        data['verification']['coverage']['environment'] = 'env [x] "value"'
+        data['verification']['substitutes'] = ['fixture [x] "value"']
         raw = designs.render(value)
         self.assertIn('- 依据：位置 docs/"quoted".md；版本 v[2]；确认人 用户 "甲"\n', raw)
-        self.assertIn('；环境 env [x] "value"；替身', raw)
+        self.assertIn('；替身 fixture [x] "value"\n', raw)
         self.assertEqual(designs.load(raw), value)
         data['scenario']['sources'][0].update(ref='"字面引号"', version='&amp;', confirmed_by='甲；乙 / 丙')
-        data['verification']['coverage']['environment'] = '"字面引号"'
+        data['verification']['substitutes'] = ['"字面引号"']
         self.assertEqual(designs.load(designs.render(value)), value)
 
     def test_r2_prose_commas_cannot_start_list_quotes(self):
-        for kind in ('sources', 'environment', 'lists'):
+        for kind in ('sources', 'substitutes', 'lists'):
             with self.subTest(kind=kind):
                 value = example()
                 data = value['sections'][3]['data']
@@ -121,12 +121,11 @@ class MarkdownReadabilityCases(unittest.TestCase):
                     data['scenario']['sources'] = [{'ref': 'a、"unclosed', 'version': '；start', 'confirmed_by': 'user'}]
                 elif kind == 'lists':
                     rows = ['"unclosed', '；start', '["x"]', 'first；second']
-                    data['verification']['coverage']['entrypoints'] = rows
-                    data['verification']['coverage']['environment'] = rows[0]
-                    data['verification']['coverage']['substitutes'] = rows[1:]
+                    data['verification']['cases'] = rows
+                    data['verification']['substitutes'] = rows[1:]
                 else:
-                    data['verification']['coverage']['environment'] = 'a、"unclosed'
-                    data['verification']['coverage']['substitutes'] = ['；start']
+                    data['verification']['cases'] = ['a、"unclosed']
+                    data['verification']['substitutes'] = ['；start']
                 self.assertEqual(designs.load(designs.render(value)), value)
 
     def test_r2_special_values_and_nested_lists_roundtrip(self):
@@ -134,7 +133,7 @@ class MarkdownReadabilityCases(unittest.TestCase):
         data = value['sections'][3]['data']
         data['scenario']['actor'] = '第一行\n第二行 &amp; "引号"；原样'
         data['scenario']['steps'] = ['无', '["literal"]', '"literal"', ' ]first ', '&amp;', 'line\nbreak', 'a"b', ']first']
-        data['verification']['coverage']['entrypoints'] = ['call；then', 'api、v2', 'call [x]']
+        data['verification']['substitutes'] = ['call；then', 'api、v2', 'call [x]']
         self.assertEqual(designs.load(designs.render(value)), value)
 
 

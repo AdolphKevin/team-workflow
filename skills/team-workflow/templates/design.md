@@ -27,7 +27,7 @@ __REPLACE__
 - 反例：__REPLACE__
 - 依据：位置 __REPLACE__；版本 __REPLACE__；确认人 __REPLACE__
 - 检查：__REPLACE__
-- 验证：自动；层级 journey；入口 __REPLACE__；环境 __REPLACE__；替身 无；隔离 unresolved；隔离依据 无；用例 无
+- 验证：自动
 
 ## 实施任务
 <!-- tw-section id=T1 type=task -->

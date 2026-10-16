@@ -31,12 +31,16 @@ def readable(result):
         lines.append('提示：' + str(warning))
     for gap in result.get('gaps', []):
         lines.append('- ' + str(gap))
+    if result.get('verification_gaps'):
+        lines += ['', '验收无法满足：'] + ['- ' + gap for gap in result['verification_gaps']] + ['']
     for key in ('artifact', 'task', 'design', 'brief'):
         item = result.get(key)
         if isinstance(item, dict) and item.get('path'):
             lines.append(key + ': ' + item['path'])
     if result.get('pr_description') is not None:
         lines += ['--- PR 描述草稿 ---', result['pr_description']]
+    if result.get('checks_markdown'):
+        lines += ['', result['checks_markdown']]
     if result.get('markdown'):
         lines += ['--- 发布评论草稿 ---', result['markdown']]
     if result.get('summary_markdown'):
@@ -304,6 +308,9 @@ def dispatch(args, root):
                           'reason': args.reason,
                           'allow_modified_tool': args.allow_modified_tool,
                           'grant': args.grant, 'confirmed_by': args.confirmed_by}}
+    if args.reconcile is not None:
+        inputs['options']['reconcile'] = args.reconcile
+        inputs['reconciliation_history'] = platform['history_digest'] if platform else None
     if args.command == 'review':
         import reviews
         require(not args.file or args.submit, '--file 仅用于 review --submit')
@@ -389,6 +396,14 @@ def missing_task_block(args, exc):
 
 
 def produce(args, root, profile, task, platform, request):
+    def verification_report(value, design):
+        from contracts import execution_environment
+        gaps = execution_environment(profile, task, design)
+        value['verification_gaps'] = gaps
+        if gaps:
+            value['next_action'] = gaps[0] + ('；' + value['next_action'] if value.get('next_action') else '')
+        return value
+
     def emit(value, name):
         return {'ok': value.get('ok', True), 'artifact': request.publish(name, value, args.out),
                 **{k: value[k] for k in ('summary', 'gaps', 'problem', 'next_action', 'implementation_ready',
@@ -441,6 +456,7 @@ def produce(args, root, profile, task, platform, request):
             if progress['finished']:
                 value['summary'] = '已交付；关闭需要授权，工具不执行关闭'
         value['warnings'] = platform.get('warnings', []) if platform else []
+        verification_report(value, selection['design'])
         return {**value, 'artifact': request.publish('start.json', value, args.out)}
     if args.command == 'task-export':
         return {**emit(task, 'task.json'), 'summary': '仅导出任务；实施和交付条件尚未核对。', 'implementation_ready': False, 'business_accepted': False}
@@ -458,9 +474,7 @@ def produce(args, root, profile, task, platform, request):
                     code_digest=validation.source_digest(root, profile), run_refs=[])
         paths = knowledge.query_paths(root, task, design, args.path)
         brief = knowledge.brief(root, task, paths, args.symbol)
-        from contracts import execution_environment
         from validation_session import active
-        environment_gaps = execution_environment(profile, task, design)
         running = active(root)
         from common import rules_digest
         login = selection['login']
@@ -473,7 +487,7 @@ def produce(args, root, profile, task, platform, request):
                    'dependencies': selection['dependencies'],
                    'preparation_inputs': selection['signature'],
                    'implementation_ready': readiness['implementation_ready'] and not running,
-                   'validation_active': running, 'verification_gaps': environment_gaps,
+                   'validation_active': running,
                    'rules_digest': rules_digest(), 'login_policy': login['policy'],
                    'authorizations': login['granted'], 'authorizations_needed': login['needed'],
                    'ok': not platform or not platform['gaps'], 'gaps': platform['gaps'] if platform else [],
@@ -484,6 +498,7 @@ def produce(args, root, profile, task, platform, request):
                                   + ('Implement within the approved scope.' if readiness['implementation_ready'] and not running
                                      else 'Obtain confirmation for the named plan sections.'),
                    'knowledge_claim': 'captured for reading; not evidence that knowledge was used'}
+        verification_report(context, design)
         result = {**emit(context, 'context.json'), **{k: context[k] for k in ('task', 'design', 'brief')},
                   'continued': False, 'task_id': task['id'], 'warnings': context['warnings'],
                   'task_directory': request.directory.parent.parent.relative_to(root).as_posix()}
@@ -504,7 +519,8 @@ def produce(args, root, profile, task, platform, request):
             design = design_files.read(local(root, args.design or args.record))
             coordination.validate_task_design(task, design)
             if args.command == 'design-draft':
-                return emit(design, 'design.json')
+                return verification_report({**emit(design, 'design.json'),
+                    'checks_markdown': design_files.check_table(design, profile['checks'])}, design)
             supplied = approval_input(args, root)
             require(isinstance(supplied, dict) and 'reviewer' in supplied, 'Approval input must name the reviewer')
             allowed = {'reviewer', 'confirmation', 'decision', 'section_ids', 'deletion_ids', 'mode', 'revision'}
@@ -515,13 +531,17 @@ def produce(args, root, profile, task, platform, request):
             binding = {'code_digest': validation.source_digest(root, profile),
                        'run_refs': [artifact(root, local(root, p)) for p in args.run]} if mode == 'combined' else {}
             result = designs.approval_draft(design, history=history, mode=mode, **binding, **supplied)
-            return emit(result, 'approval.json')
+            return verification_report(emit(result, 'approval.json'), design)
         require(args.issue == task['id'], 'Shared draft requires its canonical --issue')
+        resolution = ({'history_digest': platform['history_digest'], 'reason': args.reconcile}
+                      if args.reconcile is not None else None)
         if args.command == 'design-draft':
             result = coordination.draft_design(args.issue, design_files.read(local(root, args.record or args.design)),
-                                               path=local(root, args.record or args.design), root=root)
+                                               resolution=resolution, path=local(root, args.record or args.design), root=root)
         elif args.command == 'approval-draft':
             supplied = approval_input(args, root)
+            if resolution is not None:
+                supplied['resolution'] = resolution
             if not args.record:
                 import designs
                 assessments = designs.task_assessments(platform['design'], task['section_ids'])
@@ -536,6 +556,10 @@ def produce(args, root, profile, task, platform, request):
             completed, _ = predecessor_checks(args, root, profile, task, platform['design'])
             result = coordination.draft(root, profile, args.issue, read(local(root, args.progress)),
                                         args.kind, completed_tasks=completed)
+        if args.command in ('design-draft', 'approval-draft'):
+            design = (design_files.read(local(root, args.record or args.design))
+                      if args.command == 'design-draft' else platform['design'])
+            verification_report(result, design)
         return emit(result, args.command + '.json')
     if args.command == 'design-diff':
         import designs

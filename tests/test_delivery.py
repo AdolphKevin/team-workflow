@@ -297,7 +297,7 @@ class DeliveryCases(unittest.TestCase):
         self.task['kind'] = 'docs'
         self.task['acceptance'][0]['checks'] = []
         self.design['sections'][1]['data']['checks'] = []
-        self.design['sections'][1]['data']['verification'] = {'method': 'manual', 'coverage': plans.coverage('manual'), 'cases': []}
+        self.design['sections'][1]['data']['verification'] = {'method': 'manual', 'substitutes': [], 'cases': []}
         self.write('design', self.design)
         self.write('brief', knowledge.brief(self.root, self.task, [], []))
         self.report['runs'] = []
@@ -309,7 +309,7 @@ class DeliveryCases(unittest.TestCase):
         review.update(reviewer='carol', knowledge_conflicts_resolved=True)
         for axis in ('standards', 'spec'):
             review[axis] = {'status': 'passed', 'summary': 'Read actual content against the requirement', 'evidence': [ref]}
-        review['acceptance'] = [{'id': 'A1', 'status': 'passed', 'summary': 'Content requirement inspected', 'evidence': [ref], 'observations': [{'kind': 'manual', 'observer': observer, 'at': '2026-01-01T00:00:00+00:00', 'steps': ['Read content against the requirement'], 'result': 'Required content present', 'coverage': plans.coverage('manual'), 'evidence': [ref]}]}]
+        review['acceptance'] = [{'id': 'A1', 'status': 'passed', 'summary': 'Content requirement inspected', 'evidence': [ref], 'observations': [{'kind': 'manual', 'observer': observer, 'at': '2026-01-01T00:00:00+00:00', 'steps': ['Read content against the requirement'], 'result': 'Required content present', 'evidence': [ref]}]}]
         self.write('review', review)
 
     def test_document_only_acceptance_does_not_invent_execution(self):

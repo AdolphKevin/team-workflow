@@ -69,7 +69,7 @@ class BusinessEvidence(unittest.TestCase):
         self.setup_task()
         self.profile['checks']['unit']['coverage']['level'] = 'unit'
         self.refresh()
-        with self.assertRaisesRegex(Invalid, 'Verification level'):
+        with self.assertRaisesRegex(Invalid, 'journey'):
             self.verify()
 
     def test_fresh_business_entry_catches_missing_creation_despite_seeded_test_success(self):
@@ -98,7 +98,6 @@ class BusinessEvidence(unittest.TestCase):
             'steps': ['Install through the public CLI', 'Send the first message'],
             'expected': 'Message accepted after installation', 'negative_cases': ['A missing channel prevents accepting the message'],
             'sources': plans.sources()}
-        self.design['sections'][1]['data']['verification']['coverage'] = journey['coverage']
         self.design['sections'][1]['data']['checks'] = ['journey']
         self.refresh()
         first = read(self.root / self.runs[0])
@@ -118,9 +117,33 @@ class BusinessEvidence(unittest.TestCase):
     def test_repository_entry_cannot_certify_the_public_entry(self):
         self.setup_task()
         self.profile['checks']['unit']['coverage']['entrypoints'] = ['repository.add']
+        self.profile['checks']['unit']['coverage']['level'] = 'interface'
         self.refresh()
-        with self.assertRaisesRegex(Invalid, 'entrypoint'):
+        with self.assertRaisesRegex(Invalid, 'journey'):
             self.verify()
+
+    def test_allowed_substitutes_accept_different_entry_and_environment(self):
+        self.setup_task()
+        self.profile['checks']['unit']['coverage'].update(
+            entrypoints=['repository.add'], environment='another fixture', substitutes=['database fixture'])
+        self.design['sections'][1]['data']['verification']['substitutes'] = ['database fixture']
+        self.refresh()
+        self.assertTrue(self.verify()['business_accepted'])
+
+    def test_one_journey_check_suffices_and_unobserved_checks_still_need_allowed_substitutes(self):
+        self.setup_task(extra_check=True)
+        self.design['sections'][1]['data']['checks'] = ['unit', 'safety']
+        self.task['acceptance'][0]['checks'] = ['unit', 'safety']
+        self.profile['checks']['unit']['coverage']['level'] = 'unit'
+        self.refresh()
+        self.assertTrue(self.verify()['business_accepted'])
+        self.profile['checks']['safety']['coverage']['substitutes'] = ['notification recorder']
+        self.refresh()
+        with self.assertRaisesRegex(Invalid, 'substituted'):
+            self.verify()
+        self.design['sections'][1]['data']['verification']['substitutes'] = ['notification recorder']
+        self.refresh()
+        self.assertTrue(self.verify()['business_accepted'])
 
     def test_recorded_notification_cannot_certify_real_delivery(self):
         self.setup_task()
@@ -145,7 +168,7 @@ class BusinessEvidence(unittest.TestCase):
         self.setup_task()
         self.design['sections'][1]['data']['verification']['cases'] = ['sample::TestFreshStart']
         self.refresh()
-        with self.assertRaisesRegex(Invalid, 'required observed cases'):
+        with self.assertRaisesRegex(Invalid, '用例不存在或未通过：sample::TestFreshStart'):
             self.verify()
         review = read(self.root / self.name('review'))
         review['acceptance'][0]['observations'][0]['cases'] = ['sample::TestFreshStart']

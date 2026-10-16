@@ -260,15 +260,19 @@ def _read(issue, root=None):
                     text(resolution['reason'])
                     require(resolution['history_digest'] == digest(seen) and row['previous'] is None,
                             'Resolution no longer covers the preceding history')
-                    problems[name] = []
                 else:
                     require(row['previous'] == _pointer(latest), 'Missing or edited predecessor; reconcile explicitly')
-                if name == 'design' and latest:
+                if name == 'design' and latest and not resolution:
                     old, current = latest['record']['design'], row['design']
                     require(current['id'] == old['id'] and current['revision'] == old['revision'] + 1,
                             'Design revisions must advance by one without changing identity')
                 elif name == 'design':
                     require(row['design']['revision'] == 1, 'Design history must begin with revision 1')
+                if resolution:
+                    problems[name] = []
+                    if name == 'design':
+                        rows['design'], rows['approval'] = [], []
+                        problems['approval'] = []
                 rows[name].append({'url': comment['url'], 'digest': record_digest, 'record': row,
                                    'recorded_by': comment.get('author'),
                                    **({'source': source_reference, 'markdown': source_markdown} if name == 'design' else {})})
@@ -329,7 +333,8 @@ def load(url, issue=None, root=None):
                     if item.get('kind') == 'change']
     warnings = (['变更请求描述与最新发布的方案原文不一致，请更新展示内容。']
                 if latest and descriptions and descriptions[-1].get('body', '')
-                != design_files.display(latest['markdown'], latest['record']['design'], latest['source']) else [])
+                != design_files.display(latest['markdown'], latest['record']['design'], latest['source'],
+                                        root=platform_read.project_root(root)) else [])
     return {'data_version': 1, 'kind': 'platform-task', 'ok': not gaps, 'issue': url,
             'assurance': 'continuation-only', 'delivery': 'not-evaluated',
             'known_issues': list(known.values()), 'warnings': warnings,
@@ -392,7 +397,7 @@ def draft_design(url, design, resolution=None, issue=None, *, path=None, root=No
     require(not state['design'] or state['design_issue'] == url,
             'Update the shared design on its own task issue')
     validate_task_design(state['task'], design)
-    prior = state['design']
+    prior = None if resolution else state['design']
     require(design['revision'] == (prior['revision'] + 1 if prior else 1), 'Design revisions must advance by one')
     require(not prior or prior['id'] == design['id'], 'Cannot change a design identity')
     row = {'data_version': 1, 'kind': 'design-record', 'task': url,
@@ -404,7 +409,7 @@ def draft_design(url, design, resolution=None, issue=None, *, path=None, root=No
         text(resolution.get('reason'))
         row.update(resolution=resolution, previous=None)
     require(not any('Invalid design ' in gap for gap in state['gaps']) or resolution,
-            'Read all design branches and provide an explicit resolution')
+            '方案历史有缺口；请核对全部方案分支，用 design-draft --reconcile "<原因>" 发布对账记录')
     return {**_draft_result('design', url, row), 'pr_description': markdown}
 
 

@@ -24,7 +24,7 @@ def plan(value):
         row['data'].setdefault('scenario', {'actor': 'caller', 'initial_state': 'Fresh process',
             'steps': ['Call the public function with 1 and 2'], 'expected': row['body'],
             'negative_cases': ['Incorrect sums are rejected by the assertion'], 'sources': sources()})
-        row['data'].setdefault('verification', {'method': 'automatic', 'coverage': coverage(), 'cases': []})
+        row['data'].setdefault('verification', {'method': 'automatic', 'cases': [], 'substitutes': []})
     return value
 
 

@@ -190,7 +190,7 @@ tw team review --root "$PROJECT" --task "$TASK_ID" --from-platform
 Markdown 姓名不能是实施负责人；以后复用也核对平台作者和已存原文。正文与评论中的讨论
 不能替代 `review` 条目。平台上的合并批准选择经原文核对后可作为已共享批准。
 
-任务目录的 `review.md` 是可编辑表，绑定未变的未提交文件只报告路径和填写进度。评审人实际阅读代码、需求与原始结果，填写评审人、知识冲突是否已处理（是/否）、规范与需求及各验收项的结论（通过/不通过）和理由。各轴及验收项可补充证据文件，每行一个项目内路径；工具计算指纹，自动验收的运行、检查、用例引用无需手写。人工观察的观察人、带时区的时间、操作、结果、数据及证据文件全部由人填写。只引用源码不能证明执行已通过。
+`review.md` 是可编辑表；绑定未变的工作稿保留并报告填写进度。评审人核对代码、需求和原始结果，填写姓名、知识冲突处置（是/否）、各轴及验收的结论（通过/不通过）和理由。可补证据，每行一个仓内路径，工具计算指纹及运行引用。自动验收的“用例”可选，每行一个或用 `、` 分隔；方案与评审均未写时，评审稿及收尾注明“未指明用例，证据为整项检查通过”。人工观察各字段由人填写，源码引用不能证明执行。
 
 绑定区使用隐藏的 `tw-record` HTML 注释，包含任务、任务与源码指纹、校验策略、章节和运行；它与工具填写的结果、风险列表及变化说明均不可改动。提交只检查格式完整和绑定有效，拒绝时指出行号或小节；“不通过”、知识冲突未处理或含 open 阻塞问题的完整评审仍保存。独立性、实际检查与通过条件由 accept/deliver 核查，不因此放宽。成功后原文 `review.md`、现有格式的 `review.json` 与 `review-source.json` 保存到本次请求目录，登记为当前评审。下一条命令为 `deliver --task <身份> --reason <理由>`；需要更新知识则先 `accept --task <身份>`，写知识后再交付。清理保留引用的原文、JSON、源码指纹、运行和任务目录的未提交表。
 
@@ -390,8 +390,8 @@ tw team metrics --root "$PROJECT" [--task "$TASK"] [--since 2026-10-01] [--forma
 
 ## 业务场景与证据
 
-方案仍用稳定编号分节。`scope-global.data.requirement_acceptance` 是非空的主需求验收编号；
-其验证层次为完整业务路径或人工观察。`scope-global.data.impact` 每项包含 `repository`、
+`scope-global.data.requirement_acceptance` 列非空的主需求验收编号，验证完整业务路径或人工观察。
+`scope-global.data.impact` 每项含 `repository`、
 `entrypoint`、`operations`、`producer`、`consumer`、`commit_owner` 和 `acceptance` 编号列表。
 主需求任务必须覆盖所列验收；子任务通过只返回 `acceptance_scope: task`。
 
@@ -402,26 +402,25 @@ tw team metrics --root "$PROJECT" [--task "$TASK"] [--since 2026-10-01] [--forma
   的位置、版本和确认人。方案历史中的早期修订可以没有该字段；`start` 在 `verification_gaps`
   中列出缺少来源的验收项，`accept` 和 `verify` 拒绝本任务任一验收项缺少来源。工具只核对字段齐全，不判断来源是否
   真实、是否独立于实现；补充来源会改变方案指纹，需要重新批准。
-- `verification`：`method` 为 `automatic` 或 `manual`，`coverage` 说明实际范围，`cases`
-  列出必须在原始运行中通过的准确用例编号。普通命令不能编造用例编号。
+- `verification`：`{method,cases,substitutes}`，方式为 `automatic` 或 `manual`；后两项默认
+  空数组。人工验证均留空。自动验证的 `cases` 是原始报告中的准确编号，`substitutes` 是允许的替代依赖。
 
-方案与检查配置中的 `coverage` 使用相同字段：`level` 为 `unit`、`interface`、`journey` 或
-`manual`；`entrypoints` 为非空入口列表，`environment` 为具体环境名称，`substitutes` 列出
-替代依赖。`isolation` 为 `isolated`、`shared-reviewed` 或 `unresolved`，`isolation_evidence`
-记录隔离依据；共享资源必须有依据，未解决的隔离禁止执行相应检查。它补充已有环境身份
-命令，不替代实际身份核对。自动证据可以覆盖同级或更完整的层次，但入口与环境必须匹配，
-实际替代依赖不能超出方案声明。覆盖声明本身仍需评审实际测试代码与报告。
+覆盖只写在 `.tw/config.json` 的 `checks.<编号>.coverage`：`level` 为 `unit/interface/journey/manual`；
+`entrypoints` 非空，`environment` 是环境名，`substitutes` 列替代依赖；`isolation` 为
+`isolated/shared-reviewed/unresolved`。共享须有 `isolation_evidence`；未解决时禁止执行对应检查，环境身份仍单独核对。
+业务验收核对检查全通过、隔离已解决、替身获准、方案及评审的用例均通过；需求级自动验收至少一项
+journey 检查。入口、环境及验收层级不作逐字比对，声明仍需独立评审。
+`design-draft/approval-draft/start` 在 `verification_gaps` 给改法，文字标题“验收无法满足”；
+只提示，不改 `ok`、`implementation_ready` 或 `gaps`。
 
-下述是工具生成的评审 JSON，评审人无需手写。每个验收项有非空 `observations`：自动观察为
-`{kind:"execution",run:{path,sha256},check:"检查编号",cases:["实际用例编号"]}`，其中运行必须
-已经列入本任务的 `runs`，且正是该检查选中的有效记录，并通过原始报告核对；不能引用失败或已被替代的记录来
-借用另一记录的通过结果。人工观察为
-`{kind:"manual",observer,at,steps,result,coverage,evidence:[{path,sha256}]}`，时间含时区，
-步骤和证据非空；Markdown 中的“结果”和“数据”一起保存到 `result`，保持原 JSON 格式。纯文档可使用人工观察，不能把只有源码链接的描述当成已经运行。
+评审 JSON 由工具生成，每项须有非空 `observations`。自动观察为
+`{kind:"execution",run:{path,sha256},check:"检查编号",cases:["实际用例编号"]}`；运行须在本任务
+`runs` 中，且为该检查选中的有效记录，经原始报告核对，不能借用其他运行的结果。人工观察为
+`{kind:"manual",observer,at,steps,result,evidence:[{path,sha256}]}`，时间含时区，
+步骤和证据非空；Markdown 的“结果”和“数据”合存到 `result`。纯文档可人工观察，源码链接不算运行证据。
 
-评审的 `reviewer` 和每个人工观察的 `observer` 在业务验收时不能与方案 `roles.implementation_owner` 相同，
-比较时忽略大小写和多余空格；实施者为空时不能验收。工具只比较记录的身份，无法证明两个不同
-名称属于不同的人或会话，团队应为成员和代理使用稳定、可区分的身份名称。
+业务验收时，`reviewer` 与人工 `observer` 均须独立于 `roles.implementation_owner`，比较忽略
+大小写及多余空格；实施者为空则拒绝。工具只核对姓名，成员和代理应使用稳定、可区分的身份。
 
 ## 问题处置与交接
 

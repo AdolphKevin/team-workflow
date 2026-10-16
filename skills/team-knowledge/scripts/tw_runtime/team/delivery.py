@@ -122,6 +122,7 @@ def check_review_format(root, profile, task, review, selected, design):
     reconcile(issue_history.known(root, task['id']), review.get('findings', []))
     assessed = set()
     for row in review.get('acceptance', []):
+        strings(row.get('cases', []))
         require(row.get('status') in ('passed', 'failed'), 'Acceptance conclusion must be passed or failed')
         text(row.get('summary'))
         require(row['id'] not in assessed and bool(row.get('evidence')), 'Duplicate acceptance or missing evidence')
@@ -267,6 +268,9 @@ def verify(root, profile, task, report, phase='delivery', _seen=None, live=None)
               'scope': 'business-acceptance' if phase == 'acceptance' else 'team-delivery',
               'acceptance_scope': task['acceptance_scope'], 'report': dict(report), 'issues': review['findings'],
               'observations': {r['id']: r['observations'] for r in review['acceptance']},
+              'unspecified_cases': [r['id'] for r in review['acceptance'] if not r.get('cases')
+                                    and any(s['id'] == r['id'] and s['data']['verification']['method'] == 'automatic'
+                                            and not s['data']['verification']['cases'] for s in design['sections'])],
               'business_accepted': True, 'delivery_complete': False, 'closable': False,
               'reused_execution': reused, 'automation_status': regression, 'tool': tool,
               'superseded_execution': execution['superseded'],
@@ -366,6 +370,16 @@ def check_observations(root, profile, design, row, execution, run_paths):
     observations = row.get('observations')
     require(isinstance(observations, list) and bool(observations), 'Acceptance needs actual execution or manual observations')
     cases = set()
+    if requirement['method'] == 'automatic':
+        checks = section['data']['checks']
+        for key in checks:
+            require(execution['results'].get(key, {}).get('status') == 'passed', 'Check did not pass: ' + key)
+            require('coverage' in profile['checks'][key], '检查缺少覆盖声明：' + key)
+            match_coverage(requirement, profile['checks'][key]['coverage'])
+        scope = next(s['data'] for s in design['sections'] if s['id'] == 'scope-global')
+        if row['id'] in scope['requirement_acceptance']:
+            require(any(profile['checks'][key]['coverage']['level'] == 'journey' for key in checks),
+                    '需求级验收 ' + row['id'] + ' 至少需要一项 journey 层级检查，或改为人工验收')
     for observation in observations:
         if requirement['method'] == 'automatic':
             obj(observation, {'kind', 'run', 'check', 'cases'})
@@ -381,13 +395,12 @@ def check_observations(root, profile, design, row, execution, run_paths):
             identifiers = [r['id'] for r in record.get('results', [])] if record['kind'] == 'execution' else [record['result']['id']]
             require(key in identifiers, 'Observation check belongs to another run')
             result = execution['results'][key]
-            match_coverage(requirement['coverage'], profile['checks'][key]['coverage'])
             strings(observation['cases'])
-            require(all(result.get('cases', {}).get(c) == 'passed' for c in observation['cases']),
-                    'Observed case is missing, failed or skipped')
-            cases.update(observation['cases'])
+            for case in observation['cases']:
+                require(result.get('cases', {}).get(case) == 'passed', 'Observed case is missing, failed or skipped: ' + case)
+            cases.update(case for case, outcome in result.get('cases', {}).items() if outcome == 'passed')
         else:
-            obj(observation, {'kind', 'observer', 'at', 'steps', 'result', 'coverage', 'evidence'})
+            obj(observation, {'kind', 'observer', 'at', 'steps', 'result', 'evidence'})
             require(observation['kind'] == 'manual', 'Manual acceptance needs actual observations')
             from contracts import independent
             independent(design, observation['observer'], 'Manual observer')
@@ -397,8 +410,8 @@ def check_observations(root, profile, design, row, execution, run_paths):
             from datetime import timezone
             require(observed_at <= datetime.now(timezone.utc), 'Observation cannot be dated in the future')
             strings(observation['steps'], True)
-            match_coverage(requirement['coverage'], observation['coverage'])
             require(bool(observation['evidence']), 'Manual observation needs captured evidence')
             for ref in observation['evidence']:
                 evidence(root, profile, ref)
-    require(set(requirement['cases']) <= cases, 'Acceptance lacks required observed cases')
+    for case in sorted(set(requirement['cases']) | set(row.get('cases', []))):
+        require(case in cases, '验收 ' + row['id'] + ' 用例不存在或未通过：' + case)
