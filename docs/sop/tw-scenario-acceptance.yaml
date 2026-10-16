@@ -2,11 +2,12 @@
 # 格式见 docs/proposals/2026-10-16-scenario-acceptance-and-positive-text.md 第 2.1 节。
 # 预期结果只依据已批准方案（含 2.3 的产品指纹补充）与 D1–D8，不依据当前实现的输出。
 # 版本 1（2026-10-17）：AdolphKevin 2026-10-17 确认。
+# 版本 2（2026-10-17）：按第 1 轮的场景问题改正 SOP-07-P01、SOP-03-P01、SOP-05-N01 的写法；SOP-01-N02、SOP-05-N02、SOP-05-P03 补充修正后的预期；新增 SOP-05-P04、SOP-06-P02、SOP-07 的三条 skill 场景与 SOP-08 任务阶段；AdolphKevin 2026-10-17 确认。
 
 metadata:
   requirement: "场景化黑盒验收：场景文件、用例导入与覆盖、增量黑盒执行、按场景验收与回归状态；指令文本每个概念一处定义"
   batch: "tw-scenario-acceptance"
-  version: 1
+  version: 2
   owner: "AdolphKevin"
   sources:
     - ref: "docs/proposals/2026-10-16-scenario-acceptance-and-positive-text.md 第 2、3 节与 D1–D8"
@@ -65,7 +66,7 @@ sops:
         verify: cli
         initial_state: ["同 SOP-01-P01，把一条场景的 verify 改为未在 acceptance_entries 声明的名字"]
         steps: ["运行 tw team scenarios check <场景文件>"]
-        expected: ["退出码非 0，指出该场景的 verify 与行号"]
+        expected: ["退出码非 0，指出该场景的编号、verify 当前取值与行号"]
         forbidden_effects: []
         evidence_hints: ["完整输出"]
 
@@ -185,7 +186,7 @@ sops:
         initial_state: ["已 start、已 run 的任务，方案引用 4 条场景", "结果文件与证据放在仓库外"]
         steps: ["运行 scenarios pending", "提交 3 条 pass、1 条 fail 的结果，每条带证据"]
         expected: ["清单列出 4 条，原因均为新增", "提交后一次通过率为 3/4，清单只剩失败的那条"]
-        forbidden_effects: ["项目目录中出现新文件"]
+        forbidden_effects: ["项目目录中 .tw/local/ 之外出现新文件，或 git status 发生变化"]
         evidence_hints: ["两次输出", "轮次记录与复制的证据"]
 
       - id: SOP-03-N01
@@ -344,8 +345,8 @@ sops:
         priority: P0
         refs: ["2.4", "E-A5"]
         verify: cli
-        initial_state: ["一条场景最近结果为 fail，评审已提交"]
-        steps: ["运行 tw team deliver"]
+        initial_state: ["一条场景最近结果为 fail"]
+        steps: ["用 tw team review 生成评审稿，由独立评审人填写并提交", "运行 tw team deliver"]
         expected: ["停在业务验收，点名该场景及其状态，下一步指向场景清单"]
         forbidden_effects: ["生成通过的业务验收记录"]
         evidence_hints: ["输出"]
@@ -360,7 +361,7 @@ sops:
         verify: cli
         initial_state: ["一条场景以 blocked 提交，结果带 finding 问题编号"]
         steps: ["生成评审稿", "评审人只填写该问题的状态与处置，设为 deferred 并写确认人、跟进任务和范围调整", "提交评审并运行 deliver"]
-        expected: ["评审稿中预填同编号问题，负责人为验收负责人，影响范围为引用该场景的验收项", "业务验收通过"]
+        expected: ["评审稿中预填同编号问题，负责人为验收负责人，影响范围为引用该场景的验收项", "业务验收通过", "交付摘要把该受阻场景与问题编号列在未验证范围下"]
         forbidden_effects: []
         evidence_hints: ["review.md 的问题小节", "deliver 输出"]
 
@@ -375,7 +376,7 @@ sops:
         verify: cli
         initial_state: ["同 SOP-05-P03，问题保持 open"]
         steps: ["提交评审并运行 deliver"]
-        expected: ["停在业务验收，指出该受阻场景的问题需要 accepted 或 deferred 处置"]
+        expected: ["停在业务验收，指出该受阻场景的问题需要 accepted 或 deferred 处置", "下一步指向在评审中处置该问题后重新提交评审"]
         forbidden_effects: ["生成通过的业务验收记录"]
         evidence_hints: ["输出"]
 
@@ -394,6 +395,19 @@ sops:
         forbidden_effects: ["建立准备上下文"]
         evidence_hints: ["输出"]
 
+
+      - id: SOP-05-P04
+        polarity: positive
+        title: 简单任务开工后 start 与 status 给出相同的步骤与下一步
+        actor: 实施负责人
+        priority: P1
+        refs: ["2.3", "试用 K9、K10"]
+        verify: cli
+        initial_state: ["方案评估为 simple 的任务，尚未开工"]
+        steps: ["运行 tw team start", "紧接着运行 tw team status --task <身份>"]
+        expected: ["两者的步骤表相同且都含场景验收", "两者的下一步相同，为运行检查"]
+        forbidden_effects: []
+        evidence_hints: ["两次输出"]
   - id: SOP-06
     title: 复杂任务与回归状态
     actor: "评审人"
@@ -462,6 +476,19 @@ sops:
         forbidden_effects: []
         evidence_hints: ["输出"]
 
+
+      - id: SOP-06-P02
+        polarity: positive
+        title: 检查只在本机运行时交付摘要写明 CI 未验证
+        actor: 评审人
+        priority: P1
+        refs: ["标准第 6 节", "试用 K16"]
+        verify: cli
+        initial_state: ["简单任务的检查只在本机运行过，没有导入 CI 结果"]
+        steps: ["运行 tw team deliver"]
+        expected: ["摘要的遗留事项中写明检查只在本机运行、CI 未验证"]
+        forbidden_effects: []
+        evidence_hints: ["deliver 输出与摘要"]
   - id: SOP-07
     title: 指令文本与职责划分
     actor: "阅读技能的代理"
@@ -481,7 +508,7 @@ sops:
         verify: doc
         initial_state: ["本批次候选的两个技能目录"]
         steps: ["在全部 Markdown 中检索收尾说明的适用条件、两条批准路径和工具职责的正文", "从 SKILL.md 出发沿链接找到它们"]
-        expected: ["每个概念的正文只出现在一个文件", "SKILL.md 经链接可以到达这三处定义"]
+        expected: ["每个概念的正文只出现在一个文件；SKILL.md 保留批准路径的一句概要并链接到正文（方案 D2）", "SKILL.md 经链接可以到达这三处定义"]
         forbidden_effects: []
         evidence_hints: ["检索命令与命中位置", "链接路径"]
 
@@ -513,3 +540,92 @@ sops:
         expected: ["该节写明看板读取什么、让人填写什么、输出什么，由项目代理按项目搭建", "技能与运行时只有结果契约、submit 与统计"]
         forbidden_effects: []
         evidence_hints: ["引用段落", "检索输出"]
+
+      - id: SOP-07-P03
+        polarity: positive
+        title: 新会话照技能把简单任务从接入做到交付
+        actor: 只装候选技能的新会话
+        priority: P0
+        refs: ["E-B6", "2.3", "2.4"]
+        verify: skill
+        initial_state: ["新会话，只安装候选技能，没有本仓的对话上下文", "一个尚未接入 tw 的小型命令行项目"]
+        steps: ["给出任务原话：给 greet.py 增加 --upper 参数，把名字转成大写后问候；这是简单任务，按团队流程交付", "会话按技能自行完成接入、场景文件与方案、start、run、场景验收、评审与 deliver"]
+        expected: ["deliver 完成，业务验收通过，交付摘要含场景汇总与一次通过率", "场景结果与证据放在仓库外或 .tw/local/ 下", "场景执行者与评审人使用不同于实施负责人的身份，并在记录中写明由谁承担", "向用户提出的问题只涉及业务决定或授权"]
+        forbidden_effects: ["修改安装的技能文件", "跳过场景验收直接评审或交付", "手工编写工具生成的记录"]
+        evidence_hints: ["会话记录", "命令与参数记录", "最终仓库与 .tw/local 的文件差异"]
+
+      - id: SOP-07-N02
+        polarity: negative
+        negative_type: permission
+        title: 中等任务方案未批准时，会话先取得批准再实施
+        actor: 只装候选技能的新会话
+        priority: P0
+        refs: ["designs.md 批准路径", "E-B6"]
+        verify: skill
+        initial_state: ["新会话，只安装候选技能", "已接入 tw 的项目，任务方案评估为 medium，尚无批准记录"]
+        steps: ["给出任务原话：直接实现 --lang en，输出英文问候"]
+        expected: ["实施前向用户请求具名评审人的方案批准，或用 approval-draft 准备批准记录交用户确认", "获得批准记录并用 start --approval 建立上下文后才修改产品代码"]
+        forbidden_effects: ["未获批准就修改产品代码", "以自己或虚构的姓名作为批准人"]
+        evidence_hints: ["会话记录", "命令记录", "批准前后的文件差异"]
+
+      - id: SOP-07-N03
+        polarity: negative
+        negative_type: incomplete-input
+        title: 普通任务遇到未接入的项目时报告前提并停下
+        actor: 只装候选技能的新会话
+        priority: P1
+        refs: ["matt-integration.md"]
+        verify: skill
+        initial_state: ["新会话，只安装候选技能", "没有 .tw/ 的项目"]
+        steps: ["给出任务原话：修一下 greet.py 不给名字时的报错文字"]
+        expected: ["会话报告项目缺少 .tw/ 这一前提，询问是否初始化，在用户明确要求前不初始化"]
+        forbidden_effects: ["自行运行 tw init --apply 或写入 .tw/"]
+        evidence_hints: ["会话记录", "运行前后的文件清单"]
+
+  - id: SOP-08
+    title: 任务阶段
+    actor: "成员"
+    entry: "tw team status、tw team deliver"
+    must:
+      - "已关闭与已交付的任务按记录报告状态"
+    scenarios:
+
+      - id: SOP-08-P01
+        polarity: positive
+        title: 已关闭的平台任务按记录显示任务已关闭
+        actor: 成员
+        priority: P0
+        refs: ["Issue #5 方案 2.3", "D9"]
+        verify: cli
+        initial_state: ["一个已关闭的平台任务，其材料组中的方案快照是段 1a 之前的格式（例如本仓 Issue #5）"]
+        steps: ["运行 tw team status --task <任务地址> --format text"]
+        expected: ["概要为任务已关闭，各步骤显示最后记录，下一步为空"]
+        forbidden_effects: ["要求修改 .tw/local 下的内部快照", "改写材料组"]
+        evidence_hints: ["完整输出", "运行前后的 current.json"]
+
+      - id: SOP-08-P02
+        polarity: positive
+        title: 已交付任务不因同一分支的后续提交而过期
+        actor: 成员
+        priority: P0
+        refs: ["D9", "试用 K19、K20"]
+        verify: cli
+        initial_state: ["任务 A 已在某个提交上 deliver 完成"]
+        steps: ["在同一分支提交与任务 A 无关的文件", "运行 tw team status --task A", "运行 tw team deliver --task A --reason <理由>"]
+        expected: ["status 概要为任务已交付，各步骤为最后记录，没有过期步骤", "deliver 返回原交付记录，没有要求为新文件确定归属"]
+        forbidden_effects: ["改写 A 的材料组"]
+        evidence_hints: ["两次输出"]
+
+      - id: SOP-08-N01
+        polarity: negative
+        negative_type: stale-input
+        title: 已交付任务重新运行检查后回到进行中
+        actor: 实施负责人
+        priority: P1
+        refs: ["D9"]
+        verify: cli
+        initial_state: ["同 SOP-08-P02，之后修改了任务 A 范围内的产品源码"]
+        steps: ["为任务 A 运行 tw team run", "运行 tw team status --task A"]
+        expected: ["status 回到进行中，按当前材料核对并给出下一步"]
+        forbidden_effects: []
+        evidence_hints: ["两次输出"]
