@@ -12,7 +12,7 @@ def parser():
     root = argparse.ArgumentParser(prog='tw', description=__doc__)
     root.add_argument('--root', default='.', help='项目内任意路径，默认当前目录')
     root.add_argument('--repository', action='append', default=[], metavar='别名=路径',
-                      help='共享仓的本机路径，覆盖 .tw/local/repositories.json')
+                      help='共享仓的本机路径；按别名覆盖检出目录和用户级 repositories.json')
     sub = root.add_subparsers(dest='command', required=True)
     shared = argparse.ArgumentParser(add_help=False)
     shared.add_argument('--repository', dest='sub_repository', action='append', default=[], metavar='别名=路径',

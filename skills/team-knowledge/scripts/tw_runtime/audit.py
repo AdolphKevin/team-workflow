@@ -2,10 +2,11 @@
 from collections import Counter
 import os
 from pathlib import Path
+import sys
 import urllib.error
 import urllib.request
 
-from . import KB, brief, check, entries, gitutil, textmatch
+from . import KB, brief, cache, check, entries, gitutil, textmatch
 
 BIG_FILE = 20 * 1024 * 1024
 
@@ -51,8 +52,15 @@ def run(project, links=False, top=10):
 
 
 def local_usage(root):
+    # Team modules use bare imports; select them with the same precedence as the CLI.
+    team = str(Path(__file__).resolve().parent / 'team')
+    sys.path.insert(0, team)
+    try:
+        from cleanup import MANAGED, KEEP, size as material_size
+    finally:
+        sys.path.remove(team)
     base = Path(root) / KB / 'local'
-    files, size, big = 0, 0, []
+    files, size, big, unmanaged = 0, 0, [], []
     if base.is_dir():
         for directory, _, names in os.walk(base):
             for name in names:
@@ -65,7 +73,14 @@ def local_usage(root):
                 size += length
                 if length > BIG_FILE:
                     big.append(path.relative_to(root).as_posix())
-    return {'files': files, 'bytes': size, 'over_20MiB': sorted(big)}
+        managed = {*MANAGED, *KEEP, Path(cache.DIRECTORY).name}
+        for path in sorted(base.iterdir()):
+            if path.name not in managed:
+                try:
+                    unmanaged.append({'path': path.relative_to(root).as_posix(), 'bytes': material_size(path)})
+                except OSError:
+                    continue
+    return {'files': files, 'bytes': size, 'over_20MiB': sorted(big), 'unmanaged': unmanaged}
 
 
 def check_links(project):
@@ -108,6 +123,9 @@ def render(report):
     local = report['local']
     lines += [f'本地目录 {KB}/local：{local["files"]} 个文件，{local["bytes"] / 1048576:.1f} MiB' +
               (f'；超过 20MiB 的原件：{"、".join(local["over_20MiB"])}' if local['over_20MiB'] else ''), '']
+    if local['unmanaged']:
+        lines += ['## 不归工具管理的本机材料',
+                  *[f'- {x["path"]}：{x["bytes"]} 字节（{x["bytes"] / 1048576:.1f} MiB）' for x in local['unmanaged']], '']
     if 'links' in report:
         lines += ['## 外部链接', *[f'- {x["url"]}：{x["result"]}' for x in report['links']], '']
     lines.append(report['business_truth'])

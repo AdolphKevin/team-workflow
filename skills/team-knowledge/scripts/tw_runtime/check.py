@@ -2,9 +2,18 @@
 from collections import defaultdict
 import re
 
-from . import KB, entries, files, gitutil, globs, project as projects, textmatch
+from . import KB, Invalid, entries, files, gitutil, globs, project as projects, textmatch
 
 KNOWLEDGE = ('rule', 'decision', 'lesson')
+LOCAL_MANAGED = {'tasks', 'batches', 'imports', 'validation-active', 'agents', 'cache', 'repositories.json'}
+LOCAL_REFERENCE = re.compile(r'''\.tw/local/([^\s/`<>"'\[\](){}*?，。；：、]+)''')
+
+
+def local_reference_problems(text):
+    """Report concrete unmanaged names; a bare root, glob or placeholder names no material."""
+    return [f'第 {number} 行引用了仅在本机的材料：{match.group(0)}；请写明结论和关键数据，原件留在执行者本机'
+            for number, line in enumerate(text.splitlines(), 1)
+            for match in LOCAL_REFERENCE.finditer(line) if match.group(1) not in LOCAL_MANAGED]
 
 
 def run(project, base=None):
@@ -49,6 +58,13 @@ def run(project, base=None):
             error(entry.path, message)
         for message in notes:
             warn(entry.path, message)
+        try:
+            raw = project.source.read(entry.path)
+        except (OSError, UnicodeError, Invalid):
+            pass  # load_entries already reports unreadable entries.
+        else:
+            for message in local_reference_problems(raw):
+                error(entry.path, message)
         if entry.kind not in KNOWLEDGE:
             continue
         for alias, pattern in entry.scopes():
@@ -93,7 +109,7 @@ def run(project, base=None):
         if len(paths) > 1:
             for path in paths:
                 warn(path, '与其他条目标题相同，疑似重复：' + '、'.join(p for p in paths if p != path))
-    documents(config, code, declared, shared, error, warn)
+    documents(config, code, declared, shared, error, warn, project.source)
     for value in config.get('context', []) if isinstance(config.get('context'), list) else []:
         if isinstance(value, str) and not any(globs.matches(value, f) for f in code):
             error(projects.CONFIG, f'context 中的路径不存在：{value}')
@@ -153,7 +169,7 @@ def guard_problem(value, root, source, declared, shared, checks, entry, error, w
         error(entry.path, f'守护测试 {name} 不在 {alias}:{path} 中')
 
 
-def documents(config, code, declared, shared, error, warn):
+def documents(config, code, declared, shared, error, warn, self_source):
     owners = defaultdict(list)
     docs = config.get('documents', []) if isinstance(config.get('documents'), list) else []
     for doc in docs:
@@ -175,6 +191,14 @@ def documents(config, code, declared, shared, error, warn):
     for (alias, name), ids in sorted(owners.items()):
         if len(ids) > 1:
             error(projects.CONFIG, f'同一份原文被登记了 {len(ids)} 次（{", ".join(ids)}）：{alias}:{name}')
+        label = name if alias == 'self' else f'{alias}:{name}'
+        try:
+            raw = self_source.read(name) if alias == 'self' else (shared[alias].root / name).read_text(encoding='utf-8')
+        except (OSError, UnicodeError, Invalid) as exc:
+            error(label, f'无法读取原文：{exc}')
+        else:
+            for message in local_reference_problems(raw):
+                error(label, message)
 
 
 LEGACY_TEXT = re.compile(r'\.codestable|cs_knowledge|CodeStable|\$cs\b|(?<![A-Za-z])CS(?![A-Za-z])')
