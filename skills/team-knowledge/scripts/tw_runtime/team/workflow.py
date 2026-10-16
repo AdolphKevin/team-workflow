@@ -170,6 +170,11 @@ def _terminated(signum, frame):
     raise SystemExit(128 + signum)
 
 
+def emit(result, fmt):
+    import commands
+    print(commands.readable(result) if fmt == 'text' else json.dumps(result, ensure_ascii=False, indent=2))
+
+
 def main(argv=None):
     import signal
     import threading
@@ -183,7 +188,9 @@ def main(argv=None):
 
 
 def _main(argv=None):
-    args = parser().parse_args(argv)
+    arguments = list(sys.argv[1:] if argv is None else argv)
+    args = parser().parse_args(arguments)
+    args.command_arguments = arguments
     root = args.root.resolve()
     if args.allow_modified_tool:
         import os
@@ -222,27 +229,21 @@ def _main(argv=None):
             result = commands.dispatch(args, root)
         if not result.get('ok', True):
             result.setdefault('problem', '; '.join(str(v) for v in result.get('gaps', [])) or 'The operation is incomplete.')
-            result.setdefault('next_action', 'Resolve the reported gap without replacing prior evidence.')
             import repairs
             repairs.annotate(args, result)
-        print(commands.readable(result) if args.format == 'text' else json.dumps(result, ensure_ascii=False, indent=2))
-        return 0 if result.get('ok', True) else 1
+            result.setdefault('next_action', 'Resolve the reported gap without replacing prior evidence.')
     except (RuntimeInvalid, OSError, ValueError, TypeError, KeyError) as exc:
         import repairs
-        result = {'ok': False, 'scope': args.command, 'status': 'incomplete', 'problem': str(exc),
-                  'error_code': getattr(exc, 'error_code', 'invalid-or-incomplete-input'),
-                  'next_action': repairs.action(args, str(exc), getattr(exc, 'next_action', None),
-                                                getattr(exc, 'error_code', None))}
-        print(json.dumps(result, ensure_ascii=False))
-        return 1
+        result = repairs.failure(args, exc, scope=args.command)
     except Exception as exc:
         import commands
-        print(json.dumps({'scope': args.command, **commands.tool_defect(exc)}, ensure_ascii=False))
-        return 1
+        result = {'scope': args.command, **commands.tool_defect(exc)}
     finally:
         platform_read.PROJECT_ROOT.reset(platform_token)
         LOCATIONS.reset(token)
         INSTALL_HOME.reset(home_token)
+    emit(result, args.format)
+    return 0 if result.get('ok', True) else 1
 
 
 if __name__ == '__main__':

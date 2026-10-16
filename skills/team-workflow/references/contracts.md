@@ -5,8 +5,8 @@
 运行环境为 Python 3.10+、Git 和项目自身的测试依赖，通用工具只使用标准库。
 
 下文 `tw` 指 `python3 <team-knowledge 技能目录>/scripts/tw.py`，团队命令写作 `tw team <命令>`；`$PROJECT`
-是项目目录，`$TASK_ID` 是任务 `id`（本地编号或完整 Issue 地址），`$TASK` 是首次开工的任务文件。输入路径相对项目，输出使用命令返回的 `artifact.path`，不要假设公共固定文件名。默认返回 JSON，
-`--format text` 用于阅读。
+是项目目录，`$TASK_ID` 是任务 `id`（本地编号或完整 Issue 地址），`$TASK` 是首次开工的任务文件。输入路径相对项目，输出路径以命令返回的 `artifact.path` 为准。默认返回 JSON，
+`--format text` 用于阅读；下一步由 `error_code` 决定。
 
 全局参数只有 `--root` 和可重复的 `--repository`，可写在团队子命令前后，也可由外层 `tw` 转发。
 其余参数写在对应命令之后：`tw team --help` 列出命令，`tw team <命令> --help` 列出该命令可用的参数。

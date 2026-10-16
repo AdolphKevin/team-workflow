@@ -6,6 +6,7 @@ from pathlib import Path
 
 from common import Invalid, require
 import designs
+from error_codes import Code, fields
 
 
 def path_label(path):
@@ -16,9 +17,11 @@ def path_label(path):
 
 
 class DesignReadError(Invalid):
-    def __init__(self, path, reason):
+    error_code = Code.DESIGN_INPUT
+
+    def __init__(self, path, reason, **location):
         name = path_label(path)
-        super().__init__(name + ' ' + reason)
+        super().__init__(name + ' ' + reason, **location)
         self.next_action = '修正方案文件 ' + name + ' 中指出的行，再重试原命令。'
 
 
@@ -63,7 +66,7 @@ def read(path, *, internal=True):
                 raise Invalid(f'无法读取内部方案快照：{exc}') from exc
         return designs.load(raw)
     except Invalid as exc:
-        raise DesignReadError(path, str(exc)) from exc
+        raise DesignReadError(path, str(exc), **{key: value for key, value in fields(exc).items() if key != 'error_code'}) from exc
 
 
 def _checkout(root, repository):

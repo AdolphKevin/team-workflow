@@ -1,7 +1,9 @@
 """Business acceptance and final delivery are separate read-only decisions."""
+from error_codes import Code
 import design_files
 from tw_runtime.team import platform_script as platform_read
 from datetime import datetime
+from shlex import quote
 
 from common import (RECORD_SCHEMA, Invalid, artifact, artifact_valid, digest, evidence_file, external_path, inside, obj, read,
                     require, sha, strings, task_valid, text, tool_gate)
@@ -104,13 +106,14 @@ def check_review_format(root, profile, task, review, selected, design):
     require(review.get('data_version') == RECORD_SCHEMA and review.get('kind') == 'review',
             f'Expected a schema {RECORD_SCHEMA} code review; regenerate and submit it with review')
     require(review.get('task_digest') == digest(task) and review.get('task_id') == task['id'], 'Review belongs to another task/version')
-    require(review.get('source_digest') == validation.source_digest(root, profile), 'Review does not cover current source')
+    require(review.get('source_digest') == validation.source_digest(root, profile), 'Review does not cover current source', error_code=Code.SOURCE_STALE)
     require(review.get('sections') == selected, 'Review does not cover current approved sections')
     require(review.get('validation_policy') == review_policy(root, profile, task), 'Review must cover current validation policy')
     text(review.get('reviewer'))
     for label in ('standards', 'spec'):
         row = review.get(label)
-        require(isinstance(row, dict) and row.get('status') in ('passed', 'failed'), label + ' has not passed: conclusion must be passed or failed')
+        require(isinstance(row, dict) and row.get('status') in ('passed', 'failed'), label + ' has not passed: conclusion must be passed or failed',
+                section={'standards': '规范 standards', 'spec': '需求 spec'}[label])
         text(row.get('summary'))
         require(bool(row.get('evidence')), 'Review needs actual evidence')
         for ref in row['evidence']:
@@ -149,7 +152,7 @@ def review_failures(review, required):
 
 
 class ReviewBlocked(Invalid):
-    error_code = 'review-not-passed'
+    error_code = Code.REVIEW_NOT_PASSED
 
     def __init__(self, task, failures):
         import shlex
@@ -205,12 +208,13 @@ def verify(root, profile, task, report, phase='delivery', _seen=None, live=None)
     live = phase == 'acceptance' if live is None else live
     tool = tool_gate()
     obj(report, {'data_version', 'task_id', 'design', 'approvals', 'brief', 'runs', 'review'},
-        {'acceptance', 'knowledge', 'design_history', 'close_authorization', 'dependencies', 'automation'})
+        {'acceptance', 'knowledge', 'design_history', 'close_authorization', 'dependencies', 'automation'},
+        error_code=Code.REPORT_INCOMPLETE)
     import task_inputs
     task = task_inputs.expand(task, design_files.read(inside(root, report['design'])))
     task_valid(task, profile, root)
     require(report['data_version'] == RECORD_SCHEMA and report['task_id'] == task['id'],
-            f'Expected a schema {RECORD_SCHEMA} delivery report for this task; regenerate it with delivery-template')
+            f'Expected a schema {RECORD_SCHEMA} delivery report for this task; regenerate it with delivery-template', error_code=Code.REPORT_INCOMPLETE)
     strings(report['runs'])
     strings(report['approvals'])
     import issue_history
@@ -248,7 +252,7 @@ def verify(root, profile, task, report, phase='delivery', _seen=None, live=None)
         require(platform_state['design'] == design, 'Local design differs from the shared plan')
         import reviews
         published = reviews.published_approval(root, task['id'], review)
-        require(all(a in platform_state['approvals'] or a == published for a in approvals), 'Approval has not been shared on the task')
+        require(all(a in platform_state['approvals'] or a == published for a in approvals), 'Approval has not been shared on the task', error_code=Code.APPROVAL_INCOMPLETE)
     from contracts import unsourced
     missing = unsourced(task, design)
     require(not missing, 'Acceptance scenario needs confirmed business sources: ' + ', '.join(missing))
@@ -256,7 +260,9 @@ def verify(root, profile, task, report, phase='delivery', _seen=None, live=None)
         check_review_format(root, profile, task, review, selected, design)
     except Invalid as exc:
         import shlex
-        incomplete = Invalid('Current approval/review materials are incomplete: ' + str(exc))
+        incomplete = Invalid('Current approval/review materials are incomplete: ' + str(exc),
+                             error_code=Code.SOURCE_STALE if exc.error_code == Code.SOURCE_STALE else Code.REVIEW_MATERIALS_INCOMPLETE,
+                             **{key: getattr(exc, key) for key in ('section', 'line') if hasattr(exc, key)})
         selected_task = '--task ' + shlex.quote(task['id'])
         incomplete.next_action = '重跑检查并复核当前材料：tw team run ' + selected_task + '；tw team review ' + selected_task
         raise incomplete from exc
@@ -264,8 +270,13 @@ def verify(root, profile, task, report, phase='delivery', _seen=None, live=None)
         require_review_passed(task, review, status['required_sections'])
         from contracts import independent
         independent(design, review['reviewer'], 'Reviewer')
-    require(status.get('local_review_valid') is True, 'Design coverage/history needs review: ' + design_problem(status))
-    require(status.get('acceptance_ready') is True, 'Current design/code approval is missing: ' + design_problem(status))
+    require(status.get('local_review_valid') is True, 'Design coverage/history needs review: ' + design_problem(status),
+            error_code=status.get('error_code') or (Code.APPROVAL_INCOMPLETE if status.get('missing') or status.get('stale') else Code.INVALID))
+    require(status.get('acceptance_ready') is True, '方案的验收条件尚待补齐：' + design_problem(status),
+            error_code=Code.DESIGN_INPUT,
+            next_action='补齐方案中的职责、待定事项与前置任务材料后重新开工：tw team start --task '
+                        + quote(task['id']) + ' --design ' + quote(report['design'])
+                        + ' --root ' + quote(str(root)))
     execution = validation.verify_runs(root, profile, task, report['runs'], live=live)
     initial = read(inside(root, report['brief']))
     require(initial.get('data_version') == RECORD_SCHEMA and initial.get('kind') == 'knowledge-brief'
@@ -325,22 +336,24 @@ def verify(root, profile, task, report, phase='delivery', _seen=None, live=None)
             except Invalid as exc:
                 import shlex
                 invalid = Invalid('关闭授权 close_authorization 不完整：' + str(exc))
-                invalid.error_code = 'close-authorization-incomplete'
+                invalid.error_code = Code.CLOSE_AUTHORIZATION
                 invalid.next_action = ('在新报告副本中补齐 confirmed_by 和 reference，再核对：tw team verify --task '
                                        + shlex.quote(task['id']) + ' --report <修正后的报告路径>')
                 raise invalid from exc
         require(bool(report.get('acceptance')),
-                '最终交付需要业务验收记录：先运行 tw team accept，再把产物路径写进交付报告的 acceptance')
+                '最终交付需要业务验收记录：先运行 tw team accept，再把产物路径写进交付报告的 acceptance', error_code=Code.REPORT_INCOMPLETE)
         acceptance_path = inside(root, report['acceptance'])
         accepted = read(acceptance_path)
         require(accepted.get('data_version') == RECORD_SCHEMA and accepted.get('kind') == 'acceptance'
-                and accepted.get('business_accepted') is True, '交付报告的 acceptance 不是通过的业务验收记录')
-        require(accepted.get('task_id') == task['id'] and accepted.get('task_digest') == digest(task),
-                '业务验收记录属于其他任务或任务已经改动')
-        require(accepted.get('sections') == selected, '业务验收之后方案章节已变化，需要重新验收')
-        require(accepted.get('source_digest') == before, '业务验收之后源码已变化，需要重新验收')
+                and accepted.get('business_accepted') is True, '交付报告的 acceptance 不是通过的业务验收记录', error_code=Code.REPORT_INCOMPLETE)
+        require(accepted.get('task_id') == task['id'],
+                '业务验收记录属于其他任务或任务已经改动', error_code=Code.REPORT_INCOMPLETE)
+        require(accepted.get('task_digest') == digest(task),
+                '业务验收记录属于其他任务或任务已经改动', error_code=Code.ACCEPTANCE_STALE)
+        require(accepted.get('sections') == selected, '业务验收之后方案章节已变化，需要重新验收', error_code=Code.ACCEPTANCE_STALE)
+        require(accepted.get('source_digest') == before, '业务验收之后源码已变化，需要重新验收', error_code=Code.ACCEPTANCE_STALE)
         require(contents(accepted.get('materials')) == contents(result['materials']),
-                '业务验收之后执行、评审、批准或方案材料已变化，需要用当前材料重新验收')
+                '业务验收之后执行、评审、批准或方案材料已变化，需要用当前材料重新验收', error_code=Code.ACCEPTANCE_STALE)
         result['environment'] = accepted.get('environment', result['environment'])
         result['materials'].append(artifact(root, acceptance_path))
         completed = knowledge.verify(root, report.get('knowledge'), task.get('base'))
@@ -380,9 +393,9 @@ def verify(root, profile, task, report, phase='delivery', _seen=None, live=None)
         latest = coordination.load(task['id'], root=root)
         observed = ('requirements', 'history_digest', 'design_requirements', 'design_history_digest', 'owners')
         require(all(latest[key] == platform_state[key] for key in observed) and not latest['gaps'],
-                'Platform requirements, approvals or progress changed during verification')
+                'Platform requirements, approvals or progress changed during verification', error_code=Code.PLATFORM_CHANGED)
     require(digest(issue_history.known(root, task['id'])) == issues_before, 'Known issues changed during verification')
-    require(validation.source_digest(root, profile) == before, 'Source changed during verification')
+    require(validation.source_digest(root, profile) == before, 'Source changed during verification', error_code=Code.SOURCE_STALE)
     return result
 
 

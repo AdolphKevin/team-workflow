@@ -7,6 +7,7 @@ from common import Invalid, artifact_valid, digest, read, require, write
 import delivery
 import knowledge
 import materials
+from error_codes import Code
 
 
 def platform_task(root, task_id):
@@ -82,7 +83,7 @@ def validate_retry(root, task, cached):
         role = expected[step['step']]
         old, current = step['result'].get('artifact'), group.get(role)
         require(old is not None and current is not None and old['sha256'] == current['sha256'],
-                'Request ID already belongs to different inputs; use a new request ID')
+                'Request ID already belongs to different inputs; use a new request ID', error_code=Code.REQUEST_CONFLICT)
 
 
 def deliver(args, root, profile, task, request):
@@ -103,10 +104,7 @@ def deliver(args, root, profile, task, request):
             from tw_runtime import Invalid as RuntimeInvalid
             if isinstance(exc, (RuntimeInvalid, OSError, ValueError, TypeError, KeyError)):
                 import repairs
-                result = {'ok': False, 'status': 'incomplete', 'problem': str(exc),
-                          'error_code': getattr(exc, 'error_code', 'invalid-or-incomplete-input'),
-                          'next_action': repairs.action(child, str(exc), getattr(exc, 'next_action', None),
-                                                        getattr(exc, 'error_code', None))}
+                result = repairs.failure(child, exc)
             else:
                 result = commands.tool_defect(exc)
             with guard(root):
@@ -139,7 +137,7 @@ def deliver(args, root, profile, task, request):
             elif stopped == 'review':
                 command = 'tw team review ' + task_arg + ' --from-platform'
             elif stopped == 'acceptance':
-                if 'source' in value['problem'].lower() or '源码' in value['problem']:
+                if result.get('error_code') in (Code.SOURCE_STALE, Code.RUN_BINDING_STALE):
                     command = 'tw team run ' + task_arg
                 else:
                     command = 'tw team review ' + task_arg + ' --submit'

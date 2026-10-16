@@ -3,6 +3,7 @@
 Capture happens at execution time. Imports retain the original tested commits;
 matching present-day content never rewrites a historical execution version.
 """
+from error_codes import Code
 from datetime import datetime
 import hashlib
 import io
@@ -198,7 +199,7 @@ def validate_result(root, profile, manifest, directory, *, remote=False, live=Tr
     require(manifest['source_before'] == manifest['source_after'], 'Sources changed during portable execution')
     row = manifest['execution']
     obj(row, {'id', 'binding', 'source_unchanged', 'argv', 'cwd', 'repository', 'status', 'cases',
-              'detail', 'state', 'exit_code', 'seconds', 'artifacts', 'coverage'})
+              'detail', 'state', 'exit_code', 'seconds', 'artifacts', 'coverage'}, {'error_code'})
     key = row['id']
     require(key in profile['checks'], 'Unknown imported check')
     check = profile['checks'][key]
@@ -231,7 +232,8 @@ def validate_result(root, profile, manifest, directory, *, remote=False, live=Tr
     decoded = decode(check, {'state': row['state'], 'exit_code': row['exit_code'],
                             'stdout': paths['stdout.txt'].read_text(encoding='utf-8')}, native)
     require(decoded[0] == 'passed' and (row['status'] != 'passed' or decoded[1] == row['cases']),
-            'Original reports do not confirm the claimed cases: ' + decoded[2])
+            'Original reports do not confirm the claimed cases: ' + decoded.detail,
+            error_code=decoded.error_code or Code.CHECK_RESULT)
     if check.get('review'):
         from validation import scenario_review
         scenario_review(root, directory, check, {value['path']: value['sha256'] for value in artifacts})
@@ -407,8 +409,11 @@ def aggregate(root, manifest, repositories):
         materials[repo] = [artifact(checkout, path) for path in paths.values()]
         profile = load_profile(checkout)
         task, report = read(paths['task']), read(paths['report'])
-        require(task.get('data_version') == 1 and report.get('data_version') == RECORD_SCHEMA,
-                f'Joint delivery requires current-format tasks and schema {RECORD_SCHEMA} reports')
+        require(task.get('data_version') == 1,
+                f'Joint delivery requires current-format tasks and schema {RECORD_SCHEMA} reports', error_code=Code.TASK_INPUT,
+                next_action='修正联合验证中引用的任务输入，再重试 aggregate。')
+        require(report.get('data_version') == RECORD_SCHEMA,
+                f'Joint delivery requires current-format tasks and schema {RECORD_SCHEMA} reports', error_code=Code.REPORT_INCOMPLETE)
         if platform_read.is_task(checkout, task['id']):
             from coordination import load
             platform = load(task['id'], root=checkout)

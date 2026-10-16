@@ -1,4 +1,5 @@
 """One explicit, content-bound material group per task; no latest-file inference."""
+from error_codes import Code
 import design_files
 from tw_runtime.team import platform_script as platform_read
 import copy
@@ -26,7 +27,7 @@ LABELS = {'context': '准备上下文', 'task': '任务', 'design': '方案', 'b
 
 
 class MaterialGap(Invalid):
-    error_code = 'current-materials-incomplete'
+    error_code = Code.CURRENT_MATERIALS
 
     def __init__(self, role, detail, task_id):
         option = OPTIONS.get(role)

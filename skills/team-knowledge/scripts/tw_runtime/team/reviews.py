@@ -17,21 +17,22 @@ from common import (Invalid, artifact, artifact_valid, create, create_text, dige
 import delivery
 import review_history
 import validation
+from error_codes import Code
 
 BIND_START = '<!-- tw-review:binding:start -->'
 BIND_END = '<!-- tw-review:binding:end -->'
 
 
 class ReviewError(Invalid):
-    error_code = 'review-incomplete'
+    error_code = Code.REVIEW_INCOMPLETE
 
-    def __init__(self, section, line, reason):
-        super().__init__(f'第 {line} 行（{section}）：{reason}')
+    def __init__(self, section, line, reason, *, error_code=None):
+        super().__init__(f'第 {line} 行（{section}）：{reason}', section=section, line=line, error_code=error_code)
         self.next_action = '按位置修正 Markdown，再运行 tw team review --task <身份> --submit。'
 
 
 class ReviewNotSubmitted(Invalid):
-    error_code = 'review-not-submitted'
+    error_code = Code.REVIEW_NOT_SUBMITTED
 
     def __init__(self, root, task, missing_run=False):
         path = locations(root, task['id'])[0]
@@ -195,8 +196,9 @@ def preview_execution(root, profile, task, paths):
                 continue
             out, _ = validation.original_files(root, check, row)
             native = out / check['report'][len('{output}/'):] if check.get('report') else None
-            status, cases, detail = validation.decode(check, {'state': row['state'], 'exit_code': row['exit_code'],
+            decoded = validation.decode(check, {'state': row['state'], 'exit_code': row['exit_code'],
                 'stdout': (out / 'stdout.txt').read_text()}, native)
+            status, cases, detail = decoded.status, decoded.cases, decoded.detail
             if not cases:
                 try:
                     if check['format'] == 'junit':
@@ -239,7 +241,9 @@ def snapshot(args, root, profile, task, draft_id, allow_incomplete=False):
         execution = validation.verify_runs(root, profile, task, report['runs'], live=False)
     except Invalid as exc:
         if not allow_incomplete:
-            raise ReviewError('运行结果', 1, '运行尚不能用于正式评审：' + str(exc)) from exc
+            raise ReviewError('运行结果', 1, '运行尚不能用于正式评审：' + str(exc),
+                              error_code=exc.error_code if exc.error_code in (Code.CHECK_CONFIG, Code.CHECK_RESULT)
+                              else Code.REVIEW_RUN_INCOMPLETE) from exc
         execution = preview_execution(root, profile, task, report['runs'])
         execution['gap'] = str(exc)
     chosen = {key: artifact(root, inside(root, path)) for key, path in execution['selected_runs'].items()}
@@ -725,7 +729,7 @@ def require_current_runs(root, profile, bindings):
         if (row is None or not record.get('source_unchanged', row.get('source_unchanged'))
                 or not row.get('source_unchanged')
                 or any(row.get('binding', {}).get(part) != val for part, val in current.items())):
-            raise ReviewError('运行结果绑定', 1, '选中运行的源码或配置已变化，请重跑后生成复核稿。')
+            raise ReviewError('运行结果绑定', 1, '选中运行的源码或配置已变化，请重跑后生成复核稿。', error_code=Code.REVIEW_BINDING_STALE)
 
 
 def submit(args, root, profile, task, request):
@@ -734,7 +738,7 @@ def submit(args, root, profile, task, request):
     try:
         raw = source_text(args, root, task['id'])
     except (OSError, UnicodeError) as exc:
-        raise ReviewError('评审文件', 1, '无法读取 Markdown：' + str(exc)) from exc
+        raise ReviewError('评审文件', 1, '无法读取 Markdown：' + str(exc), error_code=Code.REVIEW_FILE_UNREADABLE) from exc
     expected = getattr(args, 'review_source_ref', None)
     if expected and hashlib.sha256(raw.encode('utf-8')).hexdigest() != expected['sha256']:
         raise ReviewError('评审文件', 1, '读取期间 Markdown 已改变，请停止编辑后用新请求编号提交。')
@@ -743,7 +747,7 @@ def submit(args, root, profile, task, request):
     require_rechecks(value, sections)
     fresh, design, status, execution = snapshot(args, root, profile, task, value['bindings']['draft_id'], allow_incomplete=True)
     if not _usable_draft(value, fresh):
-        raise ReviewError('绑定', 1, '任务、方案、批准状态、源码、策略、章节或运行已变化；请保留原草稿后重新生成复核稿：tw team review --task <身份>。')
+        raise ReviewError('绑定', 1, '任务、方案、批准状态、源码、策略、章节或运行已变化；请保留原草稿后重新生成复核稿：tw team review --task <身份>。', error_code=Code.REVIEW_BINDING_STALE)
     require_current_runs(root, profile, fresh['bindings'])
     review = compile_review(root, value, sections)
     if item:
@@ -755,9 +759,7 @@ def submit(args, root, profile, task, request):
         delivery.check_review_format(root, profile, task, review, fresh['bindings']['sections'], design)
     except (Invalid, ValueError, TypeError, KeyError) as exc:
         message = str(exc)
-        section = ('评审信息' if 'Reviewer' in message or 'Knowledge conflicts' in message else
-                   '规范 standards' if 'standards' in message else '需求 spec' if 'spec' in message else
-                   '问题清单' if 'issue' in message.lower() else next(('人工观察 ' + key for key in value['manual']), '验收 ' + task['acceptance'][0]['id']))
+        section = getattr(exc, 'section', None) or next(('人工观察 ' + key for key in value['manual']), '验收 ' + task['acceptance'][0]['id'])
         raise ReviewError(section, sections.get(section, {'line': 1})['line'], '评审核查未通过：' + message) from exc
     approved, refs = None, []
     from contracts import identity

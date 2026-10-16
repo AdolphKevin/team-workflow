@@ -2,6 +2,7 @@
 
 These checks establish declared coverage, not the truth of a reviewer's prose.
 """
+from error_codes import Code
 from common import Invalid, obj, require, strings, text
 
 LEVELS = {'unit', 'interface', 'journey', 'manual'}
@@ -38,13 +39,13 @@ def issue(value, section_ids=None):
         material(value[key])
     strings(value['affects'])
     if section_ids is not None and value.get('state') == 'open':
-        require(set(value['affects']) <= set(section_ids), 'Issue references an unknown section')
+        require(set(value['affects']) <= set(section_ids), 'Issue references an unknown section', section='问题清单')
     strings(value['blocks'], True)
-    require(set(value['blocks']) <= {'implementation', 'acceptance'}, 'Unknown issue blocking phase')
-    require(value['state'] in STATES, 'Unknown issue disposition')
+    require(set(value['blocks']) <= {'implementation', 'acceptance'}, 'Unknown issue blocking phase', section='问题清单')
+    require(value['state'] in STATES, 'Unknown issue disposition', section='问题清单')
     resolution = value['resolution']
     if value['state'] == 'open':
-        require(resolution == {}, 'An open issue cannot claim a resolution')
+        require(resolution == {}, 'An open issue cannot claim a resolution', section='问题清单')
     else:
         obj(resolution, {'reason', 'evidence'}, {'confirmed_by', 'confirmation', 'follow_up', 'scope_change'})
         material(resolution['reason'])
@@ -63,11 +64,11 @@ def issue(value, section_ids=None):
 
 
 def issues(values, section_ids=None):
-    require(isinstance(values, list), 'Issues must be an array')
+    require(isinstance(values, list), 'Issues must be an array', section='问题清单')
     seen = set()
     for value in values:
         issue(value, section_ids)
-        require(value['id'] not in seen, 'Duplicate issue identifier: ' + value['id'])
+        require(value['id'] not in seen, 'Duplicate issue identifier: ' + value['id'], section='问题清单')
         seen.add(value['id'])
     return values
 
@@ -85,10 +86,10 @@ def reconcile(known, current):
     issues(current)
     by_id = {v['id']: v for v in current}
     for old in known:
-        require(old['id'] in by_id, 'Known issue disappeared: ' + old['id'])
+        require(old['id'] in by_id, 'Known issue disappeared: ' + old['id'], section='问题清单')
         new = by_id[old['id']]
         require(all(old[k] == new[k] for k in ('summary', 'owner', 'affects', 'blocks')),
-                'Known issue identity or affected scope changed: ' + old['id'])
+                'Known issue identity or affected scope changed: ' + old['id'], section='问题清单')
     return current
 
 
@@ -110,7 +111,7 @@ def design(value):
     identifiers = {row['id'] for row in value['issues']}
     assessments = [value['assessment']] + [r['data']['assessment'] for r in rows.values() if r['type'] == 'task' and 'assessment' in r['data']]
     for assessment in assessments:
-        require(set(assessment['uncertainties']) <= identifiers, 'Assessment uncertainties must reference shared issue IDs')
+        require(set(assessment['uncertainties']) <= identifiers, 'Assessment uncertainties must reference shared issue IDs', section='问题清单')
     for row in rows.values():
         material(row['title']); material(row['body'])
         if row['type'] != 'acceptance':
@@ -172,9 +173,9 @@ def identity(value):
 def independent(plan, actor, label):
     """Recorded identities must differ; the tool cannot prove two names are different people."""
     owner = plan['roles']['implementation_owner']
-    require(bool(owner.strip()), 'Acceptance needs the recorded implementation owner to check independence')
+    require(bool(owner.strip()), 'Acceptance needs the recorded implementation owner to check independence', error_code=Code.INDEPENDENCE)
     material(actor)
-    require(identity(actor) != identity(owner), label + ' must not be the implementation owner: ' + actor)
+    require(identity(actor) != identity(owner), label + ' must not be the implementation owner: ' + actor, error_code=Code.INDEPENDENCE)
 
 
 def match_coverage(required, actual):
@@ -257,7 +258,7 @@ def automation(value, task, findings, profile, execution):
             status['manual_only'].append({'id': entry['id'], 'acceptance': entry['acceptance'], 'owner': entry['owner']})
         else:
             material(entry['reason'])
-            require(entry['finding'] in deferred, 'Pending automation needs a deferred issue with follow-up: ' + entry['id'])
+            require(entry['finding'] in deferred, 'Pending automation needs a deferred issue with follow-up: ' + entry['id'], section='问题清单')
             try:
                 date.fromisoformat(entry['due'])
             except (TypeError, ValueError):

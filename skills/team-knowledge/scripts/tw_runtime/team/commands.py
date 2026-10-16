@@ -1,6 +1,7 @@
 """Command composition for the workflow CLI."""
 import design_files
 import json
+from error_codes import Code, check_error_code
 import shlex
 import copy
 import task_inputs
@@ -23,11 +24,31 @@ def local(root, value):
     return inside(root, path.as_posix())
 
 
+def readable_fields(value, indent=''):
+    if isinstance(value, dict):
+        rows = value.items()
+    elif isinstance(value, list):
+        rows = (('-', item) for item in value)
+    else:
+        return [indent + str(value)]
+    lines = []
+    for key, item in rows:
+        if isinstance(item, (dict, list)):
+            lines += [indent + key + '：', *readable_fields(item, indent + '  ')]
+        else:
+            lines.append(indent + key + '：' + str(item))
+    return lines
+
+
 def readable(result):
     lines = [result.get('summary') or result.get('status') or ('命令已完成；验收状态见下方' if result.get('ok', True) else '尚未完成')]
     for key in ('problem', 'next_action'):
         if result.get(key) and str(result[key]) not in lines:
-            lines.append(str(result[key]))
+            lines.append(('下一步：' if key == 'next_action' else '') + str(result[key]))
+    if result.get('error_code') == Code.TOOL_DEFECT:
+        if result.get('request_directory'):
+            lines.append('请求目录：' + result['request_directory'])
+        lines += ['调用位置：' + frame for frame in result.get('traceback', [])]
     for warning in result.get('warnings', []):
         lines.append('提示：' + str(warning))
     for gap in result.get('gaps', []):
@@ -88,7 +109,7 @@ def readable(result):
         if not value.get('ready'):
             lines.append('任务 ' + name + '：' + labels.get(value.get('state'), str(value.get('state'))))
     if result.get('checks'):
-        lines.append('检查：' + json.dumps(result['checks'], ensure_ascii=False))
+        lines += ['检查：', *readable_fields(result['checks'])]
     for key in ('implementation_ready', 'business_accepted', 'delivery_complete', 'regression_pending', 'closable'):
         if key in result:
             lines.append(key + ': ' + str(result[key]))
@@ -103,8 +124,12 @@ def references(root, values):
 
 
 def report_input(args, root, task, include_knowledge=True):
+    import repairs
     for name in ('design', 'brief'):
-        require(getattr(args, name) is not None, 'Missing --' + name + '; supply the existing artifact or use tw team start with current approvals and --context')
+        require(getattr(args, name) is not None, 'Missing --' + name + '; supply the existing artifact or use tw team start with current approvals and --context',
+                error_code={'design': Code.DESIGN_INPUT, 'brief': Code.BRIEF_INPUT}[name],
+                next_action=('补齐方案后重新开工：' + repairs.command(args, 'start', '--design <方案文件>')
+                             if name == 'design' else None))
     result = {'data_version': RECORD_SCHEMA, 'task_id': task['id'], 'design': local(root, args.design).relative_to(root).as_posix(),
               'approvals': references(root, args.approval), 'design_history': references(root, args.design_history),
               'brief': local(root, args.brief).relative_to(root).as_posix(), 'runs': references(root, args.run),
@@ -129,7 +154,8 @@ def predecessor_checks(args, root, profile, task, design, dependencies=None):
     completed, proofs = [], []
     hashes = designs.fingerprints(design)['sections']
     for value in dependencies if dependencies is not None else [read(local(root, path)) for path in args.dependency]:
-        require(set(value) == {'section', 'task', 'report'}, 'Dependency needs section, task and report paths')
+        require(set(value) == {'section', 'task', 'report'}, 'Dependency needs section, task and report paths',
+                error_code=Code.TASK_INPUT, next_action='修正 --dependency 指向的前置任务材料，再重试原命令。')
         dependency = read(local(root, value['task']))
         require(value['section'] in dependency['section_ids'] and dependency['design_id'] == task['design_id'],
                 'Predecessor evidence belongs to another task section')
@@ -156,6 +182,21 @@ def cached_predecessors(args, root, profile):
             artifact_valid(root, item)
         completed.append(value['section'])
     return completed
+
+
+APPROVAL_RECOVERY_LABELS = {Code.APPROVAL_COMMIT: '补齐批准提交', Code.APPROVAL_SOURCE: '修正批准源码链接',
+                            Code.DESIGN_HISTORY: '补齐方案历史'}
+
+
+def approval_recovery(args, value, status):
+    code = status.get('error_code')
+    if code not in APPROVAL_RECOVERY_LABELS:
+        return False
+    import repairs
+    value.update(error_code=code, next_action=repairs.action(args, error_code=code))
+    if value.get('next_step'):
+        value['next_step'].update(label=APPROVAL_RECOVERY_LABELS[code], next_command=value['next_action'])
+    return True
 
 
 def dispatch(args, root):
@@ -276,8 +317,12 @@ def dispatch(args, root):
             ref = request.publish('import.json', record, args.out) if args.out else artifact(root, path)
             return request.finish({'ok': True, 'artifact': ref, 'scope': 'execution-only'})
         except (Invalid, OSError, ValueError, TypeError, KeyError) as exc:
-            return request.finish({'ok': False, 'problem': str(exc), 'error_code': 'import-incomplete',
-                                   'next_action': 'Inspect provider identity and original reports; retry with a new request ID.'})
+            import repairs
+            code = getattr(exc, 'error_code', Code.INVALID)
+            return request.finish(repairs.annotate(args, {'ok': False, 'problem': str(exc),
+                                   'error_code': code if code != Code.INVALID else Code.IMPORT_INCOMPLETE,
+                                   'next_action': getattr(exc, 'next_action', None) or
+                                       'Inspect provider identity and original reports; retry with a new request ID.'}))
     require(task is not None and task.get('data_version') == 1, 'This operation requires a data_version 1 task')
     selected_design = (start['design'] if start else design_files.read(local(root, args.design)) if args.design else
                        design_files.read(local(root, args.record)) if args.command == 'design-draft' and args.record else
@@ -354,7 +399,7 @@ def dispatch(args, root):
                         'path': source.relative_to(root).as_posix() if source.is_relative_to(root) else str(source),
                         'sha256': sha(source)}
                 except OSError as exc:
-                    raise reviews.ReviewError('评审文件', 1, '无法读取 Markdown：' + str(source)) from exc
+                    raise reviews.ReviewError('评审文件', 1, '无法读取 Markdown：' + str(source), error_code=Code.REVIEW_FILE_UNREADABLE) from exc
             args.review_source_ref = inputs['review_markdown']
     if args.command == 'approval-draft' and any(getattr(args, key) is not None for key in ('reviewer', 'confirmation', 'approval_mode', 'revision')):
         inputs['options'].update(reviewer=args.reviewer, confirmation=args.confirmation, mode=args.approval_mode)
@@ -389,12 +434,9 @@ def dispatch(args, root):
         return materials.finish(args, root, task, result, request)
     except (RuntimeInvalid, OSError, ValueError, TypeError, KeyError) as exc:
         import repairs
-        return request.finish({'ok': False, 'status': 'incomplete', 'problem': str(exc),
+        return request.finish(repairs.failure(args, exc,
                                **({'review_failures': exc.review_failures} if hasattr(exc, 'review_failures') else {}),
-                               **({'review_file': exc.review_file} if hasattr(exc, 'review_file') else {}),
-                               'error_code': getattr(exc, 'error_code', 'invalid-or-incomplete-input'),
-                               'next_action': repairs.action(args, str(exc), getattr(exc, 'next_action', None),
-                                                             getattr(exc, 'error_code', None))})
+                               **({'review_file': exc.review_file} if hasattr(exc, 'review_file') else {})))
     except Exception as exc:
         import repairs
         return request.finish(repairs.annotate(args, tool_defect(exc)))
@@ -404,7 +446,7 @@ def tool_defect(exc):
     """An unexpected exception is a tool bug: keep evidence and say so instead of blaming the input."""
     import traceback
     frames = traceback.extract_tb(exc.__traceback__)[-3:]
-    return {'ok': False, 'status': 'incomplete', 'error_code': 'tool-defect', 'problem': repr(exc),
+    return {'ok': False, 'status': 'incomplete', 'error_code': Code.TOOL_DEFECT, 'problem': repr(exc),
             'traceback': [f'{Path(f.filename).name}:{f.lineno} {f.name}' for f in frames],
             'next_action': 'Report this as a team-workflow defect with the request directory; evidence is retained. '
                            'Do not patch the installed skill.'}
@@ -425,6 +467,8 @@ def produce(args, root, profile, task, platform, request):
         import designs
         pending = designs.pending_sections(design, status, history)
         value['pending_sections'] = pending
+        if approval_recovery(args, value, status):
+            return value
         if pending:
             if platform:
                 selector = '--issue ' + shlex.quote(platform['design_issue'])
@@ -444,7 +488,7 @@ def produce(args, root, profile, task, platform, request):
     def step_report(value, progress):
         import checklist
         if value.get('pending_sections'):
-            progress.update(next_step={'id': 'approval', 'label': '取得待确认章节的批准',
+            progress.update(next_step={'id': 'approval', 'label': APPROVAL_RECOVERY_LABELS.get(value.get('error_code'), '取得待确认章节的批准'),
                                        'next_command': value['next_action']}, finished=False)
         value.update(steps=progress['steps'], next_step=progress['next_step'], step_lines=checklist.render(progress))
 
@@ -476,8 +520,8 @@ def produce(args, root, profile, task, platform, request):
             if platform:
                 import coordination
                 continuation = coordination.resume(root, profile, task['id'], cached_predecessors(args, root, profile))
-                gaps = [gap for gap in continuation['gaps']
-                        if gap not in (coordination.NO_HANDOFF, 'Task has no assigned owner')]
+                gaps = [row['problem'] for row in continuation['gap_errors']
+                        if row['error_code'] not in (Code.HANDOFF_MISSING, Code.OWNER_MISSING)]
                 ready = not gaps and not continuation['closed']
                 value.update(ok=not gaps, ready_to_implement=ready, implementation_ready=ready, gaps=gaps)
                 if gaps:
@@ -581,9 +625,9 @@ def produce(args, root, profile, task, platform, request):
                 return verification_report({**emit(design, 'design.json'),
                     'checks_markdown': design_files.check_table(design, profile['checks'])}, design)
             supplied = approval_input(args, root)
-            require(isinstance(supplied, dict) and 'reviewer' in supplied, 'Approval input must name the reviewer')
+            require(isinstance(supplied, dict) and 'reviewer' in supplied, 'Approval input must name the reviewer', error_code=Code.APPROVAL_INCOMPLETE)
             allowed = {'reviewer', 'confirmation', 'decision', 'section_ids', 'deletion_ids', 'mode', 'revision'}
-            require(supplied.keys() <= allowed, 'Unknown approval input fields')
+            require(supplied.keys() <= allowed, 'Unknown approval input fields', error_code=Code.APPROVAL_INCOMPLETE)
             history = [design_files.read(local(root, p)) for p in args.design_history]
             assessments = designs.task_assessments(design, task['section_ids'])
             mode = supplied.pop('mode', 'combined' if any(v['complexity'] == 'simple' for v in assessments.values()) else 'design')
@@ -650,7 +694,9 @@ def produce(args, root, profile, task, platform, request):
                 'artifact': request.publish('run.json', record, args.out) if args.out else artifact(root, path),
                 'checks': [{'id': r['id'], 'status': r['status'], 'detail': r['detail'],
                             **({'source_unchanged': False} if r['id'] in moved else {})} for r in record['results']],
-                **({} if ok else {'problem': 'A check failed or its inputs changed during the run: ' + '; '.join(failed + changed),
+                **({} if ok else {'error_code': check_error_code(
+                    {r.get('error_code') for r in record['results']}, Code.CHECK_RESULT if failed else Code.RUN_BINDING_STALE),
+                    'problem': 'A check failed or its inputs changed during the run: ' + '; '.join(failed + changed),
                     'next_action': ('Read each failed check above. If the command itself ran but a registered required case name is wrong, '
                                     'correct required_cases and verify again: the original report is re-evaluated without a re-run. '
                                     'Otherwise fix the failure and run only that check with --check and a new request ID.') if failed else
@@ -684,7 +730,7 @@ def produce(args, root, profile, task, platform, request):
             if args.command == 'verify':
                 materials.report_matches(args, root, report)
         else:
-            require(args.command == 'accept', 'verify needs --report <delivery.json>')
+            require(args.command == 'accept', 'verify needs --report <delivery.json>', error_code=Code.REPORT_INCOMPLETE)
             require(args.context is not None, 'accept needs --context or --task with a prepared context; run tw team start')
             if args.review is None:
                 from reviews import ReviewNotSubmitted
@@ -701,11 +747,11 @@ def produce(args, root, profile, task, platform, request):
 
 def approval_input(args, root):
     flags = any(getattr(args, key) is not None for key in ('reviewer', 'confirmation', 'approval_mode', 'revision'))
-    require(not (args.record and flags), '--record 与批准参数二选一')
+    require(not (args.record and flags), '--record 与批准参数二选一', error_code=Code.APPROVAL_INCOMPLETE)
     if args.record:
         result = read(local(root, args.record))
     else:
-        require(bool(args.reviewer), '请用 --reviewer 指定批准人，或用 --record 提供已有输入')
+        require(bool(args.reviewer), '请用 --reviewer 指定批准人，或用 --record 提供已有输入', error_code=Code.APPROVAL_INCOMPLETE)
         result = {'reviewer': args.reviewer, 'confirmation': args.confirmation or ''}
     if args.sections is not None:
         result['section_ids'] = 'all' if args.sections.strip() == 'all' else [key.strip() for key in args.sections.split(',')]
@@ -845,6 +891,7 @@ def status(args, root, profile, task, platform=None):
     if any(row['state'] == 'done' for row in progress['steps'][3:]):
         value.pop('missing', None)
         value.pop('stale', None)
+    approval_recovery(args, value, value)
     value['step_lines'] = checklist.render(progress)
     if progress.get('rules_changed'):
         value['step_lines'].append('注意：开始任务后团队流程规则已更新；按当前规则核对已完成的步骤。')
@@ -929,5 +976,5 @@ def project_report(root, home=None):
               'summary': '项目配置、知识结构与安装已核对。' + (
                   f'另有 {len(installed["installation_problems"])} 个安装提示，见 warnings。' if installed['installation_problems'] else '')}
     if not installed['ok'] and not override:
-        result.update(error_code='tool-modified', problem='；'.join(installed['problems']))
+        result.update(error_code=Code.TOOL_MODIFIED, problem='；'.join(installed['problems']))
     return result

@@ -1,4 +1,5 @@
 """Execution records: reusable content-bound results, separate task acceptance."""
+from error_codes import Code, check_error_code
 import os
 import hashlib
 import posixpath
@@ -27,7 +28,7 @@ def revision_files(root, profile, revision):
         require(commit.lower() == revision.lower(), 'Expected the commit object itself')
         tree = git(root, 'ls-tree', '-r', '-z', '--full-tree', commit, local_only=True)
     except Invalid as exc:
-        raise Invalid('本地没有批准的提交 ' + revision + '；请先补齐本地提交，工具不会访问平台。') from exc
+        raise Invalid('本地没有批准的提交 ' + revision + '；请先补齐本地提交，工具不会访问平台。', error_code=Code.APPROVAL_COMMIT) from exc
     entries = {}
     for row in tree.split(b'\0'):
         if not row:
@@ -42,18 +43,18 @@ def revision_files(root, profile, revision):
     for oid in oids:
         end = raw.index(b'\n', offset)
         header = raw[offset:end].split()
-        require(len(header) == 3 and header[1] == b'blob', '本地缺少批准提交的源码对象：' + oid)
+        require(len(header) == 3 and header[1] == b'blob', '本地缺少批准提交的源码对象：' + oid, error_code=Code.APPROVAL_COMMIT)
         size = int(header[2])
         blobs[oid] = raw[end + 1:end + 1 + size]
         offset = end + 2 + size
 
     def content(name, seen=()):
-        require(name in entries and name not in seen, '无法核对批准提交中的文件链接：' + name)
+        require(name in entries and name not in seen, '无法核对批准提交中的文件链接：' + name, error_code=Code.APPROVAL_SOURCE)
         mode, oid = entries[name]
         if mode != '120000':
             return blobs[oid]
         target = posixpath.normpath(posixpath.join(posixpath.dirname(name), os.fsdecode(blobs[oid])))
-        require(not target.startswith(('../', '/')), '无法核对批准提交中越出仓库的链接：' + name)
+        require(not target.startswith(('../', '/')), '无法核对批准提交中越出仓库的链接：' + name, error_code=Code.APPROVAL_SOURCE)
         return content(target, (*seen, name))
 
     files = {}
@@ -216,7 +217,8 @@ def capture(root, profile, key, directory, portable=False):
         except (Invalid, OSError, UnicodeError) as exc:
             failures.append(str(exc))
     native = output_path(root, directory, check['report']) if check.get('report') else None
-    status, cases, detail = decode(check, result, native)
+    decoded = decode(check, result, native)
+    status, cases, detail = decoded.status, decoded.cases, decoded.detail
     if missing:
         detail = 'Missing required environment names: ' + ', '.join(missing)
     if failures:
@@ -230,6 +232,8 @@ def capture(root, profile, key, directory, portable=False):
             'argv': list(check['argv']), 'cwd': check['cwd'], 'repository': check.get('repository'),
             'status': status, 'cases': cases, 'detail': detail, 'state': result['state'],
             'exit_code': result['exit_code'], 'seconds': result['seconds'], 'artifacts': artifacts}
+    if failures or decoded.error_code:
+        row['error_code'] = Code.CHECK_RESULT if failures else decoded.error_code
     if portable:
         import portable
         portable.capture(directory, profile, row, portable_before, source_state(root, profile), started, now())
@@ -301,7 +305,7 @@ def verify_runs(root, profile, task, paths, live=True):
                     row, _ = portable.validate_import(root, profile, record, live=live)
                     candidates[key].append((name, record.get('started_at', ''), row, None))
                 except (Invalid, OSError, ValueError, KeyError) as exc:
-                    candidates[key].append((name, '', None, str(exc)))
+                    candidates[key].append((name, '', None, exc))
                 records.append(record)
             continue
         require(record.get('data_version') == RECORD_SCHEMA and record.get('kind') == 'execution',
@@ -317,18 +321,20 @@ def verify_runs(root, profile, task, paths, live=True):
                 try:
                     evaluated = reevaluate(root, profile, key, row)
                 except (Invalid, OSError, ValueError, KeyError, TypeError) as exc:
-                    problem = str(exc)
+                    problem = exc
             candidates[key].append((name, record.get('started_at', ''), evaluated, problem))
         records.append(record)
     results, selected_runs, superseded = {}, {}, []
     for key in sorted(required):
         usable = sorted((c for c in candidates[key] if c[3] is None), key=lambda c: c[1])
         reasons = [f'{c[0]}: {c[3]}' for c in candidates[key] if c[3] is not None]
-        require(bool(usable), 'Required execution missing or stale: ' + key + (' (' + '; '.join(reasons) + ')' if reasons else ''))
+        codes = {getattr(c[3], 'error_code', None) for c in candidates[key] if c[3] is not None}
+        require(bool(usable), 'Required execution missing or stale: ' + key + (' (' + '; '.join(reasons) + ')' if reasons else ''),
+                error_code=check_error_code(codes, Code.RUN_BINDING_STALE))
         chosen = usable[-1]
         results[key] = chosen[2]
         selected_runs[key] = inside(root, chosen[0]).relative_to(root).as_posix()
-        superseded += [{'check': key, 'path': c[0], 'reason': c[3]} for c in candidates[key] if c[3] is not None]
+        superseded += [{'check': key, 'path': c[0], 'reason': str(c[3])} for c in candidates[key] if c[3] is not None]
         superseded += [{'check': key, 'path': c[0], 'reason': 'A newer current result was selected'} for c in usable[:-1]]
     return {'checks': sorted(required), 'records': records, 'results': results,
             'selected_runs': selected_runs, 'superseded': superseded}
@@ -344,11 +350,11 @@ def row_problem(root, profile, key, row, current, record):
         binding = current(key)
         for part in binding:
             require(row.get('binding', {}).get(part) == binding[part], 'Execution ' + part + ' changed: ' + key)
-        require(row.get('state') == 'finished' and row.get('exit_code') == 0, 'Check did not pass: ' + key)
+        require(row.get('state') == 'finished' and row.get('exit_code') == 0, 'Check did not pass: ' + key, error_code=Code.CHECK_RESULT)
         original_files(root, check, row)
         return None
     except (Invalid, OSError, ValueError, KeyError, TypeError) as exc:
-        return str(exc)
+        return exc
 
 
 def original_files(root, check, row):
@@ -374,10 +380,11 @@ def reevaluate(root, profile, key, row):
     check = profile['checks'][key]
     out, captured = original_files(root, check, row)
     native = out / check['report'][len('{output}/'):] if check.get('report') else None
-    status, cases, detail = decode(check, {'state': row['state'], 'exit_code': row['exit_code'],
+    decoded = decode(check, {'state': row['state'], 'exit_code': row['exit_code'],
                                            'stdout': (out / 'stdout.txt').read_text()}, native)
-    require(status == 'passed', f'Original report does not confirm result: {key}: {detail}')
-    require(row.get('status') != 'passed' or cases == row.get('cases'), 'Original report does not confirm result: ' + key)
+    status, cases, detail = decoded.status, decoded.cases, decoded.detail
+    require(status == 'passed', f'Original report does not confirm result: {key}: {detail}', error_code=decoded.error_code)
+    require(row.get('status') != 'passed' or cases == row.get('cases'), 'Original report does not confirm result: ' + key, error_code=Code.CHECK_RESULT)
     if check.get('review'):
         scenario_review(root, out, check, captured)
     if row.get('status') == 'passed':

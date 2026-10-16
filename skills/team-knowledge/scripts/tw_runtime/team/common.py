@@ -8,6 +8,7 @@ import subprocess
 import tempfile
 from contextvars import ContextVar
 from datetime import datetime, timezone
+from error_codes import Code
 
 from tw_runtime import DATA_VERSION, VERSION, Invalid as RuntimeInvalid, gitutil, install, repo_paths
 from tw_runtime.project import CONFIG, MAPPING, TEAM_KEYS, config_problems, user_mapping_path
@@ -21,26 +22,35 @@ LOCATIONS = ContextVar('workflow_locations', default={'repositories': {}, 'input
 
 
 class Invalid(RuntimeInvalid, ValueError):
-    error_code = 'invalid-or-incomplete-input'
+    error_code = Code.INVALID
     next_action = None
+
+    def __init__(self, message, *, error_code=None, next_action=None, section=None, line=None, key=None):
+        super().__init__(message)
+        for name, value in (('error_code', error_code), ('next_action', next_action),
+                            ('section', section), ('line', line), ('key', key)):
+            if value is not None:
+                setattr(self, name, value)
 
 
 class ToolModified(Invalid):
     """An installed skill differs from its release; the fix is a reinstall, never an input change."""
-    error_code = 'tool-modified'
+    error_code = Code.TOOL_MODIFIED
     next_action = ('Reinstall the named skill from its release (npx skills update -g) and report the defect; '
                    'do not patch installed files. --allow-modified-tool records an explicit team-workflow override.')
 
 
-def require(condition, message):
+def require(condition, message, **details):
     if not condition:
-        raise Invalid(message)
+        raise Invalid(message, **details)
 
 
-def obj(value, required, optional=()):
-    require(isinstance(value, dict), 'Expected an object')
-    require(set(required) <= value.keys(), 'Missing fields: ' + ', '.join(sorted(set(required) - value.keys())))
-    require(value.keys() <= set(required) | set(optional), 'Unknown fields: ' + ', '.join(sorted(value.keys() - set(required) - set(optional))))
+def obj(value, required, optional=(), *, error_code=Code.INVALID):
+    require(isinstance(value, dict), 'Expected an object', error_code=error_code)
+    missing = set(required) - value.keys()
+    require(not missing, 'Missing fields: ' + ', '.join(sorted(missing)), error_code=error_code)
+    unknown = value.keys() - set(required) - set(optional)
+    require(not unknown, 'Unknown fields: ' + ', '.join(sorted(unknown)), error_code=error_code)
     return value
 
 
@@ -376,8 +386,8 @@ def profile_valid(profile, root, check_context=True):
         if check['format'] == 'command':
             require(not check['required_cases'], 'Plain commands cannot declare test cases')
         if check['format'] == 'junit':
-            require(check.get('report', '').startswith('{output}/'), 'JUnit report must use {output}/filename')
-            require(any('{output}' in arg for arg in argv), 'Command must generate a fresh JUnit report')
+            require(check.get('report', '').startswith('{output}/'), 'JUnit report must use {output}/filename', error_code=Code.CHECK_CONFIG)
+            require(any('{output}' in arg for arg in argv), 'Command must generate a fresh JUnit report', error_code=Code.CHECK_CONFIG)
         strings(check.get('artifacts', []))
         for name in check.get('artifacts', []):
             text(name)

@@ -4,6 +4,7 @@ import json
 import re
 
 from common import Invalid, obj, require, strings, text
+from error_codes import Code
 
 HEADER = {'design': 'id', 'task': 'task_id', 'revision': 'revision', 'assessment': 'assessment', 'roles': 'roles'}
 LABELS = {'需求级验收', '角色', '初始状态', '步骤', '预期', '反例', '依据', '检查', '验证', '验收', '范围', '前置任务', '评估'}
@@ -17,7 +18,7 @@ MARKER = re.compile(r'<!-- tw-section id=([^\s]+) type=([^\s]+)(?: depends=([^\s
 
 
 def fail(line, message):
-    raise Invalid(f'第 {line} 行：{message}')
+    raise Invalid(f'第 {line} 行：{message}', error_code=Code.DESIGN_MARKDOWN, line=line)
 
 
 def dumps(value):
@@ -369,7 +370,7 @@ def load(raw):
                     value['issues'].append(item)
                     issue_lines[item['id']] = number
             except (Invalid, ValueError, StopIteration) as exc:
-                if isinstance(exc, Invalid) and str(exc).startswith('第 '):
+                if getattr(exc, 'line', None) is not None:
                     raise
                 fail(start + 1, str(exc) or '缺少已知问题表')
             continue
@@ -512,7 +513,6 @@ def load(raw):
     try:
         return validate_design(value)
     except (Invalid, ValueError, TypeError, KeyError) as exc:
-        number = next((number for key, number in row_lines.items() if str(exc).endswith(key)), end + 1)
-        if 'Role' in str(exc):
-            number = locations['roles']
+        key = getattr(exc, 'key', None)
+        number = row_lines.get(key, locations['roles'] if key == 'roles' else end + 1)
         fail(number, str(exc))

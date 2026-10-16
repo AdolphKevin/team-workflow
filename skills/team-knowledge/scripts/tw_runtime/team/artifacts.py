@@ -1,4 +1,5 @@
 """Task-local request claims and complete, immutable output publication."""
+from error_codes import Code
 import os
 import re
 import hashlib
@@ -11,7 +12,7 @@ from common import VERSION, Invalid, artifact, create, create_text, digest, ensu
 
 def directory(root, task_id, request_id=None):
     request_id = request_id or uuid.uuid4().hex
-    require(isinstance(request_id, str) and bool(re.fullmatch(r'[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}', request_id)), 'Invalid request ID')
+    require(isinstance(request_id, str) and bool(re.fullmatch(r'[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}', request_id)), 'Invalid request ID', error_code=Code.REQUEST_INPUT)
     return inside(root, f'.tw/local/tasks/{task_directory(task_id)}/requests/{request_id}', exists=False)
 
 
@@ -44,7 +45,7 @@ class Request:
             create(self.directory / 'request.json', claim)
         except FileExistsError:
             previous = read(self.directory / 'request.json')
-            require(previous['input_digest'] == claim['input_digest'], 'Request ID already belongs to different inputs; use a new request ID')
+            require(previous['input_digest'] == claim['input_digest'], 'Request ID already belongs to different inputs; use a new request ID', error_code=Code.REQUEST_CONFLICT)
             response = self.directory / 'response.json'
             if response.is_file():
                 self.cached = read(response)
@@ -58,6 +59,7 @@ class Request:
                 except PermissionError:
                     pass
                 self.cached = {'ok': False, 'status': 'running' if active else 'interrupted',
+                               'error_code': Code.REQUEST_ACTIVE if active else Code.REQUEST_INTERRUPTED,
                                'request_id': self.directory.name,
                                'problem': 'Request is still running' if active else 'Incomplete request; inspect its materials and use a new request ID'}
 

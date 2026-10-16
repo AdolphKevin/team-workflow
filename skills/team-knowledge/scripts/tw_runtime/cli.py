@@ -78,7 +78,10 @@ def parser():
     return root
 
 
-def emit(value, text=None, fmt='text'):
+def emit(value, text=None, fmt='text', *, error=False):
+    if error and fmt != 'json':
+        print(f'tw: {value["problem"]}', file=sys.stderr)
+        return
     if fmt == 'json' or text is None:
         print(json.dumps(value, ensure_ascii=False, indent=2))
     else:
@@ -142,6 +145,9 @@ def main(argv=None):
             emit(cache.rebuild(project) if args.rebuild else cache.clear(project))
             return 0
     except Invalid as exc:
-        print(f'tw: {exc}', file=sys.stderr)
+        emit({'ok': False, 'problem': str(exc)}, fmt=getattr(args, 'format', 'text'), error=True)
         return 2
+    except Exception as exc:
+        emit({'ok': False, 'problem': str(exc)}, fmt=getattr(args, 'format', 'text'), error=True)
+        return 1
     return 2
