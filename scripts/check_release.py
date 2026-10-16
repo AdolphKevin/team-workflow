@@ -132,7 +132,7 @@ def knowledge_checks(root):
 
 
 TEAM_BUDGETS = {'SKILL.md': 3000, 'references/matt-integration.md': 3000, 'references/platform.md': 3000,
-                'references/onboarding.md': 4000}
+                'references/onboarding.md': 4000, 'references/scenarios.md': 5000}
 
 
 def team_checks(root):

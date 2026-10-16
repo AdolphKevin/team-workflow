@@ -47,7 +47,7 @@
     "scripts/tw_runtime/team/materials.py": "f6035b3cf9717348a66ae3f1ef0a03a0261cb5007a3dbf121afc7f195a481637",
     "scripts/tw_runtime/team/metrics.py": "b7bbec6e778bf4980748c6400d0e9bdf4a3c05d4d5b4d399b765b92e134f46f8",
     "scripts/tw_runtime/team/platform_script.py": "36716f3c46b91e4f602d74c2378d898a15cc16e6059de5338f0d5fa9219ed1b5",
-    "scripts/tw_runtime/team/portable.py": "e515b70dbc31e945159c818c1fd1410b2e98e7761b2dead2e17944b97913b158",
+    "scripts/tw_runtime/team/portable.py": "7bb5c45d8c4a59bd921f7fd8c92f727c42fa8ad69c758f0944115deced197e13",
     "scripts/tw_runtime/team/records.py": "59e92e0b278639846de88d5fda3547454830ea1ddd710a03055e2adac64fc7ae",
     "scripts/tw_runtime/team/repairs.py": "6f5cc9dd4f6fddbbaf137499bf597888298e9740b2fd1df0d8650e2d3dd42806",
     "scripts/tw_runtime/team/review_history.py": "4add029d657a30b76a99eafefe7fda1baaf38426aac014504719edb474f82eed",

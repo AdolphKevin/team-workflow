@@ -364,8 +364,11 @@ class WorkflowDocumentation(unittest.TestCase):
     def test_closing_instructions_require_completion_publication_and_named_authorization(self):
         root = Path(__file__).resolve().parents[1]
         text = (root / 'skills/team-workflow/references/team-delivery.md').read_text()
-        for required in ('close_authorization', 'confirmed_by', 'reference', '已发布', '不执行关闭'):
+        for required in ('close_authorization', 'confirmed_by', 'reference', '已发布', '(contracts.md#工具做什么)'):
             self.assertIn(required, text)
+        contracts = (root / 'skills/team-workflow/references/contracts.md').read_text()
+        self.assertIn('关闭任务', contracts)
+        self.assertIn('由成员按自己的授权执行；平台只读', contracts)
 
 
 class ClosingRules(unittest.TestCase):

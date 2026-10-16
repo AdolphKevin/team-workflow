@@ -271,6 +271,10 @@ def _archive_matches(archive, directory, manifest):
 
 
 def import_result(root, profile, locator, directory=None):
+    """核对平台来源与原始报告，保存导入材料，返回生成文件路径和记录。
+
+    默认保存到项目的 .tw/local/imports；业务交付结论由交付核对生成。
+    """
     directory = Path(directory) if directory is not None else root / '.tw/local/imports' / uuid.uuid4().hex
     if not directory.is_absolute():
         directory = root / directory
@@ -312,6 +316,11 @@ def import_result(root, profile, locator, directory=None):
 
 
 def validate_import(root, profile, record, *, live=True):
+    """只读核对导入材料，返回重新计算的结果与原始执行记录。
+
+    live=False 用于验收后的离线环境核查，沿用验收时的环境记录；仍核对
+    源码、检查定义、执行器、平台来源和原始报告。业务交付由交付核对判定。
+    """
     obj(record, {'data_version', 'kind', 'project', 'locator', 'retrieved_at', 'started_at', 'finished_at',
                  'source_unchanged', 'archive', 'manifest', 'provider_digest', 'provenance', 'result', 'tested_source',
                  'import_source', 'assurance'})
