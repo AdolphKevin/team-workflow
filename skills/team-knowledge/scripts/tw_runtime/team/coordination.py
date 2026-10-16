@@ -627,7 +627,7 @@ def _approval(root, profile, state, completed_tasks=()):
     validate_task_design(state['task'], state['design'])
     return designs.approval_status(state['design'], state['approvals'], history=state['history'],
         root=root, profile=profile,
-        changed_paths=validation.changed_paths(root, state['task'], profile),
+        changed_paths=validation.changed_paths(root, state['task'], profile, state['design']),
         code_digest=validation.source_digest(root, profile), section_ids=state['task']['section_ids'], completed_tasks=completed_tasks)
 
 

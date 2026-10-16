@@ -123,12 +123,16 @@ def effective_base(root, base):
     return point if contains.returncode == 0 else base
 
 
-def changed_paths(root, task, profile=None):
+def changed_paths(root, task, profile=None, design=None):
+    """The task's own design file is process material committed with it, not a change needing a task scope."""
     names = set()
     for args in [('diff', '--name-only', '--no-renames', '-z', effective_base(root, task['base'])),
                  ('ls-files', '--others', '--exclude-standard', '-z')]:
         names.update(os.fsdecode(n) for n in git(root, *args).split(b'\0') if n)
     inputs = (profile or {}).get('inputs', [])
+    if design is not None:
+        from design_files import declares
+        names = {n for n in names if not (n.endswith('.md') and declares(os.path.join(root, n), design))}
     return sorted(n for n in names if not reserved(n, inputs) and
                   (n != '.tw/config.json' or explicit_input(n, inputs)))
 

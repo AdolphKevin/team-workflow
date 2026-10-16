@@ -22,6 +22,30 @@ class DesignReadError(Invalid):
         self.next_action = '修正方案文件 ' + name + ' 中指出的行，再重试原命令。'
 
 
+def declares(path, design):
+    """A Markdown file whose header names this design and its task is that design's own source."""
+    try:
+        lines = Path(path).read_text(encoding='utf-8').split('\n')
+    except (OSError, UnicodeError):
+        return False
+    if lines[0].rstrip('\r') != '---':
+        return False
+    head = {}
+    for line in lines[1:]:
+        line = line.rstrip('\r')
+        if line == '---':
+            break
+        key, sep, value = line.partition(':')
+        if sep and key in ('design', 'task'):
+            try:
+                head[key] = json.loads(value)
+            except ValueError:
+                return False
+    else:
+        return False  # An unterminated header is not a design file.
+    return head.get('design') == design['id'] and head.get('task') == design['task_id']
+
+
 def read(path, *, internal=True):
     path = Path(path)
     try:

@@ -46,7 +46,7 @@ def design_material(root, profile, task, report, completed_tasks=()):
                                      root=root, profile=profile,
                                      section_ids=task['section_ids'],
                                      completed_tasks=completed_tasks,
-                                     changed_paths=validation.changed_paths(root, task, profile),
+                                     changed_paths=validation.changed_paths(root, task, profile, design),
                                      code_digest=code, run_refs=refs, selected_run_refs=selected_refs)
     fingerprints = designs.fingerprints(design)['sections']
     selected = {key: fingerprints[key] for key in task['section_ids']}

@@ -523,7 +523,7 @@ def produce(args, root, profile, task, platform, request):
         completed, predecessors = predecessor_checks(args, root, profile, task, design, selection['dependencies'])
         readiness = designs.approval_status(design, approvals, history=history, completed_tasks=completed,
                     root=root, profile=profile,
-                    section_ids=task['section_ids'], changed_paths=validation.changed_paths(root, task, profile),
+                    section_ids=task['section_ids'], changed_paths=validation.changed_paths(root, task, profile, design),
                     code_digest=validation.source_digest(root, profile), run_refs=[])
         paths = knowledge.query_paths(root, task, design, args.path)
         brief = knowledge.brief(root, task, paths, args.symbol)
@@ -628,8 +628,9 @@ def produce(args, root, profile, task, platform, request):
         import designs
         require(bool(args.design_history), 'Design diff needs at least the previous snapshot')
         previous = [design_files.read(local(root, p)) for p in args.design_history]
-        return emit(designs.impact(previous[-1], design_files.read(local(root, args.design)),
-                    history=previous, changed_paths=validation.changed_paths(root, task, profile)), 'design-diff.json')
+        current = design_files.read(local(root, args.design))
+        return emit(designs.impact(previous[-1], current, history=previous,
+                    changed_paths=validation.changed_paths(root, task, profile, current)), 'design-diff.json')
     if args.command == 'run':
         tasks = [task]
         for path in args.with_task:
@@ -850,7 +851,7 @@ def _status(args, root, profile, task, platform=None):
                 root=root, profile=profile,
                 history=[design_files.read(local(root, p)) for p in args.design_history], section_ids=task['section_ids'],
                 completed_tasks=cached_predecessors(args, root, profile),
-                changed_paths=validation.changed_paths(root, task, profile), code_digest=validation.source_digest(root, profile),
+                changed_paths=validation.changed_paths(root, task, profile, design), code_digest=validation.source_digest(root, profile),
                 run_refs=[artifact(root, local(root, p)) for p in args.run])
     ready = value['implementation_ready']
     summary = '可以继续实施；方案、代码与交付仍需实际验收。' if ready else '实施条件尚未满足：需补齐方案批准、决策、分派或前置任务证明。'
