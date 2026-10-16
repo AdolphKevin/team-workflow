@@ -76,7 +76,8 @@ def readable(result):
     if result.get('reference'):
         lines.append('字段说明: ' + result['reference'])
     if result.get('pending_sections'):
-        lines += ['', '待确认章节：'] + [row['id'] + ' ' + row['title'] + '：' + row['reason'] for row in result['pending_sections']]
+        import designs
+        lines += ['', '待确认章节：'] + [designs.section_label(row) + '：' + row['reason'] for row in result['pending_sections']]
     pending = set(result.get('missing', [])) | set(result.get('stale', []))
     pending &= set(result.get('required_sections', pending))
     if pending and 'pending_sections' not in result:
@@ -474,9 +475,11 @@ def produce(args, root, profile, task, platform, request):
             if platform:
                 import coordination
                 continuation = coordination.resume(root, profile, task['id'], cached_predecessors(args, root, profile))
-                value.update(ok=continuation['ok'], ready_to_implement=continuation['ready_to_implement'],
-                             implementation_ready=continuation['ready_to_implement'], gaps=continuation['gaps'])
-                if not continuation['ok']:
+                gaps = [gap for gap in continuation['gaps']
+                        if gap not in (coordination.NO_HANDOFF, 'Task has no assigned owner')]
+                ready = not gaps and not continuation['closed']
+                value.update(ok=not gaps, ready_to_implement=ready, implementation_ready=ready, gaps=gaps)
+                if gaps:
                     value.update(summary='接续仍有缺口，按所列原因修复后重新 start。',
                                  next_action='tw team start --issue ' + shlex.quote(task['id']))
         except (RuntimeInvalid, OSError, ValueError, TypeError, KeyError) as exc:

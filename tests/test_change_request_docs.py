@@ -7,6 +7,17 @@ SKILL = ROOT / 'skills/team-workflow'
 
 
 class ChangeRequestDocs(unittest.TestCase):
+    def test_close_note_guidance_covers_one_platform_owner_and_a_directed_agent_within_existing_length(self):
+        lengths = []
+        for name in ('SKILL.md', 'references/team-delivery.md', 'references/contracts.md', 'references/coordination.md'):
+            with self.subTest(name=name):
+                text = (SKILL / name).read_text()
+                lengths.append(len(text))
+                for token in ('一位平台负责人', '本人或其指挥的代理', '无须另行负责的共享仓库', '无跨服务风险'):
+                    self.assertTrue(token in text, name + ' must document ' + token)
+        self.assertLessEqual(sum(lengths[1:]), 29055)
+        self.assertLessEqual(lengths[0], 2499)
+
     def test_revision_and_platform_submission_contracts_are_documented_within_budget(self):
         for name in ('references/designs.md', 'references/contracts.md'):
             with self.subTest(name=name):

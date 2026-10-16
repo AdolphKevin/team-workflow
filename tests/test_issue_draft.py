@@ -70,6 +70,51 @@ class IssueAdoption(unittest.TestCase):
         self.assertFalse(again['body_changed'])
         self.assertEqual(again['body'].count('<!-- tw-record '), 1)
 
+    def test_design_history_reconciliation_keeps_task_body_titles_and_omits_design_outputs(self):
+        first = issue_draft.draft(self.root, self.profile, self.task, self.design,
+                                  design_path=self.design_path)['issues'][0]
+        self.issue['body'] = first['body']
+        self.publish_fixture({'markdown': first['design_comment']}, 'alice')
+        self.publish_fixture({'markdown': first['design_comment']}, 'alice')
+        self.design['revision'] = 2
+        self.design_path = plans.design_source(self.root, self.design)
+        fixtures.write_config(self.root, self.profile)
+        task_path = '.tw/local/adopt-task.json'
+        write(self.root / task_path, self.task)
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            code = workflow.main(['issue-draft', '--root', str(self.root), '--task', task_path,
+                                  '--design', str(self.design_path), '--reviewer', 'carol'])
+        result = json.loads(output.getvalue())
+        self.assertEqual(code, 0, result)
+        self.assertTrue(result['ok'])
+        own, = result['issues']
+        self.assertIn('验收项：\n- A1 Addition result\n', own['body'])
+        self.assertIn('Original MATT spec text stays as written.', own['body'])
+        self.assertEqual(coordination.task_source({'html_url': self.url, 'body': own['body']})['task'], self.task)
+        for key in ('design_comment', 'pr_description', 'approval_request'):
+            self.assertNotIn(key, own)
+        self.assertIn('design-draft --issue ' + self.url + ' --record <方案.md> --reconcile "<原因>"',
+                      '\n'.join(result['next_steps']))
+        self.assertEqual(len(self.issue['comments_data']), 2)
+
+    def test_other_design_draft_refusals_still_refuse_issue_draft(self):
+        self.design['revision'] = 2
+        self.design_path = plans.design_source(self.root, self.design)
+        with self.assertRaisesRegex(Invalid, 'Design revisions must advance by one'):
+            issue_draft.draft(self.root, self.profile, self.task, self.design, design_path=self.design_path)
+
+    def test_prefixed_titles_appear_once_in_visible_acceptance_and_approval_request(self):
+        self.design['sections'][1]['title'] = 'A1 两个 worktree'
+        self.design_path = plans.design_source(self.root, self.design)
+        result = issue_draft.draft(self.root, self.profile, self.task, self.design,
+                                   design_path=self.design_path)
+        own, = result['issues']
+        self.assertIn('验收项：\n- A1 两个 worktree\n', own['body'])
+        self.assertIn('- `A1` 两个 worktree（指纹 ', own['approval_request'])
+        self.assertNotIn('A1 A1 两个 worktree', own['body'])
+        self.assertNotIn('`A1` A1 两个 worktree', own['approval_request'])
+
     def test_child_must_declare_the_shared_design_parent(self):
         self.child_task.pop('parent')
         with self.assertRaisesRegex(Invalid, 'set "parent"'):

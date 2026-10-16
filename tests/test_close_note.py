@@ -99,20 +99,87 @@ class CloseNote(unittest.TestCase):
         self.assertFalse(result['closable'])
         self.assertNotIn('close_authorization', result['close_note']['record']['close'])
 
+    def test_single_platform_owner_can_receive_an_agent_implementers_close_note(self):
+        self.design['roles']['implementation_owner'] = 'Codex'
+        self.write('design', self.design)
+        self.issue.update(assignees=[{'login': 'AdolphKevin'}], comments_data=[])
+        self.publish(plans.draft_design(self.root, URL, self.design), 'alice')
+        approval = coordination.draft_approval(URL, {'reviewer': 'carol',
+            'code_digest': validation.source_digest(self.root, self.profile),
+            'run_refs': [artifact(self.root, self.root / path) for path in self.runs]})
+        self.publish(approval, 'carol')
+        self.write('approval', approval['record']['approval'])
+        self.accept_and_record_knowledge()
+        result = delivery.verify(self.root, self.profile, self.task, self.report)
+        self.assertTrue(result['delivery_complete'])
+        note = result['close_note']
+        self.assertEqual((note['record']['creator'], note['record']['owner']), ('Codex', 'AdolphKevin'))
+        self.assertNotIn('AdolphKevin', note['record']['roles'].values())
+        self.assertIn('负责人 AdolphKevin；实施 Codex', note['markdown'])
+        self.publish(note, 'Codex')
+        resumed = coordination.resume(self.root, self.profile, URL)
+        self.assertTrue(resumed['ok'], resumed['gaps'])
+        self.assertTrue(resumed['closed'])
+        again = delivery.verify(self.root, self.profile, self.task, self.report)
+        self.assertTrue(again['delivery_complete'])
+        self.assertNotIn('close_note', again)
+
     def test_shared_work_still_needs_an_implementation_handoff(self):
         self.accept_and_record_knowledge()
         self.issue['assignees'].append({'login': 'dave'})
-        with self.assertRaisesRegex(Invalid, 'Delivery handoff incomplete.*single assignee'):
+        with self.assertRaisesRegex(Invalid, '任务有多名负责人，请发布实施交接'):
             delivery.verify(self.root, self.profile, self.task, self.report)
 
-    def test_close_record_must_name_the_implementer_as_both_sides_with_nothing_left(self):
+    def test_no_platform_owner_requires_assigning_the_issue_to_one_person(self):
+        self.accept_and_record_knowledge()
+        self.issue['assignees'] = []
+        with self.assertRaisesRegex(Invalid, '请先将 Issue 指派给一位负责人'):
+            delivery.verify(self.root, self.profile, self.task, self.report)
+
+    def test_shared_repository_responsibility_and_cross_service_risk_still_block_close_notes(self):
+        state = coordination.load(URL, root=self.root)
+        profile = copy.deepcopy(self.profile)
+        dependency = {'kind': 'repository', 'repository': 'github.com/example/common', 'role': 'build'}
+        profile['external_inputs'] = {'common': dependency}
+        self.assertEqual(coordination.closable_alone(state, profile), [])
+        for role in ('modified', 'joint'):
+            with self.subTest(role=role):
+                dependency['role'] = role
+                self.assertIn('modified or joint repositories need their own responsibility: github.com/example/common',
+                              coordination.closable_alone(state, profile))
+        state['task']['risks'] = ['cross-service']
+        self.assertIn('cross-service work needs a joint verification owner',
+                      coordination.closable_alone(state, self.profile))
+
+    def test_close_record_allows_a_receiver_outside_design_roles_and_keeps_creator_and_completion_checks(self):
         self.accept_and_record_knowledge()
         note = delivery.verify(self.root, self.profile, self.task, self.report)['close_note']['record']
-        for change, message in [({'owner': 'carol'}, 'Close note'), ({'remaining': ['Write docs']}, 'Close note'),
+        coordination._validate_handoff({**note, 'owner': 'AdolphKevin'})
+        for change, message in [({'remaining': ['Write docs']}, '收尾说明必须没有剩余事项'),
                                 ({'creator': 'alice', 'owner': 'alice'}, 'creator must confirm')]:
             with self.subTest(change=change):
                 with self.assertRaisesRegex(Invalid, message):
                     coordination._validate_handoff({**note, **change})
+
+    def test_close_note_receiver_must_be_the_single_platform_owner(self):
+        self.accept_and_record_knowledge()
+        note = delivery.verify(self.root, self.profile, self.task, self.report)['close_note']['record']
+        progress = {key: note[key] for key in ('creator', 'owner', 'next', 'verified')}
+        for receiver in ('carol', 'AdolphKevin'):
+            with self.subTest(receiver=receiver):
+                result = coordination.draft(self.root, self.profile, URL, {**progress, 'owner': receiver},
+                                            kind='close', close=note['close'])
+                self.assertFalse(result['ok'])
+                self.assertIn('收尾说明的接收负责人必须是任务唯一的平台负责人', result['gaps'])
+
+    def test_implementation_handoff_receiver_still_needs_a_role_and_platform_assignment(self):
+        progress = {'creator': 'bob', 'owner': 'AdolphKevin', 'next': 'Continue implementation',
+                    'remaining': ['Finish implementation']}
+        with self.assertRaisesRegex(Invalid, 'receiver needs a declared responsibility'):
+            coordination.draft(self.root, self.profile, URL, progress)
+        result = coordination.draft(self.root, self.profile, URL, {**progress, 'owner': 'carol'})
+        self.assertFalse(result['ok'])
+        self.assertIn('Handoff receiver is not assigned to this task', result['gaps'])
 
 
 if __name__ == '__main__':

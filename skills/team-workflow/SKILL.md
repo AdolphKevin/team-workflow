@@ -23,13 +23,13 @@ disable-model-invocation: true
 3. **评审**：未参与实施的人填写姓名、规范与需求及逐项验收结论、理由、问题处置；人工观察由观察人填写。简单任务需合并批准时填“批准方案与代码：是”。配置平台时，将完整 Markdown 作为变更请求评审提交，`deliver` 自动导入；也可显式 `review --task <身份> --from-platform`。本地用 `review --task <身份> --submit`。不通过意见也可提交；绑定区与自动结果不改。
 4. **deliver**：不改知识时用 `tw team deliver --task <身份> --reason <理由>`，顺序完成业务验收、知识处置报告和最终核查。失败停在对应步骤，重试复用有效记录，不手写报告 JSON。
 
-简单平台任务可用 `start`、`run`、评审人在变更请求上提交评审、`deliver`。
+`deliver` 生成收尾说明的条件：仅一位平台负责人、无须另行负责的共享仓库且无跨服务风险；实施可由本人或其指挥的代理完成。
 
 要更新知识时，在第 3 步后先 `tw team accept --task <身份>`；通过后在同一分支更新 `.tw/` 并运行 `tw check`，再 `deliver --task <身份>`。检查通过、业务验收和最终交付分别报告，证据来自真实入口及原始结果。
 
 源码、方案或选中运行变化后，用 `review --task <身份>` 核对“变化”，逐项把预填结论、人工观察的“待复核”改为“已复核”后提交。已知问题保留编号、负责人和影响；接受限制或延期须有确认及处置依据。
 
-中断后用 `status --task <身份> --format text` 看有效记录和下一步；显式材料路径见[工具约定](references/contracts.md)。交付后按授权发布收尾说明或交接，报告记录关闭授权；工具不执行关闭。跨仓、接力与关闭见[团队交付](references/team-delivery.md)。
+用 `status --task <身份> --format text` 看记录与下一步；材料见[工具约定](references/contracts.md)。交付后按授权发布收尾或交接，报告记录关闭授权；工具不执行关闭，详见[团队交付](references/team-delivery.md)。
 
 ## 按目标选择方法
 
