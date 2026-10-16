@@ -73,7 +73,7 @@ class LocalMapping(Case):
             self.assertIn(str(shared[expected]), brief['repositories']['common']['description'])
         task = {'data_version': 1, 'id': 'TASK-worktree-A', 'base': git(a, 'rev-parse', 'HEAD'),
                 'goal': '说明共享仓', 'non_goals': [], 'kind': 'docs', 'risks': [],
-                'acceptance': [{'id': 'A1', 'expectation': '说明共享仓', 'checks': ['unit']}],
+                'acceptance': [{'id': 'A1'}],
                 'design_id': 'D-worktrees', 'section_ids': ['T1'], 'acceptance_scope': 'requirement',
                 'paths': ['README.md']}
         from plan_fixtures import plan
