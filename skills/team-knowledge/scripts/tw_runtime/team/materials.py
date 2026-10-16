@@ -154,7 +154,7 @@ def resolve(args, root):
     if file_task:
         captured = read(checked(root, defaults['task'], 'task', task_id))
         import task_inputs
-        task_inputs.validate_written(supplied)
+        task_inputs.validate_written(supplied, local(root, args.task).relative_to(root).as_posix())
         same = supplied == task_inputs.written(captured)
         if not same:
             raise MaterialGap('task', '内容已改变，须重新 start', task_id)

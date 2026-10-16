@@ -158,6 +158,25 @@ class ReviewBlocked(Invalid):
         super().__init__('评审未通过：' + '；'.join(names[row['kind']] + ' ' + row['id'] + '：' + row['reason'] for row in failures))
 
 
+class ReviewCaseError(Invalid):
+    def __init__(self, identifier, case):
+        super().__init__('验收 ' + identifier + ' 用例不存在或未通过：' + case)
+
+
+def review_case_failures(review, execution):
+    failures = []
+    for row in review['acceptance']:
+        passed = set()
+        for observation in row.get('observations', []):
+            key = observation.get('check')
+            if observation.get('kind') == 'execution' and observation.get('run', {}).get('path') == execution['selected_runs'].get(key):
+                passed.update(case for case, outcome in execution['results'].get(key, {}).get('cases', {}).items() if outcome == 'passed')
+        missing = [case for case in row.get('cases', []) if case not in passed]
+        if missing:
+            failures.append({'kind': 'case', 'id': row['id'], 'reason': '用例不存在或未通过：' + '、'.join(missing)})
+    return failures
+
+
 def require_review_passed(task, review, required):
     failures = review_failures(review, required)
     if failures:
@@ -260,21 +279,28 @@ def verify(root, profile, task, report, phase='delivery', _seen=None, live=None)
                            'reason': 'Existing result independently checked against current inputs; not a claim of earlier knowledge reading'})
     review = read(inside(root, report['review']))
     run_paths = [inside(root, p).relative_to(root).as_posix() for p in report['runs']]
-    check_review(root, profile, task, review, selected, design, status, execution, run_paths)
+    try:
+        check_review(root, profile, task, review, selected, design, status, execution, run_paths)
+    except ReviewCaseError as exc:
+        import reviews
+        repair = reviews.case_repair(root, task['id'], artifact(root, inside(root, report['review'])))
+        exc.next_action, exc.review_file = repair['next_action'], repair['review_file']
+        raise
     from contracts import automation
     regression = automation(report['automation'], task, review['findings'], profile, execution) if 'automation' in report else 'not-declared'
     materials = [artifact(root, inside(root, report[p])) for p in ('design', 'brief', 'review')]
     materials += [artifact(root, inside(root, p)) for p in report['approvals'] + report['runs'] + report.get('design_history', [])]
     materials += dependency_materials
+    verification = {row['id']: row['data']['verification'] for row in design['sections'] if row['type'] == 'acceptance'}
+    named_cases = {row['id']: sorted(set(verification[row['id']]['cases']) | set(row.get('cases', [])))
+                   for row in review['acceptance'] if verification[row['id']]['method'] == 'automatic'}
     result = {'data_version': RECORD_SCHEMA, 'kind': 'acceptance' if phase == 'acceptance' else 'delivery-verification',
               'ok': True, 'at': now(), 'phase': phase, 'task_id': task['id'], 'task_digest': digest(task),
               'source_digest': before, 'sections': selected, 'checks': execution['checks'], 'materials': materials,
               'scope': 'business-acceptance' if phase == 'acceptance' else 'team-delivery',
               'acceptance_scope': task['acceptance_scope'], 'report': dict(report), 'issues': review['findings'],
               'observations': {r['id']: r['observations'] for r in review['acceptance']},
-              'unspecified_cases': [r['id'] for r in review['acceptance'] if not r.get('cases')
-                                    and any(s['id'] == r['id'] and s['data']['verification']['method'] == 'automatic'
-                                            and not s['data']['verification']['cases'] for s in design['sections'])],
+              'named_cases': named_cases, 'unspecified_cases': [key for key, cases in named_cases.items() if not cases],
               'business_accepted': True, 'delivery_complete': False, 'closable': False,
               'reused_execution': reused, 'automation_status': regression, 'tool': tool,
               'superseded_execution': execution['superseded'],
@@ -418,4 +444,6 @@ def check_observations(root, profile, design, row, execution, run_paths):
             for ref in observation['evidence']:
                 evidence(root, profile, ref)
     for case in sorted(set(requirement['cases']) | set(row.get('cases', []))):
+        if case not in cases and case in row.get('cases', []):
+            raise ReviewCaseError(row['id'], case)
         require(case in cases, '验收 ' + row['id'] + ' 用例不存在或未通过：' + case)

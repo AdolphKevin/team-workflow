@@ -196,8 +196,8 @@ class MarkdownReview(unittest.TestCase):
     def test_review_gives_the_specific_substitute_fix_without_refusing_the_draft(self):
         path, _ = self.draft(substitutes=['recording sink'])
         raw = path.read_text()
-        self.assertIn('在 A1 的验证行写“替身 recording sink”', raw)
-        self.assertIn('检查 unit：使用了未允许的替身', raw)
+        self.assertIn('把 A1 的验证行改为：- 验证：自动；用例 Arithmetic::adds；替身 recording sink', raw)
+        self.assertIn('检查 unit 还使用了未允许的替身：recording sink', raw)
         self.assertNotIn('此检查的覆盖范围不足以独立证明该验收项', raw)
         code, submitted = self.submit(path, self.completed(raw))
         self.assertEqual(code, 0, submitted)

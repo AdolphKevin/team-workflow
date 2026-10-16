@@ -40,13 +40,13 @@ class PendingSections(unittest.TestCase):
         code, result = self.command(*args)
         self.assertEqual(code, 0, result)
         self.assertEqual([(row['id'], row['title'], row['reason']) for row in result['pending_sections']],
-                         [('A1', 'Result', '正文已改'), ('T1', 'Implement', '依赖 A1 已改')])
+                         [('A1', 'Result', '内容已改'), ('T1', 'Implement', '依赖 A1 已改')])
         self.assertIn('approval-draft', result['next_action'])
         self.assertIn('--task', result['next_action'])
         self.assertIn('--design', result['next_action'])
         self.assertIn('<评审人>', result['next_action'])
         text = commands.readable(result)
-        self.assertIn('待确认章节：\nA1 Result：正文已改\nT1 Implement：依赖 A1 已改', text)
+        self.assertIn('待确认章节：\nA1 Result：内容已改\nT1 Implement：依赖 A1 已改', text)
         # The checklist must not point past the missing consent.
         self.assertIn('下一步：取得待确认章节的批准\n' + result['next_action'], text)
         self.assertNotIn('下一步：运行检查', text)

@@ -70,6 +70,27 @@ def source_text(args, root, task_id):
     return source_path(args, root, task_id).read_bytes().decode('utf-8')
 
 
+def case_repair(root, task_id, review_ref=None):
+    """Point back to editable input, preserving immutable submitted Markdown as evidence."""
+    state = _state(root, task_id)
+    entry = next((row for row in state['submitted'].values()
+                  if review_ref and row['review']['sha256'] == review_ref['sha256']), None)
+    original = (entry or {}).get('input_markdown')
+    if original is None and review_ref:
+        response = (root / review_ref['path']).parent / 'response.json'
+        if response.is_file():
+            candidate = read(response).get('review_file')
+            if candidate and not candidate.startswith(('http://', 'https://')) and Path(candidate).is_relative_to(root):
+                original = candidate
+    path = Path(original) if original else locations(root, task_id)[0]
+    path = (root / path).resolve() if not path.is_absolute() else path
+    name = path.relative_to(root).as_posix() if path.is_relative_to(root) else str(path)
+    command = ('tw team review --task ' + shlex.quote(task_id) + ' --submit --file ' + shlex.quote(name)
+               + ' --root ' + shlex.quote(str(root)))
+    return {'review_file': name,
+            'next_action': f'修正评审 Markdown {name} 中的“用例”字段后重新提交：' + command}
+
+
 def published_approval(root, task_id, review):
     """A combined approval derived from published Markdown is itself shared consent."""
     if 'platform_author' not in review and 'platform_url' not in review:
@@ -242,7 +263,7 @@ def snapshot(args, root, profile, task, draft_id, allow_incomplete=False):
                 for outcome in outcomes.values():
                     counts[outcome] = counts.get(outcome, 0) + 1
                 tally = '，'.join(words.get(key, key) + ' ' + str(counts[key]) for key in sorted(counts))
-                lines.append(f'  - 共 {len(outcomes)} 项用例：{tally}' + ('' if declared else '；本验收未登记对应用例'))
+                lines.append(f'  - 共 {len(outcomes)} 项用例：{tally}' + ('' if declared else '；方案未登记对应用例'))
             else:
                 lines.append('  - 未登记独立用例；以上为实际命令的退出结果。')
             if execution.get('gap'):
@@ -550,7 +571,7 @@ def generate(args, root, profile, task, request):
     from cleanup import guard
     from materials import load
     target, state_path = locations(root, task['id'])
-    candidate, _, _, _ = snapshot(args, root, profile, task, uuid.uuid4().hex, allow_incomplete=True)
+    candidate, _, _, candidate_execution = snapshot(args, root, profile, task, uuid.uuid4().hex, allow_incomplete=True)
     with guard(root):
         state = _state(root, task['id'])
         current = read(artifact_valid(root, state['current'])) if state['current'] else None
@@ -568,6 +589,10 @@ def generate(args, root, profile, task, request):
                       'binding': previous['binding'], 'review': previous['review'],
                       'summary': '当前已提交的评审仍然有效，无需生成复核稿。',
                       'next_action': 'tw team accept --task ' + shlex.quote(task['id'])}
+            failures = delivery.review_case_failures(previous['review_value'], candidate_execution)
+            if failures:
+                result.update(case_repair(root, task['id'], previous['review']), review_failures=failures,
+                              summary='当前评审中的用例需要修正后重新提交。')
             return {**result, 'artifact': request.publish('review-status.json', result)}
         if target.exists() and fresh:
             result = _existing(root, task['id'], target, state, current, True)
@@ -733,7 +758,10 @@ def mark_submitted(root, task_id, result):
     value = read(artifact_valid(root, state['generations'][result['draft_id']]))
     original = result['review_markdown']['sha256']
     marker = original if Path(result['review_file']).resolve() == target.resolve() else value['template_sha256']
+    original_path = Path(result['review_file'])
+    original = (original_path.relative_to(root).as_posix() if original_path.is_relative_to(root) else str(original_path))
     entry = {'review': result['artifact'], 'markdown': result['review_markdown'], 'source': result['review_source'],
+             'input_markdown': original if not result['review_file'].startswith(('http://', 'https://')) else None,
              'binding': state['generations'][result['draft_id']], 'default_sha': marker}
     if result.get('approval'):
         entry['approval'] = result['approval']

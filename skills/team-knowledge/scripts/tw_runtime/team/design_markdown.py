@@ -426,7 +426,8 @@ def load(raw):
                     validate_assessment(result)
                 return result
             except (Invalid, ValueError, TypeError, KeyError) as exc:
-                fail(number, str(exc))
+                reason = ('验收 ' + identifier + ' 的验证行：' if kind == 'acceptance' and name == '验证' else '')
+                fail(number, reason + str(exc))
         table_indices = set()
         if kind == 'global-scope':
             data['requirement_acceptance'] = field('需求级验收', array)

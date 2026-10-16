@@ -65,11 +65,10 @@ def readable(result):
         lines.append('已填写：{completed}/{total}'.format(**result['progress']))
     if result.get('close_note'):
         lines += ['--- 收尾说明草稿（原样发布到 Issue）---', result['close_note']['markdown']]
-    steps = [line for line in result.get('step_lines', []) if line != result.get('summary')]
-    if result.get('pending_sections') and result.get('next_action') and '' in steps:
-        # Checks come after consent; the checklist's own next step would skip the pending approval.
-        steps = steps[:steps.index('')] + ['', '下一步：取得待确认章节的批准', result['next_action']]
-    lines += steps + result.get('lines', [])
+    lines += [line for line in result.get('step_lines', []) if line != result.get('summary')] + result.get('lines', [])
+    for row in result.get('authorizations_needed', []):
+        if row['question'] not in result.get('next_action', ''):
+            lines.append(row['question'])
     for name, path in result.get('templates', {}).items():
         lines.append('模板 ' + name + ': ' + path)
     for target in result.get('targets', []):
@@ -190,8 +189,10 @@ def dispatch(args, root):
     if candidate:
         platform_read.is_task(root, candidate)
     profile = load_profile(root)
-    if args.task and (root / args.task).is_file():
-        task_inputs.validate_written(read(local(root, args.task)))
+    task_files = ([args.task] if args.task and (root / args.task).is_file() else []) + list(args.with_task)
+    for value in task_files:
+        path = local(root, value)
+        task_inputs.validate_written(read(path), path.relative_to(root).as_posix())
     import materials
     materials.resolve(args, root)
     start = None
@@ -428,7 +429,7 @@ def produce(args, root, profile, task, platform, request):
                 if platform['design_issue'] != task['id']:
                     selector += ' --sections ' + shlex.quote(','.join(dict.fromkeys(row['id'] for row in pending)))
             else:
-                design_path = args.design
+                design_path = args.start_selection.get('design_path') or args.design
                 if design_path is None or Path(design_path).suffix != '.md':
                     design_path = request.publish_text('approval-design.md', designs.render(design))['path']
                 selector = '--task ' + shlex.quote(task['id']) + ' --design ' + shlex.quote(str(design_path))
@@ -436,15 +437,20 @@ def produce(args, root, profile, task, platform, request):
                                     if Path(path).suffix == '.md')
             value['next_action'] = ('tw team approval-draft --root ' + shlex.quote(str(root)) + ' ' + selector
                                     + ' --reviewer "<评审人>"')
-            if value.get('authorizations_needed'):
-                value['next_action'] = value['authorizations_needed'][0]['question'] + ' ' + value['next_action']
         return value
+
+    def step_report(value, progress):
+        import checklist
+        if value.get('pending_sections'):
+            progress.update(next_step={'id': 'approval', 'label': '取得待确认章节的批准',
+                                       'next_command': value['next_action']}, finished=False)
+        value.update(steps=progress['steps'], next_step=progress['next_step'], step_lines=checklist.render(progress))
 
     def verification_report(value, design):
         from contracts import execution_environment
         gaps = execution_environment(profile, task, design)
         value['verification_gaps'] = gaps
-        if gaps:
+        if gaps and not (args.command == 'start' and value.get('pending_sections')):
             value['next_action'] = gaps[0] + ('；' + value['next_action'] if value.get('next_action') else '')
         return value
 
@@ -452,7 +458,7 @@ def produce(args, root, profile, task, platform, request):
         return {'ok': value.get('ok', True), 'artifact': request.publish(name, value, args.out),
                 **{k: value[k] for k in ('summary', 'gaps', 'problem', 'next_action', 'implementation_ready',
                                        'business_accepted', 'delivery_complete', 'regression_pending', 'automation_status', 'closable', 'acceptance_scope', 'scope', 'validation_active', 'verification_gaps',
-                                       'summary_markdown', 'close_note', 're_evaluated', 'tool', 'environment_checked', 'pending_acceptance', 'pending_sections') if k in value}}
+                                       'summary_markdown', 'close_note', 're_evaluated', 'tool', 'environment_checked', 'pending_acceptance', 'pending_sections', 'authorizations_needed') if k in value}}
     if args.command == 'deliver':
         import delivery_sequence
         return delivery_sequence.deliver(args, root, profile, task, request)
@@ -503,6 +509,7 @@ def produce(args, root, profile, task, platform, request):
         if 'sections' in value:
             pending_report(value, selection['design'], value, selection['history'])
         verification_report(value, selection['design'])
+        step_report(value, progress)
         return {**value, 'artifact': request.publish('start.json', value, args.out)}
     if args.command == 'task-export':
         return {**emit(task, 'task.json'), 'summary': '仅导出任务；实施和交付条件尚未核对。', 'implementation_ready': False, 'business_accepted': False}
@@ -531,7 +538,8 @@ def produce(args, root, profile, task, platform, request):
                    'design_history': [request.publish(f'design-history-{i}.json', v) for i, v in enumerate(history)],
                    'predecessors': [request.publish(f'predecessor-{i}.json', v) for i, v in enumerate(predecessors)],
                    'dependencies': selection['dependencies'],
-                   'preparation_inputs': selection['signature'],
+                   'preparation_inputs': {**selection['signature'],
+                                          **({'design_path': selection['design_path']} if selection['design_path'] else {})},
                    'implementation_ready': readiness['implementation_ready'] and not running,
                    'validation_active': running,
                    'rules_digest': rules_digest(), 'login_policy': login['policy'],
@@ -555,7 +563,7 @@ def produce(args, root, profile, task, platform, request):
         import checklist
         progress = checklist.steps(root, task, validation.source_digest(root, profile), result['context']['path'],
                                    profile=profile, current=(read(request.directory / 'request.json'), result), **step_materials(args))
-        result.update(steps=progress['steps'], next_step=progress['next_step'], step_lines=checklist.render(progress))
+        step_report(result, progress)
         return result
     if args.command == 'brief':
         return emit(knowledge.brief(root, task, relative_paths(root, args.path), args.symbol), 'brief.json')
@@ -567,8 +575,7 @@ def produce(args, root, profile, task, platform, request):
             coordination.validate_task_design(task, design)
             if args.command == 'design-draft':
                 return verification_report({**emit(design, 'design.json'),
-                    'checks_markdown': design_files.check_table(design, profile['checks']),
-                    'next_steps': list(coordination.DESIGN_PUBLICATION_STEPS)}, design)
+                    'checks_markdown': design_files.check_table(design, profile['checks'])}, design)
             supplied = approval_input(args, root)
             require(isinstance(supplied, dict) and 'reviewer' in supplied, 'Approval input must name the reviewer')
             allowed = {'reviewer', 'confirmation', 'decision', 'section_ids', 'deletion_ids', 'mode', 'revision'}
@@ -778,8 +785,8 @@ def status(args, root, profile, task, platform=None):
                     later.update(state='stale', stale_reason=later.get('stale_reason') or '前序材料已变化')
     if facts['review_current']:
         selected = '--task ' + shlex.quote(task['id'])
-        repair = None
-        if facts['review_failures']:
+        repair = facts.get('review_case_repair', {}).get('next_action')
+        if facts['review_failures'] and not repair:
             from delivery import ReviewBlocked
             repair = ReviewBlocked(task, facts['review_failures']).next_action  # deliver would only fail again
         for row in progress['steps'][3:]:
@@ -801,11 +808,16 @@ def status(args, root, profile, task, platform=None):
     value['summary'] = ('已交付；关闭需要授权，工具不执行关闭' if 'delivery' in value['verified_records']
                         and not progress['next_step'] else '按已核实的记录和下一步继续。')
     value['next_action'] = progress['next_step']['next_command'] if progress['next_step'] else value['summary']
-    if facts['review_failures'] and facts['review_current']:
+    if facts['review_failures'] and facts['review_current'] and not facts.get('review_case_repair'):
         from delivery import ReviewBlocked
         blocked = ReviewBlocked(task, facts['review_failures'])
         value.update(summary='评审已提交，仍有不通过项或阻塞问题。', review_failures=facts['review_failures'],
                      next_action=blocked.next_action)
+    if facts.get('review_case_repair') and facts['review_current']:
+        repair = facts['review_case_repair']
+        value.update(summary='评审中的用例需要修正后重新提交。', review_failures=facts['review_failures'], **repair)
+        progress['next_step'] = {'id': 'review', 'label': '修正评审中的用例并重新提交', 'next_command': repair['next_action']}
+        value['next_step'] = progress['next_step']
     if facts['stale_materials']:
         value['summary'] = '方案或批准等材料已变化，请重新 start 后继续。'
         extra = '--design ' + shlex.quote(str(args.design)) if args.design and 'design' in (getattr(args, 'material_selection', None) or {}).get('explicit', {}) else ''

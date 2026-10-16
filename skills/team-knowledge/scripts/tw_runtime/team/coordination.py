@@ -209,6 +209,7 @@ def _read(issue, root=None):
     requirements = digest(source)
     rows = {'design': [], 'approval': [], 'handoff': []}
     problems = {name: [] for name in rows}
+    repairs = {name: [] for name in rows}
     seen = []
     for comment in _history(issue):
         try:
@@ -278,18 +279,22 @@ def _read(issue, root=None):
                     require(row['design']['revision'] == 1, 'Design history must begin with revision 1')
                 if resolution:
                     problems[name] = []
+                    repairs[name] = []
                     if name == 'design':
                         rows['design'], rows['approval'] = [], []
                         problems['approval'] = []
+                        repairs['approval'] = []
                 rows[name].append({'url': comment['url'], 'digest': record_digest, 'record': row,
                                    'recorded_by': comment.get('author'),
                                    **({'source': source_reference, 'markdown': source_markdown} if name == 'design' else {})})
             except (Invalid, ValueError, KeyError, TypeError) as exc:
                 problems[name].append('Invalid ' + name + ' ' + comment['url'] + ': ' + str(exc))
+                if getattr(exc, 'next_action', None):
+                    repairs[name].append(exc.next_action)
         seen.append(comment)
     return {'source': source, 'requirements': requirements, 'rows': rows,
             'gaps': [value for group in problems.values() for value in group],
-            'problems': problems,
+            'problems': problems, 'repairs': repairs,
             'history_digest': digest(seen), 'platform_history': seen}
 
 
@@ -363,6 +368,7 @@ def load(url, issue=None, root=None):
             'current': current['record'] if current else None, 'previous': _pointer(current),
             'owners': [row['login'] for row in issue.get('assignees', [])],
             'design_gaps': sorted(set(design_gaps)),
+            'design_repair': next(iter(design_state['repairs']['design']), None),
             'progress': list(progress.values()), 'pending_progress': pending, 'gaps': sorted(set(gaps))}
 
 
@@ -373,8 +379,9 @@ def approval_sentence(approval, design=None):
     deleted = ['删除章节 ' + row['id'] for row in approval.get('deletions', [])]
     selected = records.prose('、'.join([selected, *deleted]).strip('、'))
     action = {'approved': '批准', 'changes-requested': '要求修改', 'deferred': '暂缓'}.get(approval.get('decision'), '批准')
+    confirmation = approval.get('confirmation', '')
     return (f'{records.prose(approval["reviewer"])} {action}方案第 {approval["design_revision"]} 版：{selected}。'
-            + '依据：' + records.prose(approval.get('confirmation', '')))
+            + ('依据：' + records.prose(confirmation) if confirmation.strip() else ''))
 
 
 def _markdown(name, row, heading, design=None):

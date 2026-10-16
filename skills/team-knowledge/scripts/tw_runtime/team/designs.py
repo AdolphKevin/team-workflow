@@ -336,7 +336,8 @@ def approval_draft(design, reviewer, confirmation='', decision='approved', secti
     hashes = fingerprints(design)['sections']
     identifiers = sorted(hashes) if section_ids is None else list(section_ids)
     strings(identifiers)
-    require(set(identifiers) <= hashes.keys(), 'Review references an unknown current section')
+    unknown = [key for key in dict.fromkeys(identifiers) if key not in hashes]
+    require(not unknown, '批准范围包含不存在的章节：' + '、'.join(unknown))
     _, transitions, _ = _history(design, previous, history)
     deletions = [row for change in transitions for row in change['deletions']]
     if deletion_ids is None:
@@ -430,7 +431,7 @@ STATE_REASONS = {'unreviewed': '未评审', 'approved': '', 'changes-requested':
 def _review_reason(key, row, hashes, design, chain, transitions):
     later = [change for change in transitions if change['revision'] > row['design_revision']]
     if row['sections'][key]['own'] != hashes['own'] or any(key in change['changed'] for change in later):
-        return '正文已改'
+        return '内容已改'
     if row['assessment_hash'] != _hash(design['assessment']) or any(change['assessment_changed'] for change in later):
         return '评估已改'
     for before, after, change in zip(chain, chain[1:], transitions):
@@ -441,7 +442,7 @@ def _review_reason(key, row, hashes, design, chain, transitions):
             identifier = section['id']
             if identifier in seeds and key in _closure([_dependencies(before), _dependencies(after)], {identifier}):
                 return '依赖 ' + identifier + ' 已改'
-    return '正文已改'  # A changed blocking issue is part of the effective section content.
+    return '内容已改'  # A changed blocking issue is part of the effective section content.
 
 
 def pending_sections(design, status, history=()):
@@ -477,7 +478,8 @@ def approval_selection(design, approvals, task_sections, history, value, *, root
             selected = [row['id'] for row in design['sections']]
         strings(selected)
         current = set(status['sections'])
-        require(set(selected) <= current | pending_deletions, 'Review references an unknown current section')
+        unknown = [key for key in dict.fromkeys(selected) if key not in current | pending_deletions]
+        require(not unknown, '批准范围包含不存在的章节：' + '、'.join(unknown))
         result['section_ids'] = [key for key in selected if key in current]
         result.setdefault('deletion_ids', [key for key in selected if key in pending_deletions])
     else:

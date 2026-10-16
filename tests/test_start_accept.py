@@ -41,7 +41,7 @@ class StartAccept(unittest.TestCase):
     def contexts(self):
         return sorted((self.root / '.tw/local/tasks').glob('*/requests/*/context.json'))
 
-    def test_first_start_creates_context_and_points_to_run(self):
+    def test_first_start_creates_context_and_points_to_pending_approval(self):
         self.setup_task()
         code, result = self.start('--design', self.name('design'))
         self.assertEqual(code, 0, result)
@@ -51,9 +51,10 @@ class StartAccept(unittest.TestCase):
         self.assertEqual(result['task_directory'], str(self.contexts()[0].parent.parent.parent.relative_to(self.root)))
         self.assertTrue(result['implementation_ready'])
         self.assertEqual(result['gaps'], [])
-        self.assertEqual(result['next_step']['id'], 'run')
-        self.assertIn('tw team run', result['next_step']['next_command'])
-        self.assertIn(result['context']['path'], result['next_step']['next_command'])
+        self.assertEqual(result['next_step']['id'], 'approval')
+        self.assertIn('tw team approval-draft', result['next_step']['next_command'])
+        self.assertIn(self.task['id'], result['next_step']['next_command'])
+        self.assertIn(self.name('design'), result['next_step']['next_command'])
 
     def test_same_start_continues_without_another_context(self):
         self.setup_task()
@@ -68,12 +69,13 @@ class StartAccept(unittest.TestCase):
         self.assertEqual(self.contexts(), contexts)
         self.assertNotEqual(again['brief']['path'], first['brief']['path'])
         self.assertTrue(again['brief']['path'].startswith(again['request_directory'] + '/'))
-        self.assertEqual(again['next_step']['id'], 'run')
+        self.assertEqual(again['next_step']['id'], 'approval')
         code, status = self.command('status', '--context', again['context']['path'])
         self.assertEqual(code, 0, status)
         prepared = next(row for row in status['steps'] if row['id'] == 'prepare')
         self.assertEqual((prepared['state'], prepared['evidence']), ('done', first['context']['path']))
-        self.assertEqual(status['next_step'], again['next_step'])
+        self.assertEqual(status['next_step']['id'], 'run')
+        self.assertIn('tw team run', status['next_step']['next_command'])
 
     def test_new_design_start_supersedes_the_previous_context(self):
         self.setup_task()
@@ -236,7 +238,7 @@ class StartAccept(unittest.TestCase):
         code, changed = self.start('--design', self.name('design-2'), '--design-history', self.name('design'))
         self.assertEqual(code, 0, changed)
         self.assertFalse(changed['continued'])
-        self.assertEqual(changed['next_step']['id'], 'run')
+        self.assertEqual(changed['next_step']['id'], 'approval')
         self.assertEqual(next(row for row in changed['steps'] if row['id'] == 'acceptance')['state'], 'pending')
 
     def test_accept_task_file_refuses_explicit_changes_since_start(self):
@@ -300,7 +302,7 @@ class StartAccept(unittest.TestCase):
         self.assertTrue(resumed['continued'])
         self.assertEqual(resumed['context'], first['context'])
         self.assertEqual(len(self.contexts()), 1)
-        self.assertEqual(resumed['next_step']['id'], 'run')
+        self.assertEqual(resumed['next_step']['id'], 'approval')
         code, status = self.command('status', '--context', first['context']['path'])
         self.assertEqual(code, 0, status)
         self.assertEqual(next(row for row in status['steps'] if row['id'] == 'prepare')['state'], 'done')

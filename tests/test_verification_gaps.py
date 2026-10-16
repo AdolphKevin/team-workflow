@@ -44,10 +44,13 @@ class VerificationGaps(unittest.TestCase):
             self.assertIn('A1', gap)
             self.assertIn('unit', gap)
         self.assertIn('checks.unit.coverage', gaps[0])
-        self.assertIn('在 A1 的验证行写“替身 existing、recorder”', gaps[1])
+        self.assertIn('把 A1 的验证行改为：- 验证：自动；用例 Suite::case；替身 existing、recorder', gaps[1])
         self.assertIn('journey', gaps[2])
         self.assertIn('删除用例', gaps[3])
-        self.assertTrue(result['next_action'].startswith(gaps[0]), result)
+        if result.get('pending_sections'):
+            self.assertTrue(result['next_action'].startswith('tw team approval-draft '), result)
+        else:
+            self.assertTrue(result['next_action'].startswith(gaps[0]), result)
 
     def test_early_gaps_are_actionable_and_report_only_in_local_commands(self):
         self.setup_task()
@@ -103,8 +106,8 @@ class VerificationGaps(unittest.TestCase):
         self.design['sections'][1]['data']['verification']['substitutes'] = [allowed]
         self.profile['checks']['unit']['coverage']['substitutes'] = [missing]
         gap, = contracts.execution_environment(self.profile, self.task, self.design)
-        fix = gap.partition('写“')[2].partition('”，')[0]
+        fix = gap.split('改为：', 1)[1].split('（检查 ', 1)[0]
         raw = designs.render(self.design)
         line = next(line for line in raw.splitlines() if line.startswith('- 验证：'))
-        loaded = designs.load(raw.replace(line, '- 验证：自动；' + fix))
+        loaded = designs.load(raw.replace(line, fix))
         self.assertEqual(loaded['sections'][1]['data']['verification']['substitutes'], [allowed, missing])

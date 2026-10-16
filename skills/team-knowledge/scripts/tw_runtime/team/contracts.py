@@ -209,9 +209,11 @@ def execution_environment(profile, task, plan):
                     reason = '未声明覆盖范围' if actual is None else '隔离未解决'
                     gaps.append(f'在 .tw/config.json 的 checks.{key}.coverage 中补全覆盖范围及隔离声明（验收 {a["id"]}，检查 {key}：{reason}）')
                 if actual and set(actual['substitutes']) - set(required['substitutes']):
-                    from design_markdown import listing
+                    from design_markdown import listing, verification_text
                     allowed = list(dict.fromkeys(required['substitutes'] + actual['substitutes']))
-                    gaps.append(f'在 {a["id"]} 的验证行写“替身 {listing(allowed, outer=("；",))}”，或改用不含这些替身的检查（验收 {a["id"]}，检查 {key}：使用了未允许的替身）')
+                    missing = list(dict.fromkeys(value for value in actual['substitutes'] if value not in required['substitutes']))
+                    line = '- 验证：' + verification_text({**required, 'substitutes': allowed})
+                    gaps.append(f'把 {a["id"]} 的验证行改为：{line}（检查 {key} 还使用了未允许的替身：{listing(missing, outer=("；",))}）')
             names = '、'.join(checks)
             if a['id'] in requirement_acceptance and not any(
                     profile['checks'][key].get('coverage', {}).get('level') == 'journey' for key in checks):

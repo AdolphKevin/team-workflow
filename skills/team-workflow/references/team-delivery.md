@@ -13,6 +13,8 @@
 tw team approval-draft --task <任务文件> --design <方案> --reviewer <姓名> --confirmation <说明> --mode plan
 ```
 
+本地任务保留 `approval-draft` 生成的 `approval.json`，用 `start --approval <approval.json>` 传入，之后的开工会沿用。
+
 任务只存验收编号，内容以方案为准。修改或委派前运行 `start`，阅读简报与“待确认章节”的逐项原因，执行返回的批准命令；默认范围和指定章节见[分节方案](designs.md#批准与变化)。范围内沿用有效批准；业务范围变化重审受影响部分。
 
 中等、复杂任务先开描述为方案 Markdown 原文的草稿变更请求，评审通过后再写代码。这是团队约定，工具不强制；

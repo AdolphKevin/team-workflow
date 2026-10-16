@@ -8,21 +8,38 @@ from common import Invalid, require
 import designs
 
 
+def path_label(path):
+    from tw_runtime.team import platform_script
+    path = Path(path).resolve()
+    root = platform_script.project_root()
+    return path.relative_to(root).as_posix() if path.is_relative_to(root) else str(path)
+
+
+class DesignReadError(Invalid):
+    def __init__(self, path, reason):
+        name = path_label(path)
+        super().__init__(name + ' ' + reason)
+        self.next_action = '修正方案文件 ' + name + ' 中指出的行，再重试原命令。'
+
+
 def read(path, *, internal=True):
     path = Path(path)
     try:
         raw = path.read_bytes().decode('utf-8')
     except (OSError, UnicodeError) as exc:
         raise Invalid(f'无法读取方案：{path}: {exc}') from exc
-    if raw.lstrip().startswith(('{', '[')):
-        # dispatch validates every explicit --design/--record/--design-history before selecting artifacts.
-        local = any(parent.name == 'local' and parent.parent.name == '.tw' for parent in path.resolve().parents)
-        require(internal and local, '第 1 行：JSON 方案已停用，请改写为 Markdown，格式见 references/designs.md')
-        try:
-            return designs.validate_design(json.loads(raw))
-        except ValueError as exc:
-            raise Invalid(f'无法读取内部方案快照：{path}: {exc}') from exc
-    return designs.load(raw)
+    try:
+        if raw.lstrip().startswith(('{', '[')):
+            # dispatch validates every explicit --design/--record/--design-history before selecting artifacts.
+            local = any(parent.name == 'local' and parent.parent.name == '.tw' for parent in path.resolve().parents)
+            require(internal and local, '第 1 行：JSON 方案已停用，请改写为 Markdown，格式见 references/designs.md')
+            try:
+                return designs.validate_design(json.loads(raw))
+            except ValueError as exc:
+                raise Invalid(f'无法读取内部方案快照：{exc}') from exc
+        return designs.load(raw)
+    except Invalid as exc:
+        raise DesignReadError(path, str(exc)) from exc
 
 
 def _checkout(root, repository):
@@ -79,7 +96,10 @@ def source(root, reference):
     try:
         design = designs.load(raw)
     except Invalid as exc:
-        raise Invalid(str(exc) + '；已发布方案不可读，请用 design-draft --reconcile "<原因>" 发布对账记录，从第 1 版重新开始并重新批准') from exc
+        error = Invalid(f'{reference["path"]} 第 {reference["revision"]} 版 ' + str(exc)
+                        + '；已发布方案不可读，请用 design-draft --reconcile "<原因>" 发布对账记录，从第 1 版重新开始并重新批准')
+        error.next_action = '修正方案文件 ' + path_label(checkout / reference['path']) + '，再按错误中的对账提示重新发布。'
+        raise error from exc
     require(design['id'] == reference['id'] and design['revision'] == reference['revision'], '方案引用身份或版本与原文不同')
     return design, raw
 
