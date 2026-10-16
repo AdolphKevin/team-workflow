@@ -2,7 +2,7 @@
 # 格式见 docs/proposals/2026-10-16-scenario-acceptance-and-positive-text.md 第 2.1 节。
 # 预期结果只依据已批准的流程简化方案，不依据当前实现的输出。
 # 版本 2（2026-10-15）：按批次 1 第 1 轮的场景问题 Q2、Q3 改正 SOP-06-N03 的步骤与 SOP-07-P01 的预期措辞。
-# 版本 3（2026-10-16）：按场景格式补 SOP-06-P01，SOP-07 写明 negative_exempt；待 AdolphKevin 确认。
+# 版本 3（2026-10-16）：按场景格式补 SOP-06-P01，SOP-07 写明 negative_exempt；AdolphKevin 2026-10-16 确认。
 
 metadata:
   requirement: "团队流程简化（T7）：固定材料组与 start、评审 Markdown 与逐项复核、deliver 顺序封装、参数归位、status 与关闭规则"
