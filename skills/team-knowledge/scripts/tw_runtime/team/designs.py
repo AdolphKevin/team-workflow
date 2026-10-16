@@ -31,6 +31,13 @@ def render(design):
     return markdown(design)
 
 
+def section_label(section, *, code_id=False):
+    """Display a section ID once, preserving titles that already include it."""
+    identifier = section['id']
+    title = section['title'].removeprefix(identifier + ' ')
+    return (f'`{identifier}`' if code_id else identifier) + ' ' + title
+
+
 def _normalized(value):
     if isinstance(value, str):
         return value.replace('\r\n', '\n').replace('\r', '\n')

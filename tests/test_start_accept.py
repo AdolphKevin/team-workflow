@@ -16,6 +16,7 @@ from common import artifact, digest, read, write
 import delivery
 import designs
 import validation
+import validation_session
 import coordination
 from tw_runtime.team import platform_script as platform_read
 from platform_fixtures import CONFIG as PLATFORM_CONFIG, transport as platform_transport
@@ -328,19 +329,21 @@ class StartPlatform(unittest.TestCase):
         base.setUp, base.git, base.check, base.prepare, base.body, base.github,
         base.publish_fixture, base.establish_design, base.handoff)
 
-    def command(self):
+    def command(self, *args):
         output = io.StringIO()
         with contextlib.redirect_stdout(output):
-            code = workflow.main(['start', '--root', str(self.root), '--issue', self.url])
+            code = workflow.main([*(args or ('start', '--issue', self.url)), '--root', str(self.root)])
         return code, json.loads(output.getvalue())
 
-    def prepared_platform(self, with_handoff=True):
+    def prepared_platform(self, with_handoff=True, owners=None, approved=True):
         self.prepare()
+        if owners is not None:
+            self.issue['assignees'] = [{'login': owner} for owner in owners]
         fixtures.write_config(self.root, self.profile)
         self.git('add', '.tw/config.json')
         self.git('commit', '-qm', 'share the platform check configuration')
         with patch.object(platform_read, 'call', side_effect=platform_transport(self.github)):
-            self.establish_design()
+            self.establish_design(approved=approved)
             if with_handoff:
                 self.publish_fixture(coordination.draft(self.root, self.profile, self.url, self.handoff(), kind='design'), 'alice')
             code, first = self.command()
@@ -374,12 +377,76 @@ class StartPlatform(unittest.TestCase):
         self.assertIn('offline fixture', str(refused['gaps']))
         self.assertTrue((self.root / refused['brief']['path']).is_file())
 
-    def test_platform_continuation_still_requires_the_confirmed_handoff(self):
-        self.prepared_platform(with_handoff=False)
+    def test_platform_continuation_without_handoff_or_owner_keeps_prepare_done(self):
+        first = self.prepared_platform(with_handoff=False, owners=[])
+        self.assertEqual(first['gaps'], [])
+        self.assertEqual(next(row for row in first['steps'] if row['id'] == 'prepare')['state'], 'done')
         with patch.object(platform_read, 'call', side_effect=platform_transport(self.github)):
-            code, refused = self.command()
-        self.assertEqual(code, 1, refused)
-        self.assertIn('No confirmed handoff', str(refused['gaps']))
+            code, resumed = self.command()
+            self.assertEqual(code, 0, resumed)
+            self.assertTrue(resumed['continued'])
+            self.assertTrue(resumed['ready_to_implement'])
+            self.assertEqual(resumed['gaps'], [])
+            self.assertEqual(resumed['context'], first['context'])
+            self.assertEqual(next(row for row in resumed['steps'] if row['id'] == 'prepare')['state'], 'done')
+            code, status = self.command('status', '--task', self.url)
+        self.assertEqual(code, 0, status)
+        self.assertEqual(next(row for row in status['steps'] if row['id'] == 'prepare')['state'], 'done')
+        self.assertEqual(status['next_step']['id'], 'run')
+        self.assertNotIn('tw team start', status['next_step']['next_command'])
+
+    def test_platform_continuation_without_handoff_keeps_unconfirmed_progress_gap(self):
+        self.prepared_platform(with_handoff=False, owners=[])
+        with patch.object(platform_read, 'call', side_effect=platform_transport(self.github)):
+            self.publish_fixture(coordination.progress_draft(self.root, self.profile, self.url,
+                {'author': 'bob', 'done': ['Read the implementation'], 'verified': [],
+                 'remaining': ['Confirm the result'], 'questions': []}, 'pending-progress'), 'bob')
+            code, result = self.command()
+        self.assertEqual(code, 1, result)
+        self.assertTrue(result['continued'])
+        self.assertEqual(result['gaps'], ['New progress has not been confirmed in the current handoff'])
+        self.assertFalse(result['ready_to_implement'])
+
+    def test_platform_continuation_without_handoff_keeps_active_validation_gap(self):
+        self.prepared_platform(with_handoff=False, owners=[])
+        with patch.object(platform_read, 'call', side_effect=platform_transport(self.github)):
+            with validation_session.session(self.root, self.profile, [self.task]):
+                code, result = self.command()
+        self.assertEqual(code, 1, result)
+        self.assertTrue(result['continued'])
+        self.assertEqual(result['gaps'], ['Validation is active; keep the shared workspace unchanged'])
+        self.assertFalse(result['ready_to_implement'])
+
+    def test_platform_continuation_without_handoff_keeps_platform_change_gap(self):
+        self.prepared_platform(with_handoff=False, owners=[])
+        read_fixture = platform_transport(self.github)
+        reads = 0
+
+        def changing_platform(root, operation, *arguments):
+            nonlocal reads
+            if operation == 'task':
+                reads += 1
+                self.issue['assignees'] = [{'login': 'owner-' + str(reads)}]
+            return read_fixture(root, operation, *arguments)
+
+        with patch.object(platform_read, 'call', side_effect=changing_platform):
+            code, result = self.command()
+        self.assertEqual(code, 1, result)
+        self.assertTrue(result['continued'])
+        self.assertIn('Platform changed while reading; refresh requirements, responsibilities and progress', result['gaps'])
+        self.assertFalse(result['ready_to_implement'])
+
+    def test_platform_continuation_without_handoff_keeps_approval_and_scope_gaps(self):
+        self.prepared_platform(with_handoff=False, owners=[], approved=False)
+        (self.root / 'outside.py').write_text('unmapped = True\n')
+        with patch.object(platform_read, 'call', side_effect=platform_transport(self.github)):
+            code, result = self.command()
+        self.assertEqual(code, 1, result)
+        self.assertTrue(result['continued'])
+        self.assertIn('Selected task sections are not ready for implementation; resolve approval, decisions or assignment',
+                      result['gaps'])
+        self.assertIn('Changed source paths cannot all be assigned to declared design task scopes', result['gaps'])
+        self.assertFalse(result['ready_to_implement'])
 
     def test_platform_acceptance_ids_expand_from_the_published_design(self):
         self.prepared_platform()

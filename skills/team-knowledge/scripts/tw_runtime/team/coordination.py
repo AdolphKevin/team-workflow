@@ -33,6 +33,10 @@ class MissingTaskBlock(Invalid):
         super().__init__(issue_url + ': Missing tw-record task comment；请用 issue-draft 重新生成任务草稿')
 
 
+class DesignHistoryGap(Invalid):
+    """Distinguish a design-history reconciliation from other publication refusals."""
+
+
 def block(body, name, required=True):
     return records.block(body, name, required)
 
@@ -374,7 +378,7 @@ def load(url, issue=None, root=None):
 
 def approval_sentence(approval, design=None):
     sections = (design or {}).get('sections', [])
-    selected = '、'.join(section['id'] + ' ' + section['title'] for section in sections
+    selected = '、'.join(designs.section_label(section) for section in sections
                         if section['id'] in approval['sections']) if design else '、'.join(approval['sections'])
     deleted = ['删除章节 ' + row['id'] for row in approval.get('deletions', [])]
     selected = records.prose('、'.join([selected, *deleted]).strip('、'))
@@ -392,8 +396,10 @@ def _markdown(name, row, heading, design=None):
         prose = approval_sentence(row['approval'], design)
     else:
         owner = records.prose(row.get('owner') or row.get('author', ''))
+        responsibility = (f'负责人 {owner}；实施 {records.prose(row["creator"])}'
+                          if row.get('handoff_kind') == 'close' else f'负责人：{owner}')
         status = '已完成' if not row.get('remaining') else '进行中'
-        prose = f'负责人：{owner}\n\n状态：{status}\n\n剩余事项：\n'
+        prose = f'{responsibility}\n\n状态：{status}\n\n剩余事项：\n'
         prose += '\n'.join('- ' + records.prose(item) for item in row.get('remaining', [])) or '- 无'
         if row.get('handoff_kind') == 'close':
             prose += '\n\n' + records.prose(row['close']['summary'])
@@ -437,8 +443,8 @@ def draft_design(url, design, resolution=None, issue=None, *, path=None, root=No
         require(resolution.get('history_digest') == state['history_digest'], 'History changed since reconciliation')
         text(resolution.get('reason'))
         row.update(resolution=resolution, previous=None)
-    require(not any('Invalid design ' in gap for gap in state['gaps']) or resolution,
-            '方案历史有缺口；请核对全部方案分支，用 design-draft --reconcile "<原因>" 发布对账记录')
+    if any('Invalid design ' in gap for gap in state['gaps']) and not resolution:
+        raise DesignHistoryGap('方案历史有缺口；请核对全部方案分支，用 design-draft --reconcile "<原因>" 发布对账记录')
     return {**_draft_result('design', url, row), 'pr_description': markdown,
             'next_steps': list(DESIGN_PUBLICATION_STEPS)}
 
@@ -488,9 +494,10 @@ NO_HANDOFF = 'No confirmed handoff; establish current progress before continuing
 def closable_alone(state, profile):
     """Why one person cannot close this task with a single note (empty when they can)."""
     reasons = []
-    implementer = state['roles'].get('implementation_owner')
-    if state['owners'] != [implementer]:
-        reasons.append('the implementer is not the single assignee')
+    if not state['owners']:
+        reasons.append('请先将 Issue 指派给一位负责人')
+    elif len(state['owners']) > 1:
+        reasons.append('任务有多名负责人，请发布实施交接')
     shared = sorted(v['repository'] for v in profile.get('external_inputs', {}).values()
                     if v.get('kind') == 'repository' and v.get('role', 'build') != 'build')
     if shared:
@@ -516,7 +523,7 @@ def closing(root, profile, url, completed_tasks, close):
             + ('; post an implementation handoff instead of a close note' if reasons else ''))
     implementer = continuation['roles']['implementation_owner']
     note = draft(root, profile, url, {
-        'creator': implementer, 'owner': implementer, 'done': ['Business acceptance and knowledge disposition recorded'],
+        'creator': implementer, 'owner': continuation['owners'][0], 'done': ['Business acceptance and knowledge disposition recorded'],
         'verified': [close['acceptance']], 'remaining': [],
         'next': 'Close the issue once the named close authorization is recorded.',
         'included_progress': [{'id': item['id'], 'digest': item['digest']} for item in continuation['progress']]},
@@ -541,11 +548,11 @@ def _validate_handoff(row):
         text(value)
     role = 'design_owner' if row['handoff_kind'] == 'design' else 'implementation_owner'
     require(row['creator'] == row['roles'][role], 'Handoff creator must confirm their declared role')
-    require(row['owner'] in row['roles'].values(), 'Handoff receiver needs a declared responsibility')
+    if row['handoff_kind'] != 'close':
+        require(row['owner'] in row['roles'].values(), 'Handoff receiver needs a declared responsibility')
     require((row['handoff_kind'] == 'close') == ('close' in row), 'Close details belong only to a close note')
     if row['handoff_kind'] == 'close':
-        require(row['owner'] == row['creator'] and row['remaining'] == [],
-                'Close note is written by the implementer for themselves with nothing remaining')
+        require(row['remaining'] == [], '收尾说明必须没有剩余事项')
         close = obj(row['close'], {'acceptance', 'knowledge', 'summary'}, {'close_authorization'})
         obj(close['acceptance'], {'path', 'sha256'})
         text(close['acceptance']['path']); _hash(close['acceptance']['sha256'])
@@ -642,7 +649,10 @@ def _handoff_gaps(root, profile, state, row, status, documents):
         gaps.append('Requirements changed after this handoff')
     if row['roles'] != state['roles']:
         gaps.append('Responsibilities changed after this handoff')
-    if row['owner'] not in state['owners']:
+    if row['handoff_kind'] == 'close':
+        if state['owners'] != [row['owner']]:
+            gaps.append('收尾说明的接收负责人必须是任务唯一的平台负责人')
+    elif row['owner'] not in state['owners']:
         gaps.append('Handoff receiver is not assigned to this task')
     required = set(status['required_sections'])
     snapshots = state['history'] + [state['design']]

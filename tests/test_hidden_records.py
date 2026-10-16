@@ -1,5 +1,6 @@
 """M8: platform prose is Markdown; only safe tw-record comments carry tool data."""
 import copy
+import html
 import re
 import unittest
 
@@ -19,7 +20,7 @@ class HiddenRecordCases(unittest.TestCase):
                 ('approval', {'kind': 'approval-record', 'approval': {'reviewer': value,
                     'design_revision': 1, 'confirmation': value, 'sections': {'A1': {}}}}),
                 ('handoff', {'kind': 'handoff', 'owner': value, 'remaining': [value], 'done': []}),
-                ('handoff', {'kind': 'handoff', 'handoff_kind': 'close', 'owner': value,
+                ('handoff', {'kind': 'handoff', 'handoff_kind': 'close', 'owner': value, 'creator': 'Codex ' + value,
                              'remaining': [], 'done': [value], 'close': {'summary': value}}),
                 ('progress', {'kind': 'progress', 'author': value, 'done': [value], 'remaining': [value]})]
         for name, row in rows:
@@ -32,6 +33,10 @@ class HiddenRecordCases(unittest.TestCase):
                 payload = re.search(r'<!-- tw-record (.*?) -->', raw, re.S)[1]
                 self.assertNotIn('--', payload)
                 self.assertNotIn('<!--', payload)
+                if row.get('handoff_kind') == 'close':
+                    visible = re.sub(r'<!--.*?-->', '', raw, flags=re.S)
+                    self.assertIn('负责人 ' + html.escape(value, quote=False) + '；实施 '
+                                  + html.escape('Codex ' + value, quote=False), visible)
 
     def test_task_has_goal_non_goals_acceptance_and_ignores_visible_prose(self):
         task = {'id': 'https://github.com/example/project/issues/1', 'data_version': 1,

@@ -73,6 +73,25 @@ class PendingSections(unittest.TestCase):
         status = designs.approval_status(before, [], changed_paths=[])
         self.assertEqual({row['reason'] for row in status['sections'].values()}, {'未评审'})
 
+    def test_prefixed_titles_appear_once_in_start_text_and_readable_approval(self):
+        self.configure('medium')
+        self.design['sections'][1]['title'] = 'A1 两个 worktree'
+        plans.write_design(self.root / '.tw/local/design.md', self.design)
+        args = ('start', '--task', '.tw/local/task.json', '--design', '.tw/local/design.md')
+        for continued in (False, True):
+            with self.subTest(continued=continued):
+                code, result = self.command(*args)
+                self.assertEqual(code, 0, result)
+                self.assertEqual(result['continued'], continued)
+                text = commands.readable(result)
+                self.assertIn('\nA1 两个 worktree：未评审\n', text)
+                self.assertNotIn('A1 A1 两个 worktree', text)
+        code, approval = self.command('approval-draft', '--task', '.tw/local/task.json',
+                                      '--design', '.tw/local/design.md', '--reviewer', 'carol')
+        self.assertEqual(code, 0, approval)
+        self.assertIn('A1 两个 worktree', approval['summary'])
+        self.assertNotIn('A1 A1 两个 worktree', approval['summary'])
+
 
 class ParentApprovalCommand(unittest.TestCase):
     base = shared.CoordinationCases

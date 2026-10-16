@@ -274,9 +274,7 @@ tw team verify --root "$PROJECT" --task "$TASK_ID"
 `reason` 必填。工具不判断知识是否充分，这由评审人确认。知识正文不参与执行绑定，
 提交知识不会使按内容绑定的检查过期。
 
-Issue 身份自动触发平台核查，漏传 `--issue` 不能绕过。交付完整还需要当前交接无剩余事项、
-未决问题及未确认进度。关闭另需明确授权：报告可记录 `close_authorization: {confirmed_by, reference}`；
-工具仅报告状态，不执行关闭。
+Issue 自动核查平台，漏传 `--issue` 不能绕过。仅一位平台负责人、无须另行负责的共享仓库且无跨服务风险时，可用收尾说明代替实施交接；实施可由本人或其指挥的代理完成。`creator` 是实施负责人，`owner` 是平台负责人，无须担任方案角色。交付还需无剩余事项、未决问题及未确认进度。关闭另需明确授权，工具不执行关闭。
 
 ### 回归自动化状态
 
@@ -366,7 +364,7 @@ tw team metrics --root "$PROJECT" [--task "$TASK"] [--since 2026-10-01] [--forma
 
 步骤为 `done`、`pending`、`stale`、`failed`、`running-or-interrupted` 或 `not-recorded`；只有成功提交的评审算完成。已提交且绑定有效的评审后，验收、报告、最终核查均指向 `deliver`。平台方案/批准更新、显式传入不同内容的方案、源码或配置绑定变化时，受影响步骤过期；过期记录不列为有效。不同内容的显式方案不会被 status 悄然登记，须重新 start。相同内容换路径仍可经核对登记。
 
-全部完成显示“已交付；关闭需要授权，工具不执行关闭”。平台任务的 `publication` 列出收尾说明/交接的实际发布状态、类型和评论地址；本地草稿不能证明发布。关闭须最终交付完成、收尾或完整交接已发布，且报告含 `close_authorization: {confirmed_by, reference}`；工具只报告 closable。详见[关闭步骤](team-delivery.md#状态与关闭-issue)。
+全部完成显示“已交付；关闭需要授权，工具不执行关闭”。`publication` 列出平台收尾或交接的发布状态、类型及评论地址，本地草稿不能证明发布。关闭条件及报告中的 `close_authorization: {confirmed_by, reference}` 见[关闭步骤](team-delivery.md#状态与关闭-issue)，工具只报告 closable。
 
 会话中断后先查看 status；`rules_changed` 表示开工后团队规则文本有变化。运行记录仍按内容、配置及声明的提交敏感性核对；使用修改版工具的证据有明确标记。
 
