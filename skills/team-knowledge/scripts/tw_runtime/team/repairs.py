@@ -20,6 +20,8 @@ def command(args, name, extra=''):
 
 
 def action(args, problem, existing=None, error_code=None, checks=None):
+    if existing and existing.startswith(('修正任务', '修正方案文件')):
+        return existing
     if args.command not in COMMANDS:
         return existing
     old = existing or ''

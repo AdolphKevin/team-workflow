@@ -46,7 +46,7 @@ class FourCommandDelivery(unittest.TestCase):
                  'data': {'acceptance': ['A1'], 'scope': ['app.py'], 'blocked_by': []}, 'depends_on': []}]}
         plans.plan(self.design)
         fixtures.write_config(self.root, self.profile)
-        write(self.root / '.tw/local/task.json', self.task)
+        write(self.root / '.tw/local/task.json', plans.written_task(self.task))
         plans.write_design(self.root / '.tw/local/design.md', self.design)
 
     def start(self, complexity='simple', passed=True):

@@ -52,6 +52,46 @@ class MarkdownRecordCases(unittest.TestCase):
         self.publish_fixture(draft, 'alice')
         self.assertEqual(coordination.load(self.url, root=self.root)['design'], self.design)
 
+    def test_display_uses_only_the_config_in_the_design_commit(self):
+        self.setup_record()
+        import test_workflow
+        self.profile['checks']['unit']['coverage']['substitutes'] = ['记录器|缓存']
+        self.profile['checks']['unused'] = copy.deepcopy(self.profile['checks']['unit'])
+        test_workflow.write_config(self.root, self.profile)
+        self.git('add', '.tw/config.json')
+        self.git('commit', '-qm', 'check declarations with design')
+        draft = self.draft()
+        expected = ('## 本方案引用的检查\n\n| 检查 | 层级 | 入口 | 环境 | 替身 | 隔离 |\n'
+                    '| --- | --- | --- | --- | --- | --- |\n'
+                    '| unit | journey | app.add | isolated-test | 记录器&#124;缓存 | isolated |')
+        self.assertIn(expected, draft['pr_description'])
+        self.assertNotIn('| unused |', draft['pr_description'])
+        self.publish_fixture(draft, 'alice')
+        self.issue['comments_data'].append({'html_url': self.url + '#change', 'body': draft['pr_description'],
+                                             'kind': 'change', 'user': {'login': 'alice'}})
+        self.profile['checks']['unit']['coverage']['environment'] = 'new current config'
+        test_workflow.write_config(self.root, self.profile)
+        for committed in (False, True):
+            with self.subTest(committed=committed):
+                if committed:
+                    self.git('add', '.tw/config.json')
+                    self.git('commit', '-qm', 'later check declarations')
+                state = coordination.load(self.url, issue=self.issue, root=self.root)
+                self.assertEqual(state['warnings'], [])
+                import design_files
+                self.assertEqual(design_files.display(self.raw, self.design, draft['record']['design'], root=self.root),
+                                 draft['pr_description'])
+
+    def test_display_omits_missing_config_or_checks(self):
+        self.setup_record()
+        for missing in ('checks', 'config'):
+            with self.subTest(missing=missing):
+                if missing == 'config':
+                    (self.root / '.tw/config.json').unlink()
+                    self.git('add', '.tw/config.json')
+                    self.git('commit', '-qm', 'fixture without config')
+                self.assertNotIn('本方案引用的检查', self.draft()['pr_description'])
+
     def test_m5_missing_commit_missing_file_and_bad_sha_are_separate_gaps(self):
         self.setup_record()
         draft = self.draft()

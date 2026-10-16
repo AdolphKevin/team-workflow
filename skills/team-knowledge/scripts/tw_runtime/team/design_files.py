@@ -8,21 +8,62 @@ from common import Invalid, require
 import designs
 
 
+def path_label(path):
+    from tw_runtime.team import platform_script
+    path = Path(path).resolve()
+    root = platform_script.project_root()
+    return path.relative_to(root).as_posix() if path.is_relative_to(root) else str(path)
+
+
+class DesignReadError(Invalid):
+    def __init__(self, path, reason):
+        name = path_label(path)
+        super().__init__(name + ' ' + reason)
+        self.next_action = '修正方案文件 ' + name + ' 中指出的行，再重试原命令。'
+
+
+def declares(path, design):
+    """A Markdown file whose header names this design and its task is that design's own source."""
+    try:
+        lines = Path(path).read_text(encoding='utf-8').split('\n')
+    except (OSError, UnicodeError):
+        return False
+    if lines[0].rstrip('\r') != '---':
+        return False
+    head = {}
+    for line in lines[1:]:
+        line = line.rstrip('\r')
+        if line == '---':
+            break
+        key, sep, value = line.partition(':')
+        if sep and key in ('design', 'task'):
+            try:
+                head[key] = json.loads(value)
+            except ValueError:
+                return False
+    else:
+        return False  # An unterminated header is not a design file.
+    return head.get('design') == design['id'] and head.get('task') == design['task_id']
+
+
 def read(path, *, internal=True):
     path = Path(path)
     try:
         raw = path.read_bytes().decode('utf-8')
     except (OSError, UnicodeError) as exc:
         raise Invalid(f'无法读取方案：{path}: {exc}') from exc
-    if raw.lstrip().startswith(('{', '[')):
-        # dispatch validates every explicit --design/--record/--design-history before selecting artifacts.
-        local = any(parent.name == 'local' and parent.parent.name == '.tw' for parent in path.resolve().parents)
-        require(internal and local, '第 1 行：JSON 方案已停用，请改写为 Markdown，格式见 references/designs.md')
-        try:
-            return designs.validate_design(json.loads(raw))
-        except ValueError as exc:
-            raise Invalid(f'无法读取内部方案快照：{path}: {exc}') from exc
-    return designs.load(raw)
+    try:
+        if raw.lstrip().startswith(('{', '[')):
+            # dispatch validates every explicit --design/--record/--design-history before selecting artifacts.
+            local = any(parent.name == 'local' and parent.parent.name == '.tw' for parent in path.resolve().parents)
+            require(internal and local, '第 1 行：JSON 方案已停用，请改写为 Markdown，格式见 references/designs.md')
+            try:
+                return designs.validate_design(json.loads(raw))
+            except ValueError as exc:
+                raise Invalid(f'无法读取内部方案快照：{exc}') from exc
+        return designs.load(raw)
+    except Invalid as exc:
+        raise DesignReadError(path, str(exc)) from exc
 
 
 def _checkout(root, repository):
@@ -76,7 +117,13 @@ def source(root, reference):
         raw = result.stdout.decode('utf-8')
     except UnicodeError as exc:
         raise Invalid('方案原文必须是 UTF-8 Markdown') from exc
-    design = designs.load(raw)
+    try:
+        design = designs.load(raw)
+    except Invalid as exc:
+        error = Invalid(f'{reference["path"]} 第 {reference["revision"]} 版 ' + str(exc)
+                        + '；已发布方案不可读，请用 design-draft --reconcile "<原因>" 发布对账记录，从第 1 版重新开始并重新批准')
+        error.next_action = '修正方案文件 ' + path_label(checkout / reference['path']) + '，再按错误中的对账提示重新发布。'
+        raise error from exc
     require(design['id'] == reference['id'] and design['revision'] == reference['revision'], '方案引用身份或版本与原文不同')
     return design, raw
 
@@ -106,15 +153,41 @@ def publication(root, path, design):
     raw = result.stdout.decode('utf-8')
     reference = {'id': design['id'], 'revision': design['revision'], 'repository': repository_id(checkout),
                  'path': name, 'commit': revision, 'sha256': hashlib.sha256(result.stdout).hexdigest()}
-    return reference, display(raw, design, reference)
+    return reference, display(raw, design, reference, root=root)
 
 
 COMPLEXITY = {'simple': '简单', 'medium': '中等', 'complex': '复杂'}
 
 
-def display(raw, design, reference):
+def check_table(design, checks):
+    """Only declarations for referenced checks belong in the readable design display."""
+    from design_markdown import table
+    names = dict.fromkeys(key for row in design['sections'] if row['type'] == 'acceptance'
+                          for key in row['data']['checks'])
+    rows = []
+    for key in names:
+        if key not in checks:
+            continue
+        coverage = checks[key].get('coverage', {})
+        rows.append([key, coverage.get('level', '未声明'), '、'.join(coverage.get('entrypoints', [])) or '未声明',
+                     coverage.get('environment', '未声明'), '、'.join(coverage.get('substitutes', [])) or '无',
+                     coverage.get('isolation', '未声明')])
+    return ('## 本方案引用的检查\n\n' + table(('检查', '层级', '入口', '环境', '替身', '隔离'), rows) + '\n') if rows else ''
+
+
+def display(raw, design, reference, *, root):
     """The pull request shows the original body; front matter data becomes readable lines, never JSON."""
     body = raw.split('\n---\n', 1)[1].lstrip('\n') if raw.startswith('---\n') else raw
+    import design_links
+    from tw_runtime.team import platform_script
+    try:
+        config = json.loads((Path(root) / '.tw/config.json').read_text())
+    except FileNotFoundError:
+        config = {}
+    file_url = None
+    if 'file-url' in config.get('platform', {}).get('operations', []):
+        file_url = lambda path: platform_script.file_url(root, reference['repository'], reference['commit'], path)
+    body = design_links.rewrite(body, reference, file_url)
     assessment, roles = design['assessment'], design['roles']
     joined = lambda values: '、'.join(values) or '无'
     header = [
@@ -125,4 +198,12 @@ def display(raw, design, reference):
         f"> 方案负责人：{roles['design_owner']} · 实施负责人：{roles['implementation_owner'] or '待定'}"
         f" · 验收负责人：{roles['acceptance_owner']}",
     ]
-    return '\n'.join(header) + '\n\n' + body
+    result = _git(_checkout(root, reference['repository']), 'show', reference['commit'] + ':.tw/config.json')
+    appendix = ''
+    if result.returncode == 0:
+        try:
+            checks = json.loads(result.stdout).get('checks', {})
+            appendix = check_table(design, checks)
+        except (ValueError, AttributeError, TypeError):
+            pass  # An absent or unreadable declaration supplies no display metadata.
+    return '\n'.join(header) + '\n\n' + body + ('\n' + appendix if appendix else '')

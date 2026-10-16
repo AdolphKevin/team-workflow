@@ -70,6 +70,27 @@ def source_text(args, root, task_id):
     return source_path(args, root, task_id).read_bytes().decode('utf-8')
 
 
+def case_repair(root, task_id, review_ref=None):
+    """Point back to editable input, preserving immutable submitted Markdown as evidence."""
+    state = _state(root, task_id)
+    entry = next((row for row in state['submitted'].values()
+                  if review_ref and row['review']['sha256'] == review_ref['sha256']), None)
+    original = (entry or {}).get('input_markdown')
+    if original is None and review_ref:
+        response = (root / review_ref['path']).parent / 'response.json'
+        if response.is_file():
+            candidate = read(response).get('review_file')
+            if candidate and not candidate.startswith(('http://', 'https://')) and Path(candidate).is_relative_to(root):
+                original = candidate
+    path = Path(original) if original else locations(root, task_id)[0]
+    path = (root / path).resolve() if not path.is_absolute() else path
+    name = path.relative_to(root).as_posix() if path.is_relative_to(root) else str(path)
+    command = ('tw team review --task ' + shlex.quote(task_id) + ' --submit --file ' + shlex.quote(name)
+               + ' --root ' + shlex.quote(str(root)))
+    return {'review_file': name,
+            'next_action': f'修正评审 Markdown {name} 中的“用例”字段后重新提交：' + command}
+
+
 def published_approval(root, task_id, review):
     """A combined approval derived from published Markdown is itself shared consent."""
     if 'platform_author' not in review and 'platform_url' not in review:
@@ -200,7 +221,7 @@ def snapshot(args, root, profile, task, draft_id, allow_incomplete=False):
         from commands import local
         bindings['approval_plan'] = review_history.approval_plan(
             design, [design_files.read(local(root, path)) for path in args.design_history])
-    from contracts import match_coverage
+    from contracts import execution_environment
     sections = {row['id']: row for row in design['sections']}
     for row in task['acceptance']:
         key = row['id']
@@ -210,10 +231,17 @@ def snapshot(args, root, profile, task, draft_id, allow_incomplete=False):
             **{name: execution['results'].get(check, {}).get(name) for name in ('status', 'cases', 'exit_code')}}
             for check in section['data']['checks']}}
         if requirement['method'] == 'manual':
-            value['manual'][key] = requirement['coverage']
+            value['manual'][key] = True
             continue
-        observations, evidence, lines = [], [], []
+        observations, evidence = [], []
+        lines = ['- ' + gap for gap in execution_environment(profile, {**task, 'acceptance': [row]}, design)]
+        if not requirement['cases']:
+            lines.append('- 未指明用例，证据为整项检查通过')
         for check in section['data']['checks']:
+            coverage = profile['checks'][check].get('coverage')
+            if coverage:
+                lines.append(f'- 检查 {check} 的覆盖声明：层级 {coverage["level"]}；入口 {"、".join(coverage["entrypoints"])}'
+                             f'；环境 {coverage["environment"]}；替身 {"、".join(coverage["substitutes"]) or "无"}；隔离 {coverage["isolation"]}')
             result = execution['results'].get(check)
             if result is None:
                 lines.append('- 检查 ' + check + '：没有对应的运行结果。')
@@ -235,7 +263,7 @@ def snapshot(args, root, profile, task, draft_id, allow_incomplete=False):
                 for outcome in outcomes.values():
                     counts[outcome] = counts.get(outcome, 0) + 1
                 tally = '，'.join(words.get(key, key) + ' ' + str(counts[key]) for key in sorted(counts))
-                lines.append(f'  - 共 {len(outcomes)} 项用例：{tally}' + ('' if declared else '；本验收未登记对应用例'))
+                lines.append(f'  - 共 {len(outcomes)} 项用例：{tally}' + ('' if declared else '；方案未登记对应用例'))
             else:
                 lines.append('  - 未登记独立用例；以上为实际命令的退出结果。')
             if execution.get('gap'):
@@ -245,11 +273,6 @@ def snapshot(args, root, profile, task, draft_id, allow_incomplete=False):
                 if item['path'].endswith('/stdout.txt'):
                     content = artifact_valid(root, item).read_text(errors='replace')
                     lines += ['  - 原始输出摘录：'] + ['    ' + line for line in content[:4000].splitlines()]
-            try:
-                match_coverage(requirement['coverage'], profile['checks'][check]['coverage'])
-            except Invalid:
-                lines.append('  - 此检查的覆盖范围不足以独立证明该验收项。')
-                continue
             observations.append({'kind': 'execution', 'run': ref, 'check': check, 'cases': cases})
             if ref not in evidence:
                 evidence.append(ref)
@@ -285,6 +308,7 @@ def render(value):
         lines += ['## 验收 ' + key]
         if key in value['automatic']:
             lines += [_protected('results-' + key, value['generated']['results-' + key])]
+            lines += [filled('验收 ' + key, '用例')]
         else:
             lines += ['本项要求人工观察；工具未代填操作或结果。']
         name = '验收 ' + key
@@ -419,6 +443,8 @@ def compile_review(root, value, sections):
         row.update(_conclusion(sections, name))
         if key in value['automatic']:
             row.update(copy.deepcopy(value['automatic'][key]))
+            row['cases'] = [part.strip().removeprefix('- ').strip() for part in
+                            re.split('[、\n]', _value(sections, name, '用例', False)) if part.strip()]
         else:
             name = '人工观察 ' + key
             data = {field: _value(sections, name, field) for field in ('观察人', '时间', '操作', '结果', '数据', '证据文件')}
@@ -432,7 +458,7 @@ def compile_review(root, value, sections):
             row['evidence'] = refs
             row['observations'] = [{'kind': 'manual', 'observer': data['观察人'], 'at': data['时间'],
                 'steps': [line.strip().removeprefix('- ').strip() for line in data['操作'].splitlines() if line.strip()],
-                'result': data['结果'] + '\n数据：' + data['数据'], 'coverage': value['manual'][key], 'evidence': refs}]
+                'result': data['结果'] + '\n数据：' + data['数据'], 'evidence': refs}]
         for ref in row['evidence']:
             if ref not in defaults:
                 defaults.append(ref)
@@ -545,7 +571,7 @@ def generate(args, root, profile, task, request):
     from cleanup import guard
     from materials import load
     target, state_path = locations(root, task['id'])
-    candidate, _, _, _ = snapshot(args, root, profile, task, uuid.uuid4().hex, allow_incomplete=True)
+    candidate, _, _, candidate_execution = snapshot(args, root, profile, task, uuid.uuid4().hex, allow_incomplete=True)
     with guard(root):
         state = _state(root, task['id'])
         current = read(artifact_valid(root, state['current'])) if state['current'] else None
@@ -563,6 +589,10 @@ def generate(args, root, profile, task, request):
                       'binding': previous['binding'], 'review': previous['review'],
                       'summary': '当前已提交的评审仍然有效，无需生成复核稿。',
                       'next_action': 'tw team accept --task ' + shlex.quote(task['id'])}
+            failures = delivery.review_case_failures(previous['review_value'], candidate_execution)
+            if failures:
+                result.update(case_repair(root, task['id'], previous['review']), review_failures=failures,
+                              summary='当前评审中的用例需要修正后重新提交。')
             return {**result, 'artifact': request.publish('review-status.json', result)}
         if target.exists() and fresh:
             result = _existing(root, task['id'], target, state, current, True)
@@ -576,6 +606,10 @@ def generate(args, root, profile, task, request):
         if previous:
             candidate.update(previous_review=previous['review'], previous_markdown=previous['markdown'],
                              previous_source=previous.get('source'))
+        for key in candidate['automatic']:
+            if candidate.get('prefill', {}).get('验收 ' + key, {}).get('用例', '').strip():
+                name = 'results-' + key
+                candidate['generated'][name] = candidate['generated'][name].replace('- 未指明用例，证据为整项检查通过\n', '')
         draft_id = candidate['bindings']['draft_id']
         raw = render(candidate)
         candidate['template_sha256'] = hashlib.sha256(raw.encode('utf-8')).hexdigest()
@@ -724,7 +758,10 @@ def mark_submitted(root, task_id, result):
     value = read(artifact_valid(root, state['generations'][result['draft_id']]))
     original = result['review_markdown']['sha256']
     marker = original if Path(result['review_file']).resolve() == target.resolve() else value['template_sha256']
+    original_path = Path(result['review_file'])
+    original = (original_path.relative_to(root).as_posix() if original_path.is_relative_to(root) else str(original_path))
     entry = {'review': result['artifact'], 'markdown': result['review_markdown'], 'source': result['review_source'],
+             'input_markdown': original if not result['review_file'].startswith(('http://', 'https://')) else None,
              'binding': state['generations'][result['draft_id']], 'default_sha': marker}
     if result.get('approval'):
         entry['approval'] = result['approval']

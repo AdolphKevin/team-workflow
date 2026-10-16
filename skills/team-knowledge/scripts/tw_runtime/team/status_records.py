@@ -57,6 +57,17 @@ def inspect(args, root, profile, task, progress, approval_status):
             delivery.check_review_format(root, profile, task, review, selected, design)
             result['review_current'] = rows['review']['state'] != 'stale'
             result['review_failures'] = delivery.review_failures(review, approval_status['required_sections'])
+            if result['review_current'] and any(row.get('cases') for row in review['acceptance']):
+                try:
+                    execution = validation.verify_runs(root, profile, task, expected['runs'], live=False)
+                except Invalid:
+                    pass  # The existing run step reports unavailable execution separately.
+                else:
+                    failures = delivery.review_case_failures(review, execution)
+                    if failures:
+                        import reviews
+                        result['review_case_repair'] = reviews.case_repair(root, task['id'], artifact(root, local(root, expected['review'])))
+                        result['review_failures'] += failures
         except (Invalid, OSError, ValueError, TypeError, KeyError):
             result['stale_steps']['review'] = '评审的任务、源码、配置或章节绑定已变化'
 

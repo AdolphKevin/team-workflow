@@ -434,13 +434,13 @@ class CoordinationCases(unittest.TestCase):
         self.issue['body'] = self.body()
         with patch.object(platform_read, 'call', side_effect=platform_transport(self.github)):
             self.establish_design()
-            self.task['acceptance'][0]['expectation'] = 'Updated first requirement'
-            self.issue['body'] = self.body()
+            original_body = self.issue['body']
             revised = copy.deepcopy(self.design)
             revised['revision'] = 2
             revised['sections'][1]['body'] = 'Updated first requirement'
             self.publish_fixture(plans.draft_design(self.root, self.url, revised), 'alice')
             state = coordination.load(self.url)
+            self.assertEqual(self.issue['body'], original_body)
         import designs
         status = designs.approval_status(state['design'], state['approvals'], history=state['history'], changed_paths=[])
         self.assertEqual(status['tasks']['T2']['state'], 'ready')

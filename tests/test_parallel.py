@@ -8,6 +8,7 @@ import time
 import unittest
 
 import test_workflow as fixtures
+import plan_fixtures as plans
 from common import Invalid, LOCATIONS, profile_valid, read, snapshot, write
 
 
@@ -21,9 +22,10 @@ class ParallelMaterials(unittest.TestCase):
         self.task['design_id'] = 'arithmetic'
         self.check(code)
         fixtures.write_config(self.root, self.profile)
-        write(self.root / '.tw/local/input/task.json', self.task)
+        write(self.root / '.tw/local/input/task.json', plans.written_task(self.task))
+        plans.write_design(self.root / '.tw/local/input/design.md', plans.task_design(self.task))
         return [sys.executable, str(fixtures.SCRIPTS / 'workflow.py'), 'run', '--root', str(self.root),
-                '--task', '.tw/local/input/task.json']
+                '--task', '.tw/local/input/task.json', '--design', '.tw/local/input/design.md']
 
     def start(self, args):
         process = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, start_new_session=True)
@@ -100,10 +102,11 @@ class ParallelMaterials(unittest.TestCase):
         args = self.prepare()
         # task exports compete for one explicitly requested filename, without replacing it.
         args[2] = 'task-export'
+        args = args[:-2]
         processes = [self.start(args + ['--out', '.tw/local/occupied.json']) for _ in range(2)]
         results = [self.result(p) for p in processes]
         self.assertEqual(sum(r['ok'] for r in results), 1)
-        self.assertEqual(read(self.root / '.tw/local/occupied.json'), self.task)
+        self.assertEqual(read(self.root / '.tw/local/occupied.json'), plans.written_task(self.task))
         args = self.prepare('pass')
         a = self.result(self.start(args + ['--request-id', 'empty-log']))
         b = self.result(self.start(args + ['--request-id', 'empty-log']))

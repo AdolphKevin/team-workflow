@@ -68,7 +68,7 @@ class ChangeRequestRecords(unittest.TestCase):
                 self.response()
                 self.publish_fixture(plans.draft_design(self.root, self.url, self.design), 'alice')
                 self.response(['comment'])
-                self.publish_fixture(coordination.draft_approval(self.url, {'reviewer': 'carol'}), 'carol')
+                self.publish_fixture(coordination.draft_approval(self.url, {'reviewer': 'carol', 'section_ids': 'all'}), 'carol')
                 self.response(['comment', 'review'])
                 revised = design_cases.changed(self.design, 'api-1')
                 self.publish_fixture(plans.draft_design(self.root, self.url, revised), 'alice')

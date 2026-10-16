@@ -6,6 +6,21 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class MarkdownDocumentationCases(unittest.TestCase):
+    def test_current_verification_and_reconciliation_are_documented(self):
+        base = ROOT / 'skills/team-workflow'
+        template = (base / 'templates/design.md').read_text()
+        self.assertIn('- 验证：自动\n', template)
+        for name in ('references/designs.md', 'references/contracts.md'):
+            value = (base / name).read_text()
+            self.assertNotIn('- 验证：自动；层级', value)
+            self.assertNotIn('result,coverage,evidence', value)
+            self.assertIn('substitutes', value)
+            self.assertIn('未指明用例，证据为整项检查通过', value)
+        for name in ('references/designs.md', 'references/team-delivery.md'):
+            value = (base / name).read_text()
+            self.assertIn('--reconcile', value)
+            self.assertIn('第 1 版', value)
+
     def test_authoring_entrypoints_use_markdown(self):
         base = ROOT / 'skills/team-workflow'
         for name in ('SKILL.md', 'references/designs.md', 'references/contracts.md', 'references/team-delivery.md', 'references/onboarding.md'):

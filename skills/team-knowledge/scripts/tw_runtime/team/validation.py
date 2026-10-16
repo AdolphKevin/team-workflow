@@ -105,12 +105,34 @@ def source_digest(root, profile, *, revision=None):
     return digest(source(root, profile, revision=revision))
 
 
-def changed_paths(root, task, profile=None):
+def effective_base(root, base):
+    """Where the task last met the remote default branch, like a pull request's diff; else the recorded base.
+
+    Merging the default branch into a task must not make its changes look like the task's own.
+    """
+    import subprocess
+    run = lambda *args: subprocess.run(['git', '-C', str(root), *args], capture_output=True, text=True)
+    target = run('symbolic-ref', '--quiet', 'refs/remotes/origin/HEAD')
+    if target.returncode or not target.stdout.strip():
+        return base
+    meeting = run('merge-base', 'HEAD', target.stdout.strip())
+    if meeting.returncode or not meeting.stdout.strip():
+        return base
+    point = meeting.stdout.strip()
+    contains = run('merge-base', '--is-ancestor', base, point)
+    return point if contains.returncode == 0 else base
+
+
+def changed_paths(root, task, profile=None, design=None):
+    """The task's own design file is process material committed with it, not a change needing a task scope."""
     names = set()
-    for args in [('diff', '--name-only', '--no-renames', '-z', task['base']),
+    for args in [('diff', '--name-only', '--no-renames', '-z', effective_base(root, task['base'])),
                  ('ls-files', '--others', '--exclude-standard', '-z')]:
         names.update(os.fsdecode(n) for n in git(root, *args).split(b'\0') if n)
     inputs = (profile or {}).get('inputs', [])
+    if design is not None:
+        from design_files import declares
+        names = {n for n in names if not (n.endswith('.md') and declares(os.path.join(root, n), design))}
     return sorted(n for n in names if not reserved(n, inputs) and
                   (n != '.tw/config.json' or explicit_input(n, inputs)))
 

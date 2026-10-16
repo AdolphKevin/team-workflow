@@ -46,7 +46,7 @@ def design_material(root, profile, task, report, completed_tasks=()):
                                      root=root, profile=profile,
                                      section_ids=task['section_ids'],
                                      completed_tasks=completed_tasks,
-                                     changed_paths=validation.changed_paths(root, task, profile),
+                                     changed_paths=validation.changed_paths(root, task, profile, design),
                                      code_digest=code, run_refs=refs, selected_run_refs=selected_refs)
     fingerprints = designs.fingerprints(design)['sections']
     selected = {key: fingerprints[key] for key in task['section_ids']}
@@ -122,6 +122,7 @@ def check_review_format(root, profile, task, review, selected, design):
     reconcile(issue_history.known(root, task['id']), review.get('findings', []))
     assessed = set()
     for row in review.get('acceptance', []):
+        strings(row.get('cases', []))
         require(row.get('status') in ('passed', 'failed'), 'Acceptance conclusion must be passed or failed')
         text(row.get('summary'))
         require(row['id'] not in assessed and bool(row.get('evidence')), 'Duplicate acceptance or missing evidence')
@@ -157,6 +158,25 @@ class ReviewBlocked(Invalid):
         super().__init__('评审未通过：' + '；'.join(names[row['kind']] + ' ' + row['id'] + '：' + row['reason'] for row in failures))
 
 
+class ReviewCaseError(Invalid):
+    def __init__(self, identifier, case):
+        super().__init__('验收 ' + identifier + ' 用例不存在或未通过：' + case)
+
+
+def review_case_failures(review, execution):
+    failures = []
+    for row in review['acceptance']:
+        passed = set()
+        for observation in row.get('observations', []):
+            key = observation.get('check')
+            if observation.get('kind') == 'execution' and observation.get('run', {}).get('path') == execution['selected_runs'].get(key):
+                passed.update(case for case, outcome in execution['results'].get(key, {}).get('cases', {}).items() if outcome == 'passed')
+        missing = [case for case in row.get('cases', []) if case not in passed]
+        if missing:
+            failures.append({'kind': 'case', 'id': row['id'], 'reason': '用例不存在或未通过：' + '、'.join(missing)})
+    return failures
+
+
 def require_review_passed(task, review, required):
     failures = review_failures(review, required)
     if failures:
@@ -182,9 +202,11 @@ def verify(root, profile, task, report, phase='delivery', _seen=None, live=None)
     require(phase in ('acceptance', 'delivery'), 'Unknown verification phase')
     live = phase == 'acceptance' if live is None else live
     tool = tool_gate()
-    task_valid(task, profile, root)
     obj(report, {'data_version', 'task_id', 'design', 'approvals', 'brief', 'runs', 'review'},
         {'acceptance', 'knowledge', 'design_history', 'close_authorization', 'dependencies', 'automation'})
+    import task_inputs
+    task = task_inputs.expand(task, design_files.read(inside(root, report['design'])))
+    task_valid(task, profile, root)
     require(report['data_version'] == RECORD_SCHEMA and report['task_id'] == task['id'],
             f'Expected a schema {RECORD_SCHEMA} delivery report for this task; regenerate it with delivery-template')
     strings(report['runs'])
@@ -196,7 +218,9 @@ def verify(root, profile, task, report, phase='delivery', _seen=None, live=None)
     if platform_read.is_task(root, task['id']):
         platform_state = coordination.load(task['id'], root=root)
         require(not platform_state['gaps'], 'Platform records are incomplete: ' + '; '.join(platform_state['gaps']))
-        require(platform_state['task'] == task, 'Platform task changed; read current requirements')
+        import task_inputs
+        require(task_inputs.written(platform_state['task']) == task_inputs.written(task),
+                'Platform task changed; read current requirements')
     if platform_state is not None:
         from contracts import reconcile
         reconcile(platform_state.get('known_issues', []), read(inside(root, report['review'])).get('findings', []))
@@ -255,18 +279,28 @@ def verify(root, profile, task, report, phase='delivery', _seen=None, live=None)
                            'reason': 'Existing result independently checked against current inputs; not a claim of earlier knowledge reading'})
     review = read(inside(root, report['review']))
     run_paths = [inside(root, p).relative_to(root).as_posix() for p in report['runs']]
-    check_review(root, profile, task, review, selected, design, status, execution, run_paths)
+    try:
+        check_review(root, profile, task, review, selected, design, status, execution, run_paths)
+    except ReviewCaseError as exc:
+        import reviews
+        repair = reviews.case_repair(root, task['id'], artifact(root, inside(root, report['review'])))
+        exc.next_action, exc.review_file = repair['next_action'], repair['review_file']
+        raise
     from contracts import automation
     regression = automation(report['automation'], task, review['findings'], profile, execution) if 'automation' in report else 'not-declared'
     materials = [artifact(root, inside(root, report[p])) for p in ('design', 'brief', 'review')]
     materials += [artifact(root, inside(root, p)) for p in report['approvals'] + report['runs'] + report.get('design_history', [])]
     materials += dependency_materials
+    verification = {row['id']: row['data']['verification'] for row in design['sections'] if row['type'] == 'acceptance'}
+    named_cases = {row['id']: sorted(set(verification[row['id']]['cases']) | set(row.get('cases', [])))
+                   for row in review['acceptance'] if verification[row['id']]['method'] == 'automatic'}
     result = {'data_version': RECORD_SCHEMA, 'kind': 'acceptance' if phase == 'acceptance' else 'delivery-verification',
               'ok': True, 'at': now(), 'phase': phase, 'task_id': task['id'], 'task_digest': digest(task),
               'source_digest': before, 'sections': selected, 'checks': execution['checks'], 'materials': materials,
               'scope': 'business-acceptance' if phase == 'acceptance' else 'team-delivery',
               'acceptance_scope': task['acceptance_scope'], 'report': dict(report), 'issues': review['findings'],
               'observations': {r['id']: r['observations'] for r in review['acceptance']},
+              'named_cases': named_cases, 'unspecified_cases': [key for key, cases in named_cases.items() if not cases],
               'business_accepted': True, 'delivery_complete': False, 'closable': False,
               'reused_execution': reused, 'automation_status': regression, 'tool': tool,
               'superseded_execution': execution['superseded'],
@@ -366,6 +400,16 @@ def check_observations(root, profile, design, row, execution, run_paths):
     observations = row.get('observations')
     require(isinstance(observations, list) and bool(observations), 'Acceptance needs actual execution or manual observations')
     cases = set()
+    if requirement['method'] == 'automatic':
+        checks = section['data']['checks']
+        for key in checks:
+            require(execution['results'].get(key, {}).get('status') == 'passed', 'Check did not pass: ' + key)
+            require('coverage' in profile['checks'][key], '检查缺少覆盖声明：' + key)
+            match_coverage(requirement, profile['checks'][key]['coverage'])
+        scope = next(s['data'] for s in design['sections'] if s['id'] == 'scope-global')
+        if row['id'] in scope['requirement_acceptance']:
+            require(any(profile['checks'][key]['coverage']['level'] == 'journey' for key in checks),
+                    '需求级验收 ' + row['id'] + ' 至少需要一项 journey 层级检查，或改为人工验收')
     for observation in observations:
         if requirement['method'] == 'automatic':
             obj(observation, {'kind', 'run', 'check', 'cases'})
@@ -381,13 +425,12 @@ def check_observations(root, profile, design, row, execution, run_paths):
             identifiers = [r['id'] for r in record.get('results', [])] if record['kind'] == 'execution' else [record['result']['id']]
             require(key in identifiers, 'Observation check belongs to another run')
             result = execution['results'][key]
-            match_coverage(requirement['coverage'], profile['checks'][key]['coverage'])
             strings(observation['cases'])
-            require(all(result.get('cases', {}).get(c) == 'passed' for c in observation['cases']),
-                    'Observed case is missing, failed or skipped')
-            cases.update(observation['cases'])
+            for case in observation['cases']:
+                require(result.get('cases', {}).get(case) == 'passed', 'Observed case is missing, failed or skipped: ' + case)
+            cases.update(case for case, outcome in result.get('cases', {}).items() if outcome == 'passed')
         else:
-            obj(observation, {'kind', 'observer', 'at', 'steps', 'result', 'coverage', 'evidence'})
+            obj(observation, {'kind', 'observer', 'at', 'steps', 'result', 'evidence'})
             require(observation['kind'] == 'manual', 'Manual acceptance needs actual observations')
             from contracts import independent
             independent(design, observation['observer'], 'Manual observer')
@@ -397,8 +440,10 @@ def check_observations(root, profile, design, row, execution, run_paths):
             from datetime import timezone
             require(observed_at <= datetime.now(timezone.utc), 'Observation cannot be dated in the future')
             strings(observation['steps'], True)
-            match_coverage(requirement['coverage'], observation['coverage'])
             require(bool(observation['evidence']), 'Manual observation needs captured evidence')
             for ref in observation['evidence']:
                 evidence(root, profile, ref)
-    require(set(requirement['cases']) <= cases, 'Acceptance lacks required observed cases')
+    for case in sorted(set(requirement['cases']) | set(row.get('cases', []))):
+        if case not in cases and case in row.get('cases', []):
+            raise ReviewCaseError(row['id'], case)
+        require(case in cases, '验收 ' + row['id'] + ' 用例不存在或未通过：' + case)

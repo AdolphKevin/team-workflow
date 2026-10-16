@@ -6,12 +6,14 @@ from common import digest, require, task_valid
 import coordination
 import designs
 import records
+import task_inputs
 from tw_runtime.team import platform_script as platform_read
 
 BLOCK = re.compile(r'```team-workflow-task\s*\n.*?\n```', re.S)
 
 
-def body(issue, task, parent):
+def body(issue, task, parent, design=None):
+    task_inputs.validate_written(task)
     prose = re.sub(r'<!-- tw-task:start -->.*?<!-- tw-task:end -->', '', issue.get('body') or '', flags=re.S)
     prose = BLOCK.sub('', prose, count=1)
     # Replace a standalone task comment produced outside this helper as well.
@@ -21,7 +23,9 @@ def body(issue, task, parent):
     prose = prose.rstrip()
     lines = ['<!-- tw-task:start -->', '## 任务', '', '目标：' + records.prose(task['goal']), '', '非目标：']
     lines += ['- ' + records.prose(value) for value in task['non_goals']] or ['- 无']
-    lines += ['', '验收项：'] + ['- ' + records.prose(row['id']) + '：' + records.prose(row.get('expectation', '待补充验收预期')) for row in task['acceptance']]
+    titles = {row['id']: row['title'] for row in (design or {}).get('sections', [])}
+    lines += ['', '验收项：'] + ['- ' + records.prose(row['id'] + (' ' + titles[row['id']] if row['id'] in titles else ''))
+                           for row in task['acceptance']]
     lines += ['', records.comment({'data_version': 1, 'parent': parent, 'task': task}), '<!-- tw-task:end -->', '']
     return (prose + '\n\n' if prose else '') + '\n'.join(lines)
 
@@ -30,7 +34,8 @@ def approval_request(url, design, reviewer):
     sections = designs.fingerprints(design)['sections']
     lines = [f'## 请求方案评审：{design["id"]} 第 {design["revision"]} 版', '',
              f'评审人：{reviewer or "（请指定具体的人）"}', '',
-             '请阅读本 Issue 上的方案记录，确认以下章节。只回复“同意”不够，请写明认可的范围；'
+             '请阅读方案原文，确认以下章节。方案记录发布在承载方案的变更请求上；没有变更请求时发布在任务上。'
+             '只回复“同意”不够，请写明认可的范围；'
              '需要修改时说明章节和原因。', '']
     for row in design['sections']:
         lines.append(f'- `{row["id"]}` {row["title"]}（指纹 {sections[row["id"]]["own"][:12]}）')
@@ -44,7 +49,8 @@ def draft(root, profile, task, design=None, siblings=(), reviewer=None, *, desig
     for item in [task, *siblings]:
         url = item['id']
         platform_read.task_url(url)
-        task_valid(item, profile, root)
+        task_inputs.validate_written(item)
+        task_valid(task_inputs.expand(item, design) if design else item, profile, root, written=design is None)
         parent = None
         if design is not None and design['task_id'] != url:
             parent = design['task_id']
@@ -56,7 +62,7 @@ def draft(root, profile, task, design=None, siblings=(), reviewer=None, *, desig
             coordination.validate_task_design(item, design)
         issue = coordination.platform_issue(url, root)
         require(issue.get('state', 'open') == 'open', f'{url} is closed; reopen it before drafting')
-        new_body = body(issue, item, parent)
+        new_body = body(issue, item, parent, design)
         adopted = {**issue, 'body': new_body}
         coordination.task_source(adopted)
         row = {'issue': url, 'body': new_body, 'body_changed': new_body != issue.get('body'),
@@ -69,12 +75,12 @@ def draft(root, profile, task, design=None, siblings=(), reviewer=None, *, desig
         rows.append(row)
     require(design is None or any('design_comment' in row for row in rows),
             'Include the issue that owns the design (its task_id) with --task or --with-task')
-    steps = ['Replace each issue body with its drafted body (the original prose is kept verbatim).']
+    steps = ['用草稿替换各任务正文（保留原文），并完成变更请求描述等其他编辑。']
     if design is not None:
-        steps += ['Post the design comment on the design issue.',
-                  'Post the approval request and wait for the named reviewer to confirm the listed sections.',
-                  'After explicit confirmation, run approval-draft and post the approval record.']
-    steps.append('Run tw team start --issue <URL> for each issue; implementation starts only when it reports implementation_ready.')
+        steps += ['最后重新生成方案记录，立即发布到承载方案的变更请求上；没有变更请求时发布在任务上，之后不要修改更早的评论。',
+                  '发布评审请求，请具名评审人阅读方案原文并确认所列章节。',
+                  '确认后运行 approval-draft，按已有授权发布批准记录。']
+    steps.append('逐个运行 tw team start --issue <URL>，按其实施就绪状态继续。')
     return {'ok': True, 'kind': 'issue-adoption-draft', 'read_only': True, 'issues': rows, 'next_steps': steps,
             'publication': 'draft-only; post in this order after reading the current issue again',
             'summary': f'已为 {len(rows)} 个任务生成接入草稿；工具没有修改平台。'}

@@ -127,18 +127,18 @@ def design(value):
             for item in scenario[key]:
                 material(item)
         verification = data['verification']
-        obj(verification, {'method', 'coverage', 'cases'})
+        require(isinstance(verification, dict) and 'coverage' not in verification,
+                'verification 不再接受 coverage；验证：自动；用例 <用例>；替身 <替身>；覆盖范围写在 .tw/config.json 的 checks.<编号>.coverage')
+        obj(verification, {'method', 'cases', 'substitutes'})
         require(verification['method'] in {'automatic', 'manual'}, 'Unknown verification method')
-        coverage(verification['coverage'])
         strings(verification['cases'])
+        strings(verification['substitutes'])
         if verification['method'] == 'automatic':
             require(bool(data['checks']), 'Automatic acceptance needs an executable check')
         else:
-            require(verification['coverage']['level'] == 'manual', 'Manual acceptance needs manual coverage')
+            require(not verification['cases'] and not verification['substitutes'], '人工验证不能填写用例或替身')
     for identifier in scope['requirement_acceptance']:
         require(identifier in rows and rows[identifier]['type'] == 'acceptance', 'Missing requirement acceptance section')
-        require(rows[identifier]['data']['verification']['coverage']['level'] in {'journey', 'manual'},
-                'Requirement acceptance must cover the business journey or explicit manual observations')
     strings(value['assessment']['drivers'], True)
     for driver in value['assessment']['drivers']:
         material(driver)
@@ -178,11 +178,8 @@ def independent(plan, actor, label):
 
 
 def match_coverage(required, actual):
-    coverage(required); coverage(actual)
+    coverage(actual)
     require(actual['isolation'] != 'unresolved', 'Verification environment isolation is unresolved')
-    require(actual['level'] in COVERS[required['level']], 'Verification level does not cover the declared acceptance')
-    require(set(required['entrypoints']) <= set(actual['entrypoints']), 'Verification omits a required business entrypoint')
-    require(required['environment'] == actual['environment'], 'Verification environment differs from the plan')
     require(set(actual['substitutes']) <= set(required['substitutes']), 'Verification substituted an undeclared dependency')
 
 
@@ -201,18 +198,29 @@ def execution_environment(profile, task, plan):
     """Preparation is read-only: inspect declarations without running environment commands."""
     rows = {v['id']: v for v in plan['sections']}
     gaps = ['Acceptance scenario needs confirmed business sources: ' + key for key in unsourced(task, plan)]
+    requirement_acceptance = rows['scope-global']['data']['requirement_acceptance']
     for a in task['acceptance']:
         required = rows[a['id']]['data']['verification']
-        if required['coverage']['isolation'] == 'unresolved':
-            gaps.append('Unresolved verification isolation: ' + a['id'])
         if required['method'] == 'automatic':
-            for key in a['checks']:
+            checks = rows[a['id']]['data']['checks']
+            for key in checks:
                 actual = profile['checks'][key].get('coverage')
-                if actual is None:
-                    gaps.append('Check needs declared business coverage: ' + key)
-                elif actual['isolation'] == 'unresolved':
-                    gaps.append('Unresolved verification isolation: ' + key)
-    return sorted(set(gaps))
+                if actual is None or actual['isolation'] == 'unresolved':
+                    reason = '未声明覆盖范围' if actual is None else '隔离未解决'
+                    gaps.append(f'在 .tw/config.json 的 checks.{key}.coverage 中补全覆盖范围及隔离声明（验收 {a["id"]}，检查 {key}：{reason}）')
+                if actual and set(actual['substitutes']) - set(required['substitutes']):
+                    from design_markdown import listing, verification_text
+                    allowed = list(dict.fromkeys(required['substitutes'] + actual['substitutes']))
+                    missing = list(dict.fromkeys(value for value in actual['substitutes'] if value not in required['substitutes']))
+                    line = '- 验证：' + verification_text({**required, 'substitutes': allowed})
+                    gaps.append(f'把 {a["id"]} 的验证行改为：{line}（检查 {key} 还使用了未允许的替身：{listing(missing, outer=("；",))}）')
+            names = '、'.join(checks)
+            if a['id'] in requirement_acceptance and not any(
+                    profile['checks'][key].get('coverage', {}).get('level') == 'journey' for key in checks):
+                gaps.append(f'改用 journey 层级的检查，或改为人工验收（需求级验收 {a["id"]}，检查 {names}：均未声明完整业务路径层级）')
+            if required['cases'] and all(profile['checks'][key]['format'] == 'command' for key in checks):
+                gaps.append(f'删除用例，或改用报告用例的检查（验收 {a["id"]}，检查 {names}：命令型检查没有逐项用例结果）')
+    return list(dict.fromkeys(gaps))
 
 
 def automation(value, task, findings, profile, execution):

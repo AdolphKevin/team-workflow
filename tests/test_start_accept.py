@@ -12,7 +12,7 @@ import test_coordination
 import test_delivery
 import test_workflow as fixtures
 import plan_fixtures as plans
-from common import artifact, digest, read
+from common import artifact, digest, read, write
 import delivery
 import designs
 import validation
@@ -41,7 +41,7 @@ class StartAccept(unittest.TestCase):
     def contexts(self):
         return sorted((self.root / '.tw/local/tasks').glob('*/requests/*/context.json'))
 
-    def test_first_start_creates_context_and_points_to_run(self):
+    def test_first_start_creates_context_and_points_to_pending_approval(self):
         self.setup_task()
         code, result = self.start('--design', self.name('design'))
         self.assertEqual(code, 0, result)
@@ -51,9 +51,10 @@ class StartAccept(unittest.TestCase):
         self.assertEqual(result['task_directory'], str(self.contexts()[0].parent.parent.parent.relative_to(self.root)))
         self.assertTrue(result['implementation_ready'])
         self.assertEqual(result['gaps'], [])
-        self.assertEqual(result['next_step']['id'], 'run')
-        self.assertIn('tw team run', result['next_step']['next_command'])
-        self.assertIn(result['context']['path'], result['next_step']['next_command'])
+        self.assertEqual(result['next_step']['id'], 'approval')
+        self.assertIn('tw team approval-draft', result['next_step']['next_command'])
+        self.assertIn(self.task['id'], result['next_step']['next_command'])
+        self.assertIn(self.name('design'), result['next_step']['next_command'])
 
     def test_same_start_continues_without_another_context(self):
         self.setup_task()
@@ -68,12 +69,13 @@ class StartAccept(unittest.TestCase):
         self.assertEqual(self.contexts(), contexts)
         self.assertNotEqual(again['brief']['path'], first['brief']['path'])
         self.assertTrue(again['brief']['path'].startswith(again['request_directory'] + '/'))
-        self.assertEqual(again['next_step']['id'], 'run')
+        self.assertEqual(again['next_step']['id'], 'approval')
         code, status = self.command('status', '--context', again['context']['path'])
         self.assertEqual(code, 0, status)
         prepared = next(row for row in status['steps'] if row['id'] == 'prepare')
         self.assertEqual((prepared['state'], prepared['evidence']), ('done', first['context']['path']))
-        self.assertEqual(status['next_step'], again['next_step'])
+        self.assertEqual(status['next_step']['id'], 'run')
+        self.assertIn('tw team run', status['next_step']['next_command'])
 
     def test_new_design_start_supersedes_the_previous_context(self):
         self.setup_task()
@@ -135,26 +137,24 @@ class StartAccept(unittest.TestCase):
         self.assertEqual(again['context'], result['context'])
         self.assertEqual(read(self.root / self.name('task'))['acceptance'], [{'id': 'A1'}])
 
-    def test_each_missing_acceptance_field_is_generated_without_replacing_explicit_text(self):
+    def test_partial_acceptance_text_is_rejected_even_when_it_matches_the_design(self):
         self.setup_task()
         for missing in ('expectation', 'checks'):
             task = copy.deepcopy(self.task)
             task['acceptance'][0].pop(missing)
-            self.write('task', task)
+            write(self.root / self.name('task'), task)
             with self.subTest(missing=missing):
                 code, result = self.start('--design', self.name('design'))
-                self.assertEqual(code, 0, result)
-                self.assertEqual(read(self.root / result['task']['path']), self.task)
+                self.assertEqual(code, 1, result)
+                self.assertIn('验收项只写编号，内容以方案为准', result['problem'])
 
-    def test_inconsistent_acceptance_is_refused_with_generation_hint(self):
+    def test_acceptance_text_is_refused_with_ids_only_hint(self):
         self.setup_task()
         self.task['acceptance'][0]['expectation'] = 'A different expectation'
-        self.write('task', self.task)
+        write(self.root / self.name('task'), self.task)
         code, result = self.start('--design', self.name('design'))
         self.assertEqual(code, 1, result)
-        self.assertIn('Task acceptance differs from design section: A1', result['problem'])
-        self.assertIn('只写编号', result['problem'])
-        self.assertIn('start', result['problem'])
+        self.assertIn('验收项只写编号，内容以方案为准', result['problem'])
 
     def test_help_exposes_start_accept_and_rejects_removed_commands_and_phase(self):
         result = subprocess.run([sys.executable, str(TW), 'team', '--help'], text=True, capture_output=True)
@@ -238,7 +238,7 @@ class StartAccept(unittest.TestCase):
         code, changed = self.start('--design', self.name('design-2'), '--design-history', self.name('design'))
         self.assertEqual(code, 0, changed)
         self.assertFalse(changed['continued'])
-        self.assertEqual(changed['next_step']['id'], 'run')
+        self.assertEqual(changed['next_step']['id'], 'approval')
         self.assertEqual(next(row for row in changed['steps'] if row['id'] == 'acceptance')['state'], 'pending')
 
     def test_accept_task_file_refuses_explicit_changes_since_start(self):
@@ -292,7 +292,7 @@ class StartAccept(unittest.TestCase):
         code, first = self.start('--design', self.name('design'))
         self.assertEqual(code, 0, first)
         original = copy.deepcopy(self.task)
-        self.task['acceptance'][0]['expectation'] = 'An inconsistent requirement'
+        self.task['design_id'] = 'another-plan'
         self.write('task', self.task)
         code, failed = self.start()
         self.assertEqual(code, 1, failed)
@@ -302,7 +302,7 @@ class StartAccept(unittest.TestCase):
         self.assertTrue(resumed['continued'])
         self.assertEqual(resumed['context'], first['context'])
         self.assertEqual(len(self.contexts()), 1)
-        self.assertEqual(resumed['next_step']['id'], 'run')
+        self.assertEqual(resumed['next_step']['id'], 'approval')
         code, status = self.command('status', '--context', first['context']['path'])
         self.assertEqual(code, 0, status)
         self.assertEqual(next(row for row in status['steps'] if row['id'] == 'prepare')['state'], 'done')
@@ -313,7 +313,7 @@ class StartAccept(unittest.TestCase):
         code, first = self.start('--design', self.name('design'))
         self.assertEqual(code, 0, first)
         other = dict(self.task, id='TASK-other', parent=self.task['id'], acceptance_scope='task')
-        self.write('other-task', other)
+        self.write('other-task', plans.written_task(other))
         for task_arg in (self.name('other-task'), 'TASK-other'):
             with self.subTest(task=task_arg):
                 code, refused = self.command('start', '--task', task_arg, '--context', first['context']['path'])
@@ -381,14 +381,15 @@ class StartPlatform(unittest.TestCase):
         self.assertEqual(code, 1, refused)
         self.assertIn('No confirmed handoff', str(refused['gaps']))
 
-    def test_platform_acceptance_block_is_not_generated_from_local_design(self):
+    def test_platform_acceptance_ids_expand_from_the_published_design(self):
         self.prepared_platform()
         self.task['acceptance'] = [{'id': 'A1'}]
         self.issue['body'] = self.body()
         with patch.object(platform_read, 'call', side_effect=platform_transport(self.github)):
-            code, refused = self.command()
-        self.assertEqual(code, 1, refused)
-        self.assertIn('expectation', refused['problem'])
+            code, result = self.command()
+        self.assertEqual(code, 0, result)
+        self.assertEqual(read(self.root / result['task']['path'])['acceptance'],
+                         [{'id': 'A1', 'expectation': '1 + 2 is 3', 'checks': ['unit']}])
 
 
 if __name__ == '__main__':

@@ -488,7 +488,7 @@ class PlatformCurrentMaterials(unittest.TestCase):
         self.prepared_platform()
         with patch.object(platform_read, 'call', side_effect=platform_transport(self.github)):
             self.publish_fixture(coordination.draft_approval(self.url,
-                {'reviewer': 'carol', 'confirmation': 'New explicit approval'}), 'carol')
+                {'reviewer': 'carol', 'confirmation': 'New explicit approval', 'section_ids': 'all'}), 'carol')
             code, refused = self.identity_command('task-export')
         self.assertEqual(code, 1, refused)
         self.assertIn('approvals', refused['problem'])

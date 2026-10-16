@@ -96,8 +96,9 @@ class WorkflowCases(unittest.TestCase):
 
     def test_unexpected_exception_is_reported_as_tool_defect_with_response(self):
         import commands
+        import plan_fixtures as plans
         write_config(self.root, self.profile)
-        write(self.root / '.tw/local/task.json', self.task)
+        write(self.root / '.tw/local/task.json', plans.written_task(self.task))
         output = io.StringIO()
         with patch.object(commands, 'produce', side_effect=NameError("name 'read' is not defined")), \
                 contextlib.redirect_stdout(output):

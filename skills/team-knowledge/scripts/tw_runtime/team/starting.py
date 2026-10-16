@@ -1,6 +1,6 @@
 """Select a task's most recent prepared context and compare its actual preparation inputs."""
 import design_files
-import copy
+import task_inputs
 from pathlib import Path
 
 from common import Invalid, artifact, artifact_valid, digest, read, require
@@ -16,19 +16,8 @@ def latest_context(root, task_id):
 
 
 def fill_acceptance(task, design):
-    """Only local start inputs may omit acceptance text; explicit values remain subject to validation."""
-    result = copy.deepcopy(task)
-    sections = {row['id']: row for row in design['sections']}
-    for row in result.get('acceptance', []):
-        if not isinstance(row, dict):
-            continue  # The ordinary task validator names invalid rows.
-        section = sections.get(row.get('id'), {})
-        if 'expectation' not in row or 'checks' not in row:
-            require(section.get('type') == 'acceptance',
-                    'Missing acceptance section: ' + str(row.get('id')) + '; check --design and run tw team start')
-            row.setdefault('expectation', section['body'])
-            row.setdefault('checks', copy.deepcopy(section['data']['checks']))
-    return result
+    """Resolve acceptance through the same contract used by platform and direct commands."""
+    return task_inputs.expand(task, design)
 
 
 def _values(root, context, key):
@@ -90,10 +79,12 @@ def select(args, root, profile):
     require(task is not None, 'No prepared context for this identity; run tw team start --task <task.json> --design <design.md>')
     design = (design_files.read(local(root, args.design)) if args.design else (platform or {}).get('design') or
               (read(artifact_valid(root, previous['design'])) if previous else None))
-    require(design is not None, 'start needs --design <design.md> or a shared plan')
-    # A platform task block is always fully specified and is never generated locally.
-    if not args.issue:
-        task = fill_acceptance(task, design)
+    if design is None:
+        error = Invalid('；'.join((platform or {}).get('design_gaps', []))
+                        or 'start needs --design <design.md> or a shared plan')
+        error.next_action = (platform or {}).get('design_repair')
+        raise error
+    task = fill_acceptance(task, design)
     approvals = ([read(local(root, p)) for p in args.approval] if args.approval else
                  platform['approvals'] if platform else _values(root, previous or {}, 'approvals'))
     history = ([design_files.read(local(root, p)) for p in args.design_history] if args.design_history else
@@ -107,12 +98,16 @@ def select(args, root, profile):
             login['needed'] = []
     dependency_inputs = [{'input': value, 'task': artifact(root, local(root, value['task'])),
                           'report': artifact(root, local(root, value['report']))} for value in dependencies]
+    previous_inputs = (previous or {}).get('preparation_inputs') or {}
+    design_path = explicit.get('design', {}).get('path') or previous_inputs.get('design_path')
     selected = signature(task, design, approvals, history, dependency_inputs, login['granted'], login['policy'])
     old = None
     if previous:
         old = previous.get('preparation_inputs') or signature(read(artifact_valid(root, previous['task'])), read(artifact_valid(root, previous['design'])),
                         _values(root, previous, 'approvals'), _values(root, previous, 'design_history'),
                         dependency_inputs, previous.get('authorizations', []), previous.get('login_policy', {}))
+        # The original filename is navigation metadata, not a change to the prepared content.
+        old = {key: value for key, value in old.items() if key != 'design_path'}
     continued = previous is not None and selected == old and not (selection and selection['repair'])
     require(not platform_gap or continued, platform_gap or '')
     args.context = Path(previous_ref['path']) if continued else None
@@ -129,7 +124,7 @@ def select(args, root, profile):
     return {'task': task, 'platform': platform, 'platform_gap': platform_gap, 'design': design,
             'approvals': approvals, 'history': history, 'dependencies': dependencies, 'login': login,
             'continued': continued, 'previous_ref': previous_ref, 'previous': previous,
-            'signature': selected, 'explicit': explicit}
+            'signature': selected, 'explicit': explicit, 'design_path': design_path}
 
 
 def resolve_accept_context(args, root):
@@ -144,13 +139,8 @@ def resolve_accept_context(args, root):
     require(ref is not None, 'accept needs a prepared context; run tw team start --task <task.json> --design <design.md>')
     if supplied:
         captured = read(artifact_valid(root, context['task']))
-        # The original file may still contain ID-only rows; every explicitly supplied field must agree.
-        rows = captured['acceptance']
-        same = (dict(supplied, acceptance=rows) == captured and
-                isinstance(supplied.get('acceptance'), list) and len(supplied['acceptance']) == len(rows) and
-                all(isinstance(row, dict) and row.get('id') == saved['id']
-                    and all(key in saved and saved[key] == value for key, value in row.items())
-                    for row, saved in zip(supplied['acceptance'], rows)))
+        task_inputs.validate_written(supplied, local(root, args.task).relative_to(root).as_posix())
+        same = supplied == task_inputs.written(captured)
         require(same, 'Task content changed since preparation; run tw team start with this task file before acceptance')
     args.context = Path(ref['path'])
     args.task = None

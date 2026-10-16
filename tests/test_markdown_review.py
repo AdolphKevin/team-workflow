@@ -25,18 +25,19 @@ class MarkdownReview(unittest.TestCase):
         base.setUp, base.git, base.check, base.setup_task, base.write, base.name, base.command,
         base.rule, base.current_path, base.current)
 
-    def prepared(self, manual=False, issues=None):
+    def prepared(self, manual=False, issues=None, substitutes=()):
         self.setup_task(complexity='medium')
         if manual:
             self.task['kind'] = 'docs'
             self.task['acceptance'][0]['checks'] = []
             self.design['sections'][1]['data']['checks'] = []
             self.design['sections'][1]['data']['verification'] = {
-                'method': 'manual', 'coverage': plans.coverage('manual'), 'cases': []}
+                'method': 'manual', 'substitutes': [], 'cases': []}
         else:
             code = "import app; from pathlib import Path; assert app.add(1,2)==3; print('sum=3'); Path('{output}/results.xml').write_text('<testsuite tests=\"1\"><testcase classname=\"Arithmetic\" name=\"adds\"/></testsuite>')"
             self.check(code, format='junit', report='{output}/results.xml', required_cases=['Arithmetic::adds'])
             self.design['sections'][1]['data']['verification']['cases'] = ['Arithmetic::adds']
+            self.profile['checks']['unit']['coverage']['substitutes'] = list(substitutes)
         if issues is not None:
             self.design['issues'] = copy.deepcopy(issues)
         fixtures.write_config(self.root, self.profile)
@@ -141,10 +142,11 @@ class MarkdownReview(unittest.TestCase):
         if skipped:
             rows.append('<testcase classname="Other" name="skipped"><skipped/></testcase>')
         (self.root / 'cases.xml').write_text(f'<testsuite tests="{len(rows)}">' + ''.join(rows) + '</testsuite>')
+        self.design['sections'][-1]['data']['scope'].append('cases.xml')
         code = ("import app, shutil; assert app.add(1,2)==3; print('sum=3'); "
                 "shutil.copy('cases.xml', '{output}/results.xml')")
         self.check(code, format='junit', report='{output}/results.xml',
-                   required_cases=['Arithmetic::adds'] if declared else [])
+                   required_cases=['Arithmetic::adds'] if declared or skipped else [])
         self.design['sections'][1]['data']['verification']['cases'] = ['Arithmetic::adds'] if declared else []
         fixtures.write_config(self.root, self.profile)
         self.write('task', self.task)
@@ -168,6 +170,85 @@ class MarkdownReview(unittest.TestCase):
         self.assertNotIn('Suite::case07', section)
         self.assertRegex(section, r'共 41 项.*通过 41')
         self.assertLess(len(section), 2000)
+
+    def test_review_cases_are_optional_and_checked_by_name(self):
+        self.many_cases(declared=False, skipped=True)
+        path = self.current_path().parent / 'review.md'
+        raw = path.read_text()
+        self.assertIn('未指明用例，证据为整项检查通过', raw)
+        self.assertIn('检查 unit 的覆盖声明：层级 journey；入口 app.add；环境 isolated-test；替身 无；隔离 isolated', raw)
+        for cases, expected in [('Arithmetic::adds', None),
+                                ('Arithmetic::adds、Unknown::case', 'Unknown::case'),
+                                ('Arithmetic::adds\n  Other::skipped', 'Other::skipped')]:
+            with self.subTest(cases=cases):
+                text = self.field(self.completed(raw), '## 验收 A1', '用例', cases)
+                code, submitted = self.submit(path, text)
+                self.assertEqual(code, 0, submitted)
+                review = read(self.root / submitted['artifact']['path'])
+                self.assertEqual(review['acceptance'][0]['cases'], cases.replace('\n  ', '、').split('、'))
+                code, accepted = self.command('accept', '--task', self.task['id'])
+                self.assertEqual(code, 1 if expected else 0, accepted)
+                if expected:
+                    self.assertIn(expected, accepted['problem'])
+                else:
+                    self.assertNotIn('未指明用例', accepted.get('summary_markdown', ''))
+
+    def test_review_gives_the_specific_substitute_fix_without_refusing_the_draft(self):
+        path, _ = self.draft(substitutes=['recording sink'])
+        raw = path.read_text()
+        self.assertIn('把 A1 的验证行改为：- 验证：自动；用例 Arithmetic::adds；替身 recording sink', raw)
+        self.assertIn('检查 unit 还使用了未允许的替身：recording sink', raw)
+        self.assertNotIn('此检查的覆盖范围不足以独立证明该验收项', raw)
+        code, submitted = self.submit(path, self.completed(raw))
+        self.assertEqual(code, 0, submitted)
+        code, rejected = self.command('accept', '--task', self.task['id'])
+        self.assertEqual(code, 1, rejected)
+        self.assertIn('substituted', rejected['problem'])
+
+    def test_design_cases_and_review_cases_are_both_required(self):
+        self.many_cases(declared=True)
+        path = self.current_path().parent / 'review.md'
+        raw = path.read_text()
+        for cases, rejected in [('Suite::case07', False), ('Suite::missing', True)]:
+            with self.subTest(cases=cases):
+                source = self.field(self.completed(raw), '## 验收 A1', '用例', cases)
+                code, submitted = self.submit(path, source)
+                self.assertEqual(code, 0, submitted)
+                code, accepted = self.command('accept', '--task', self.task['id'])
+                self.assertEqual(code, int(rejected), accepted)
+                if rejected:
+                    self.assertIn(cases, accepted['problem'])
+                else:
+                    self.assertNotIn('未指明用例', accepted['summary_markdown'])
+
+    def test_review_case_names_survive_recheck_without_unspecified_notice(self):
+        self.many_cases(declared=False)
+        path = self.current_path().parent / 'review.md'
+        source = self.field(self.completed(path.read_text()), '## 验收 A1', '用例', 'Suite::case07')
+        code, submitted = self.submit(path, source)
+        self.assertEqual(code, 0, submitted)
+        (self.root / 'app.py').write_text('def add(a,b): return a + b + 0\n')
+        code, ran = self.command('run', '--task', self.task['id'])
+        self.assertEqual(code, 0, ran)
+        code, drafted = self.command('review', '--task', self.task['id'])
+        self.assertEqual(code, 0, drafted)
+        raw = (self.root / drafted['review_file']).read_text()
+        self.assertIn('- 用例：Suite::case07', raw)
+        self.assertNotIn('未指明用例，证据为整项检查通过', raw)
+
+    def test_unspecified_cases_are_explicit_in_acceptance_and_close_summary(self):
+        self.many_cases(declared=False)
+        path = self.current_path().parent / 'review.md'
+        code, submitted = self.submit(path, self.completed(path.read_text()))
+        self.assertEqual(code, 0, submitted)
+        code, accepted = self.command('accept', '--task', self.task['id'])
+        self.assertEqual(code, 0, accepted)
+        self.assertIn('A1', read(self.root / accepted['artifact']['path'])['unspecified_cases'])
+        self.assertIn('未指明用例，证据为整项检查通过', accepted['summary_markdown'])
+        self.rule()
+        code, delivered = self.command('deliver', '--task', self.task['id'])
+        self.assertEqual(code, 0, delivered)
+        self.assertIn('未指明用例，证据为整项检查通过', delivered['summary_markdown'])
 
     def test_declared_cases_and_every_unpassed_case_are_listed(self):
         section = self.many_cases(declared=True, skipped=True)
@@ -215,6 +296,7 @@ class MarkdownReview(unittest.TestCase):
         code, result = self.submit(path, complete)
         self.assertEqual(code, 0, result)
         row = read(self.root / result['artifact']['path'])['acceptance'][0]['observations'][0]
+        self.assertEqual(set(row), {'kind', 'observer', 'at', 'steps', 'result', 'evidence'})
         self.assertEqual(row['observer'], 'carol')
         self.assertIn('result=3; count=1', row['result'])
 

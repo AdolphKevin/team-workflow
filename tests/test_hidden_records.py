@@ -36,10 +36,10 @@ class HiddenRecordCases(unittest.TestCase):
     def test_task_has_goal_non_goals_acceptance_and_ignores_visible_prose(self):
         task = {'id': 'https://github.com/example/project/issues/1', 'data_version': 1,
                 'goal': '目标 --flag -->\n中文', 'non_goals': ['不改支付'],
-                'acceptance': [{'id': 'A1', 'expectation': '结果为三'}], 'parent': None}
+                'acceptance': [{'id': 'A1'}], 'parent': None}
         raw = issue_draft.body({'body': '# 原文'}, task, None)
         self.assertNotIn('```team-workflow-task', raw)
-        for part in (task['goal'], '不改支付', '结果为三'):
+        for part in (task['goal'], '不改支付', '- A1'):
             self.assertIn(__import__('html').escape(part, quote=False), raw)
         source = coordination.task_source({'html_url': task['id'], 'body': raw})
         edited = coordination.task_source({'html_url': task['id'], 'body': raw.replace('# 原文', '# 可见说明改变')})
@@ -72,7 +72,7 @@ class HiddenRecordCases(unittest.TestCase):
         row = {'kind': 'approval-record', 'approval': designs.approval_draft(design, 'carol', '会议确认', section_ids=['A1'])}
         raw = coordination._draft_result('approval', 'task', row, design=design)['markdown']
         visible = re.sub(r'<!--.*?-->', '', raw, flags=re.S)
-        self.assertIn('carol 批准方案第 1 版：A1。依据：会议确认', visible)
+        self.assertIn('carol 批准方案第 1 版：A1 A1。依据：会议确认', visible)
 
     def test_unicode_line_separators_inside_strings_are_not_markdown_lines(self):
         for separator in ('\u0085', '\u2028', '\u2029'):

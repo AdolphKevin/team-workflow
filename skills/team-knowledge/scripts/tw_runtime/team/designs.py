@@ -336,7 +336,8 @@ def approval_draft(design, reviewer, confirmation='', decision='approved', secti
     hashes = fingerprints(design)['sections']
     identifiers = sorted(hashes) if section_ids is None else list(section_ids)
     strings(identifiers)
-    require(set(identifiers) <= hashes.keys(), 'Review references an unknown current section')
+    unknown = [key for key in dict.fromkeys(identifiers) if key not in hashes]
+    require(not unknown, '批准范围包含不存在的章节：' + '、'.join(unknown))
     _, transitions, _ = _history(design, previous, history)
     deletions = [row for change in transitions for row in change['deletions']]
     if deletion_ids is None:
@@ -424,6 +425,77 @@ def _combined_matches(row, code_digest, run_refs, selected_run_refs=None):
                  or selected_run_refs is not None and _run_refs(row['run_refs']) == selected_run_refs))
 
 
+STATE_REASONS = {'unreviewed': '未评审', 'approved': '', 'changes-requested': '评审人要求修改', 'deferred': '暂缓'}
+
+
+def _review_reason(key, row, hashes, design, chain, transitions):
+    later = [change for change in transitions if change['revision'] > row['design_revision']]
+    if row['sections'][key]['own'] != hashes['own'] or any(key in change['changed'] for change in later):
+        return '内容已改'
+    if row['assessment_hash'] != _hash(design['assessment']) or any(change['assessment_changed'] for change in later):
+        return '评估已改'
+    for before, after, change in zip(chain, chain[1:], transitions):
+        if change not in later or key not in change['affected']:
+            continue
+        seeds = set(change['changed'] + change['added'] + change['removed'])
+        for section in before['sections'] + after['sections']:
+            identifier = section['id']
+            if identifier in seeds and key in _closure([_dependencies(before), _dependencies(after)], {identifier}):
+                return '依赖 ' + identifier + ' 已改'
+    return '内容已改'  # A changed blocking issue is part of the effective section content.
+
+
+def pending_sections(design, status, history=()):
+    """Keep current document order, placing removed sections at their last document position."""
+    required = set(status['required_sections'])
+    result = [{'id': row['id'], 'title': row['title'], **status['sections'][row['id']]}
+              for row in design['sections'] if row['id'] in required and status['sections'][row['id']]['state'] != 'approved']
+    order = [row['id'] for row in design['sections']]
+    snapshots = {row['revision']: row for row in history}
+    for deletion in status['deletions']:
+        if not deletion['required'] or deletion['state'] == 'approved':
+            continue
+        previous = snapshots[deletion['previous_revision']]['sections']
+        index = next(i for i, row in enumerate(previous) if row['id'] == deletion['id'])
+        following = next((row['id'] for row in previous[index + 1:] if row['id'] in order), None)
+        order.insert(order.index(following) if following else len(order), deletion['id'])
+        result.append({'id': deletion['id'], 'title': previous[index]['title'], **deletion, 'deleted': True})
+    return sorted(result, key=lambda row: order.index(row['id']))
+
+
+def approval_selection(design, approvals, task_sections, history, value, *, root=None, profile=None):
+    """Select defaults from current consent; explicit IDs retain explicit deletion semantics."""
+    result = dict(value)
+    mode = result.get('mode', 'combined' if result.get('code_digest') is not None else 'design')
+    status = approval_status(design, approvals, history=history, section_ids=task_sections,
+                             code_digest=result.get('code_digest'), run_refs=result.get('run_refs'),
+                             root=root, profile=profile)
+    required = set(status['required_sections'])
+    pending_deletions = {row['id'] for row in status['deletions'] if row['state'] != 'approved'}
+    if 'section_ids' in result:
+        selected = result['section_ids']
+        if selected == 'all':
+            selected = [row['id'] for row in design['sections']]
+        strings(selected)
+        current = set(status['sections'])
+        unknown = [key for key in dict.fromkeys(selected) if key not in current | pending_deletions]
+        require(not unknown, '批准范围包含不存在的章节：' + '、'.join(unknown))
+        result['section_ids'] = [key for key in selected if key in current]
+        result.setdefault('deletion_ids', [key for key in selected if key in pending_deletions])
+    else:
+        selected = required if mode == 'combined' else {key for key in required if status['sections'][key]['state'] != 'approved'}
+        deletions = [row['id'] for row in status['deletions'] if row['required']
+                     and (mode == 'combined' or row['state'] != 'approved')]
+        if mode == 'combined' and required <= set(status['combined_sections']) and all(
+                row['combined_current'] for row in status['deletions'] if row['required']):
+            selected, deletions = set(), []
+        result['section_ids'] = [row['id'] for row in design['sections'] if row['id'] in selected]
+        result.setdefault('deletion_ids', deletions)
+        if not result['section_ids'] and not result['deletion_ids']:
+            return None
+    return result
+
+
 def approval_status(design, approvals, previous=None, changed_paths=None, code_digest=None,
                     run_refs=None, completed_tasks=(), *, history=None, section_ids=None, selected_run_refs=None,
                     root=None, profile=None):
@@ -481,17 +553,19 @@ def approval_status(design, approvals, previous=None, changed_paths=None, code_d
     for key, hashes in current.items():
         reviews = [row for row in valid if key in row['sections']]
         row = reviews[-1] if reviews else None
-        state = 'unreviewed'
+        state, reason = 'unreviewed', STATE_REASONS['unreviewed']
         if row:
             affected_later = any(change['revision'] > row['design_revision'] and key in change['affected']
                                  for change in transitions)
             if row['sections'][key] != hashes or affected_later or row['assessment_hash'] != _hash(design['assessment']):
                 state = 'needs-review'
+                reason = _review_reason(key, row, hashes, design, chain, transitions)
             else:
                 state = row['decision']
+                reason = STATE_REASONS[state]
                 if _combined_matches(row, code_digest, current_runs, selected_runs):
                     combined.append(key)
-        sections[key] = {'state': state, **hashes}
+        sections[key] = {'state': state, 'reason': reason, **hashes}
         if row:
             sections[key].update(reviewer=row['reviewer'], confirmation=row['confirmation'],
                                  reviewed_revision=row['design_revision'])
@@ -501,6 +575,7 @@ def approval_status(design, approvals, previous=None, changed_paths=None, code_d
         latest = reviews[-1] if reviews else None
         affected = deletion_impact[(value['id'], value['removed_in_revision'])]
         deletions.append({**value, 'state': latest['decision'] if latest else 'unreviewed',
+                          'reason': STATE_REASONS[latest['decision'] if latest else 'unreviewed'],
                           'combined_current': _combined_matches(latest, code_digest, current_runs, selected_runs),
                           'affected': sorted(affected), 'required': section_ids is None or bool(affected & required)})
     pending = [{**v, 'question': v['summary'], 'status': 'pending'} for v in design['issues']
@@ -582,7 +657,7 @@ def approval_status(design, approvals, previous=None, changed_paths=None, code_d
             'sections': sections, 'deletions': deletions, 'approved': approved,
             'stale': sorted(key for key, row in sections.items() if row['state'] == 'needs-review'),
             'missing': sorted(key for key, row in sections.items() if row['state'] == 'unreviewed'),
-            'fully_approved': fully_approved, 'combined_complete': combined_complete,
+            'fully_approved': fully_approved, 'combined_complete': combined_complete, 'combined_sections': combined,
             'implementation_ready': bool(required_tasks) and all(tasks[key]['ready'] for key in required_tasks) and not gaps,
             'acceptance_ready': acceptance_ready,
             'local_review_valid': fully_approved and scope['complete'] and combined_complete,

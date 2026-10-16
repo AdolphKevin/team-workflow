@@ -133,7 +133,7 @@ class ProjectPlatform(unittest.TestCase):
     def test_registered_operations_and_unchanged_sample_task(self):
         config = json.loads((ROOT / '.tw/config.json').read_text())
         self.assertEqual(config['platform']['argv'], ['python3', '.tw/platform.py'])
-        self.assertEqual(config['platform']['operations'], ['task', 'commit', 'reference', 'ci-result'])
+        self.assertEqual(config['platform']['operations'], ['task', 'commit', 'reference', 'ci-result', 'file-url'])
         result = self.read_task()
         self.assertEqual((result['id'], result['url'], result['repository'], result['state'], result['owners']),
                          (ISSUE, ISSUE, REPO, 'closed', ['AdolphKevin']))

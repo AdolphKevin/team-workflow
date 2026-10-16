@@ -312,7 +312,7 @@ class PlatformStatus(unittest.TestCase):
         self.prepared_platform()
         with patch.object(platform_read, 'call', side_effect=platform_transport(self.github)):
             self.publish_fixture(coordination.draft_approval(self.url,
-                {'reviewer': 'carol', 'confirmation': 'New explicit approval'}), 'carol')
+                {'reviewer': 'carol', 'confirmation': 'New explicit approval', 'section_ids': 'all'}), 'carol')
             code, status = self.identity_command('status')
         self.assertEqual(code, 0, status)
         self.assertEqual(next(row for row in status['steps'] if row['id'] == 'prepare')['state'], 'stale')
