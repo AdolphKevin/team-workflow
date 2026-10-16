@@ -28,7 +28,7 @@ roles: {"design_owner":"Claude","implementation_owner":"Codex","acceptance_owner
 - 场景：docs/sop/tw-scenario-acceptance.yaml#SOP-01
 - 依据：位置 docs/proposals/2026-10-16-scenario-acceptance-and-positive-text.md；版本 2026-10-16 批准版及 2.3 补充；确认人 AdolphKevin
 - 检查：unit
-- 验证：自动
+- 验证：自动；替身 项目平台脚本夹具
 
 ## 验收 A2：测试用例导入与覆盖
 <!-- tw-section id=A2 type=acceptance depends=scope-global -->
@@ -37,7 +37,7 @@ roles: {"design_owner":"Claude","implementation_owner":"Codex","acceptance_owner
 - 场景：docs/sop/tw-scenario-acceptance.yaml#SOP-02
 - 依据：位置 docs/proposals/2026-10-16-scenario-acceptance-and-positive-text.md；版本 2026-10-16 批准版及 2.3 补充；确认人 AdolphKevin
 - 检查：unit
-- 验证：自动
+- 验证：自动；替身 项目平台脚本夹具
 
 ## 验收 A3：待执行清单与结果登记
 <!-- tw-section id=A3 type=acceptance depends=scope-global -->
@@ -46,7 +46,7 @@ roles: {"design_owner":"Claude","implementation_owner":"Codex","acceptance_owner
 - 场景：docs/sop/tw-scenario-acceptance.yaml#SOP-03
 - 依据：位置 docs/proposals/2026-10-16-scenario-acceptance-and-positive-text.md；版本 2026-10-16 批准版及 2.3 补充；确认人 AdolphKevin
 - 检查：unit
-- 验证：自动
+- 验证：自动；替身 项目平台脚本夹具
 
 ## 验收 A4：增量验收
 <!-- tw-section id=A4 type=acceptance depends=scope-global -->
@@ -55,7 +55,7 @@ roles: {"design_owner":"Claude","implementation_owner":"Codex","acceptance_owner
 - 场景：docs/sop/tw-scenario-acceptance.yaml#SOP-04
 - 依据：位置 docs/proposals/2026-10-16-scenario-acceptance-and-positive-text.md；版本 2026-10-16 批准版及 2.3 补充；确认人 AdolphKevin
 - 检查：unit
-- 验证：自动
+- 验证：自动；替身 项目平台脚本夹具
 
 ## 验收 A5：按场景验收与评审
 <!-- tw-section id=A5 type=acceptance depends=scope-global -->
@@ -64,7 +64,7 @@ roles: {"design_owner":"Claude","implementation_owner":"Codex","acceptance_owner
 - 场景：docs/sop/tw-scenario-acceptance.yaml#SOP-05
 - 依据：位置 docs/proposals/2026-10-16-scenario-acceptance-and-positive-text.md；版本 2026-10-16 批准版及 2.3 补充；确认人 AdolphKevin
 - 检查：unit
-- 验证：自动
+- 验证：自动；替身 项目平台脚本夹具
 
 ## 验收 A6：复杂任务与回归状态
 <!-- tw-section id=A6 type=acceptance depends=scope-global -->
@@ -73,7 +73,7 @@ roles: {"design_owner":"Claude","implementation_owner":"Codex","acceptance_owner
 - 场景：docs/sop/tw-scenario-acceptance.yaml#SOP-06
 - 依据：位置 docs/proposals/2026-10-16-scenario-acceptance-and-positive-text.md；版本 2026-10-16 批准版及 2.3 补充；确认人 AdolphKevin
 - 检查：unit
-- 验证：自动
+- 验证：自动；替身 项目平台脚本夹具
 
 ## 验收 A7：指令文本与职责划分
 <!-- tw-section id=A7 type=acceptance depends=scope-global -->
@@ -91,7 +91,7 @@ roles: {"design_owner":"Claude","implementation_owner":"Codex","acceptance_owner
 - 场景：docs/sop/tw-scenario-acceptance.yaml#SOP-08
 - 依据：位置 docs/proposals/2026-10-16-scenario-acceptance-and-positive-text.md；版本 2026-10-16 批准版及 D9–D12；确认人 AdolphKevin
 - 检查：unit
-- 验证：自动
+- 验证：自动；替身 项目平台脚本夹具
 
 ## 任务 T1：运行时
 <!-- tw-section id=T1 type=task depends=scope-global -->
