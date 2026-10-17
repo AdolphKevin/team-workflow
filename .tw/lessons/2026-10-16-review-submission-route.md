@@ -1,0 +1,19 @@
+---
+title: "平台任务的下一步仍指向本地评审提交"
+scope: ["self:skills/team-knowledge/scripts/tw_runtime/team/**", "self:tests/test_recheck.py"]
+source: ["self:skills/team-workflow/references/contracts.md", "self:tests/test_recheck.py"]
+verified: {"self": {"commit": "ffc8fdcc8d590d18242e77bd0bb2917c3cbd17ba", "date": "2026-10-16"}}
+guards: ["self:tests/test_recheck.py#test_u2_run_and_status_choose_platform_publication", "self:tests/test_recheck.py#test_u2_missing_approval_uses_publication_and_keeps_plan_approval_path", "self:tests/test_recheck.py#test_u2_status_recomputes_prior_repair_from_its_error_code", "self:tests/test_recheck.py#test_u2_local_task_keeps_local_submission"]
+tags: ["平台评审", "提交方式", "下一步", "合并批准", "历史修复指引"]
+---
+# 平台任务的下一步仍指向本地评审提交
+
+现象：平台任务缺批准时，照下一步完成本地提交，交付又要求把评审发布到变更请求；运行检查和查看状态也给出了本地提交命令。
+
+根因：各个命令分别拼接评审提交指引，任务来源的判断只在部分错误出口使用。状态还会照抄历史请求中的旧指引，再用通用交付命令覆盖失败步骤的具体修复。
+
+修复与防护：评审提交方式由同一个函数按任务来源决定，调用方提供实际文件与当前阶段。缺合并批准使用结构化批准状态赋码；进行中状态按历史错误代码重算修复指引，原请求记录保留。守护测试同时核对平台与本地任务、历史指引和实际文件路径。
+
+发现方法：平台任务与本地任务各走一轮检查、评审和状态查询，再照缺批准的指引补齐材料并完成交付。多轮评审的试用数据提供明确的提交先后时间。
+
+适用条件：调整评审草稿、提交、运行结果、状态恢复或批准修复指引时。

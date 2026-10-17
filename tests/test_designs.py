@@ -48,6 +48,12 @@ def changed(design, identifier, body='Changed required behavior.'):
 
 
 class DesignCases(unittest.TestCase):
+    def test_invalid_complexity_lists_the_supported_values(self):
+        value = example()
+        value['assessment']['complexity'] = 'large'
+        with self.assertRaisesRegex(Invalid, '复杂度 complexity 取 simple、medium、complex'):
+            designs.validate_design(value)
+
     def test_simple_child_of_complex_plan_uses_its_own_assessment(self):
         design = example('complex')
         child = next(row for row in design['sections'] if row['id'] == 'T1')

@@ -14,9 +14,10 @@ class TeamParser(argparse.ArgumentParser):
     def parse_args(self, args=None, namespace=None):
         value = super().parse_args(args, namespace)
         # Subparsers parse into a separate namespace; append without losing mappings before the command.
-        value.repository = value.repository + getattr(value, 'sub_repository', [])
-        if hasattr(value, 'sub_repository'):
-            del value.sub_repository
+        value.repository = value.repository + getattr(value, 'sub_repository', []) + getattr(value, 'action_repository', [])
+        for field in ('sub_repository', 'action_repository'):
+            if hasattr(value, field):
+                delattr(value, field)
         return value
 
 
@@ -143,6 +144,24 @@ def parser():
     c.add_argument('--sections', help='逗号分隔的章节编号，或 all 选择全部现有章节')
     c.add_argument('--reconcile', help='对账原因；绑定当前平台历史重新确认批准')
     command('design-diff', '核对方案变化及受影响的章节', task, inputs, request, design, history)
+    c = command('scenarios', '核对场景文件、导入用例与核对覆盖')
+    actions = c.add_subparsers(dest='scenario_action', required=True)
+    action_locations = argparse.ArgumentParser(add_help=False)
+    action_locations.add_argument('--root', type=Path, default=argparse.SUPPRESS)
+    action_locations.add_argument('--repository', dest='action_repository', action='append', default=[])
+    action = actions.add_parser('check', help='核对场景文件', parents=[action_locations, output])
+    action.add_argument('file', type=Path)
+    action = actions.add_parser('import-cases', help='导入测试用例', parents=[action_locations, output])
+    action.add_argument('--task', required=True)
+    action.add_argument('file', type=Path)
+    action = actions.add_parser('coverage', help='核对用例覆盖', parents=[action_locations, output])
+    action.add_argument('--task', required=True)
+    action.add_argument('--pairs', required=True, type=Path)
+    action = actions.add_parser('pending', help='列出待执行场景', parents=[action_locations, output])
+    action.add_argument('--task', required=True)
+    action = actions.add_parser('submit', help='登记场景执行结果', parents=[action_locations, output])
+    action.add_argument('--task', required=True)
+    action.add_argument('--results', required=True, type=Path)
     command('schema', '列出团队材料模板与字段说明')
     c = command('cleanup', '预览或应用本机材料清理计划')
     c.add_argument('--apply', action='store_true', help='Apply an explicitly reviewed cleanup plan')
@@ -170,6 +189,18 @@ def _terminated(signum, frame):
     raise SystemExit(128 + signum)
 
 
+def emit(result, fmt):
+    import commands
+    def public(value):
+        if isinstance(value, dict):
+            return {key: public(item) for key, item in value.items() if key != 'source_next_action'}
+        if isinstance(value, list):
+            return [public(item) for item in value]
+        return value
+    result = public(result)
+    print(commands.readable(result) if fmt == 'text' else json.dumps(result, ensure_ascii=False, indent=2))
+
+
 def main(argv=None):
     import signal
     import threading
@@ -183,7 +214,9 @@ def main(argv=None):
 
 
 def _main(argv=None):
-    args = parser().parse_args(argv)
+    arguments = list(sys.argv[1:] if argv is None else argv)
+    args = parser().parse_args(arguments)
+    args.command_arguments = arguments
     root = args.root.resolve()
     if args.allow_modified_tool:
         import os
@@ -222,27 +255,21 @@ def _main(argv=None):
             result = commands.dispatch(args, root)
         if not result.get('ok', True):
             result.setdefault('problem', '; '.join(str(v) for v in result.get('gaps', [])) or 'The operation is incomplete.')
-            result.setdefault('next_action', 'Resolve the reported gap without replacing prior evidence.')
             import repairs
             repairs.annotate(args, result)
-        print(commands.readable(result) if args.format == 'text' else json.dumps(result, ensure_ascii=False, indent=2))
-        return 0 if result.get('ok', True) else 1
+            result.setdefault('next_action', 'Resolve the reported gap without replacing prior evidence.')
     except (RuntimeInvalid, OSError, ValueError, TypeError, KeyError) as exc:
         import repairs
-        result = {'ok': False, 'scope': args.command, 'status': 'incomplete', 'problem': str(exc),
-                  'error_code': getattr(exc, 'error_code', 'invalid-or-incomplete-input'),
-                  'next_action': repairs.action(args, str(exc), getattr(exc, 'next_action', None),
-                                                getattr(exc, 'error_code', None))}
-        print(json.dumps(result, ensure_ascii=False))
-        return 1
+        result = repairs.failure(args, exc, scope=args.command)
     except Exception as exc:
         import commands
-        print(json.dumps({'scope': args.command, **commands.tool_defect(exc)}, ensure_ascii=False))
-        return 1
+        result = {'scope': args.command, **commands.tool_defect(exc)}
     finally:
         platform_read.PROJECT_ROOT.reset(platform_token)
         LOCATIONS.reset(token)
         INSTALL_HOME.reset(home_token)
+    emit(result, args.format)
+    return 0 if result.get('ok', True) else 1
 
 
 if __name__ == '__main__':

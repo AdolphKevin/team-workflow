@@ -5,6 +5,7 @@ import unittest
 from test_designs import example, section, question
 from common import Invalid
 import designs
+import plan_fixtures as plans
 
 
 class MarkdownDesignCases(unittest.TestCase):
@@ -23,26 +24,17 @@ class MarkdownDesignCases(unittest.TestCase):
         automatic.update(cases=['Suite::a、b', 'quoted "case"', 'x；y'],
                          substitutes=['记录器、缓存', ' 无 ', 'x；y'])
         raw = designs.render(value)
-        self.assertEqual(designs.load(raw), value)
+        self.assertEqual(designs.load(raw, scenario_reader=plans.scenario_reader), value)
         self.assertIn('- 验证：自动\n', raw)
         for label in ('层级 journey', '入口 app.add', '环境 isolated-test', '隔离 isolated', '隔离依据 无'):
             changed = raw.replace('- 验证：自动\n', '- 验证：自动；' + label + '\n')
             number = next(i for i, line in enumerate(changed.splitlines(), 1) if line.endswith(label))
             with self.subTest(label=label), self.assertRaisesRegex(Invalid, f'第 {number} 行.*验证：自动.*checks.*coverage'):
-                designs.load(changed)
-        manual = value['sections'][3]['data']
-        manual.update(checks=[], verification={'method': 'manual', 'cases': [], 'substitutes': []})
-        raw = designs.render(value)
-        self.assertIn('- 验证：人工\n', raw)
-        self.assertEqual(designs.load(raw), value)
-        for field in ('用例 无', '替身 无'):
-            changed = raw.replace('- 验证：人工', '- 验证：人工；' + field)
-            number = next(i for i, line in enumerate(changed.splitlines(), 1) if line.endswith(field))
-            with self.subTest(field=field), self.assertRaisesRegex(Invalid, f'第 {number} 行.*人工'):
-                designs.load(changed)
-        manual['verification']['coverage'] = {}
-        with self.assertRaisesRegex(Invalid, 'coverage'):
-            designs.validate_design(value)
+                designs.load(changed, scenario_reader=plans.scenario_reader)
+        changed = raw.replace('- 验证：自动', '- 验证：人工')
+        number = next(i for i, line in enumerate(changed.splitlines(), 1) if line.startswith('- 验证：人工'))
+        with self.assertRaisesRegex(Invalid, f'第 {number} 行.*人工执行按场景逐条记录.*submit'):
+            designs.load(changed, scenario_reader=plans.scenario_reader)
 
     def test_m1_roundtrip_all_fields_and_section_types(self):
         values = [example(level) for level in ('simple', 'medium', 'complex')]
@@ -60,24 +52,24 @@ class MarkdownDesignCases(unittest.TestCase):
             with self.subTest(complexity=value['assessment']['complexity'], sections=len(value['sections'])):
                 raw = designs.render(value)
                 self.assertNotIn('```json', raw)
-                self.assertEqual(designs.load(raw), value)
-                self.assertEqual(designs.fingerprints(designs.load(raw)), designs.fingerprints(value))
+                self.assertEqual(designs.load(raw, scenario_reader=plans.scenario_reader), value)
+                self.assertEqual(designs.fingerprints(designs.load(raw, scenario_reader=plans.scenario_reader)), designs.fingerprints(value))
 
     def test_m2_intro_does_not_participate_in_fingerprints(self):
         value = example()
         raw = designs.render(value)
         index = raw.index('## ')
         edited = raw[:index] + '# 标题\n\n批准记录已更新。\n\n' + raw[index:]
-        self.assertEqual(designs.load(edited), value)
-        self.assertEqual(designs.fingerprints(designs.load(edited)), designs.fingerprints(value))
+        self.assertEqual(designs.load(edited, scenario_reader=plans.scenario_reader), value)
+        self.assertEqual(designs.fingerprints(designs.load(edited, scenario_reader=plans.scenario_reader)), designs.fingerprints(value))
 
     def test_m3_only_changed_section_and_dependents_need_review(self):
-        before = designs.load(designs.render(example()))
+        before = designs.load(designs.render(example()), scenario_reader=plans.scenario_reader)
         approved = designs.approval_draft(before, 'alice')
         after = copy.deepcopy(before)
         after['revision'] = 2
         after['sections'][1]['body'] = '新的接口行为。'
-        after = designs.load(designs.render(after))
+        after = designs.load(designs.render(after), scenario_reader=plans.scenario_reader)
         self.assertEqual(designs.impact(before, after, [], history=[before])['affected'], ['A1', 'T1', 'api-1'])
         status = designs.approval_status(after, [approved], history=[before], changed_paths=[])
         self.assertEqual(status['stale'], ['A1', 'T1', 'api-1'])
@@ -91,17 +83,17 @@ class MarkdownDesignCases(unittest.TestCase):
                  raw.replace('id=api-2', 'id=api-1'),
                  raw.replace('depends=api-1', 'depends=missing'),
                  raw.replace('id=api-1 type=interface', 'id=second-global type=global-scope'),
-                 raw.replace('- 角色：caller\n', ''),
+                 raw.replace('- 场景：tests/fixtures/scenarios.json#SYNTH-01\n', ''),
                  raw.replace('- 验证：自动', '- 验证：自动；层级 journey', 1),
                  '{}']
         for text in cases:
             with self.subTest(text=text[:100]), self.assertRaisesRegex(Invalid, r'第 \d+ 行'):
-                designs.load(text)
+                designs.load(text, scenario_reader=plans.scenario_reader)
 
     def test_body_ends_at_same_or_higher_marked_heading(self):
         raw = designs.render(example())
         raw = raw.replace('## api-1\n', '## api-1\n').replace('## api-2\n', '### api-2\n')
-        loaded = designs.load(raw)
+        loaded = designs.load(raw, scenario_reader=plans.scenario_reader)
         self.assertIn('### api-2\n<!-- tw-section id=api-2', loaded['sections'][1]['body'])
         self.assertEqual(loaded['sections'][2]['body'], 'Required behavior.')
 
@@ -112,48 +104,48 @@ class MarkdownDesignCases(unittest.TestCase):
         issue = question('resolved')
         issue['resolution']['confirmation'] = '—'
         value['issues'] = [issue]
-        self.assertEqual(designs.load(designs.render(value)), value)
+        self.assertEqual(designs.load(designs.render(value), scenario_reader=plans.scenario_reader), value)
 
     def test_m4_invalid_structured_values_report_the_actual_line(self):
         raw = designs.render(example())
         changed = raw.replace('- 范围：src/orders', '- 范围：../outside')
         line = next(i for i, text in enumerate(changed.splitlines(), 1) if text == '- 范围：../outside')
         with self.assertRaisesRegex(Invalid, f'第 {line} 行'):
-            designs.load(changed)
+            designs.load(changed, scenario_reader=plans.scenario_reader)
 
     def test_m4_unknown_text_after_labels_is_not_silently_lost(self):
         raw = designs.render(example()).replace('- 前置任务：无', '- 前置任务：无\n必须保留这条业务要求。', 1)
         with self.assertRaisesRegex(Invalid, r'第 \d+ 行'):
-            designs.load(raw)
+            designs.load(raw, scenario_reader=plans.scenario_reader)
 
     def test_m1_lists_preserve_unbalanced_punctuation(self):
         for values in ([']first', 'second'], ['a"b', 'c'], ['x{y', 'z']):
             with self.subTest(values=values):
                 value = example()
-                value['sections'][3]['data']['scenario']['steps'] = values
-                self.assertEqual(designs.load(designs.render(value)), value)
+                value['sections'][3]['data']['verification']['cases'] = values
+                self.assertEqual(designs.load(designs.render(value), scenario_reader=plans.scenario_reader), value)
 
     def test_m1_long_fence_keeps_short_fences_and_labels_as_prose(self):
         value = example()
         value['sections'][3]['body'] = '例子：\n````markdown\n```\n- 角色：this is code\n````'
-        self.assertEqual(designs.load(designs.render(value)), value)
+        self.assertEqual(designs.load(designs.render(value), scenario_reader=plans.scenario_reader), value)
 
     def test_m1_unclosed_body_fences_cannot_swallow_later_sections(self):
         for body in ('```', '```python\nx', '```python\n```example\n- 角色：仅示例', '\\```python\n- 角色：原有反斜杠'):
             with self.subTest(body=body):
                 value = example()
                 value['sections'][1]['body'] = body
-                self.assertEqual(designs.load(designs.render(value)), value)
+                self.assertEqual(designs.load(designs.render(value), scenario_reader=plans.scenario_reader), value)
 
     def test_m4_table_separator_has_the_same_column_count(self):
         raw = designs.render(example()).replace('| --- | --- | --- | --- | --- | --- | --- |', '| --- |', 1)
         with self.assertRaisesRegex(Invalid, r'第 \d+ 行'):
-            designs.load(raw)
+            designs.load(raw, scenario_reader=plans.scenario_reader)
 
     def test_fenced_marker_examples_are_body_text(self):
         value = example()
         value['sections'][1]['body'] = '例子：\n```markdown\n## Example\n<!-- tw-section id=fake type=scope -->\n示例\n```'
-        self.assertEqual(designs.load(designs.render(value)), value)
+        self.assertEqual(designs.load(designs.render(value), scenario_reader=plans.scenario_reader), value)
 
 
 if __name__ == '__main__':

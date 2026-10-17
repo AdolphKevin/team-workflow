@@ -19,7 +19,7 @@ class TaskProgress(unittest.TestCase):
 
     def setUp(self):
         self.base.setUp(self)
-        self.setup_task()
+        self.setup_task(ready_scenarios=False)
 
     def cli(self, *args):
         output = io.StringIO()
@@ -52,21 +52,21 @@ class TaskProgress(unittest.TestCase):
         self.declare_accounts()
         code, prepared = self.cli('start', '--task', self.name('task'), '--design', self.name('design'))
         self.assertEqual(code, 0, prepared)
-        context = json.loads((self.root / prepared['artifact']['path']).read_text())
+        context = json.loads((self.root / prepared['context']['path']).read_text())
         self.assertEqual(context['login_policy']['agent_after_authorization'], ['e2e-owner'])
         self.assertIn('shopify-partner', context['login_policy']['user_signs_in'])
         self.assertEqual(context['authorizations_needed'][0]['accounts'], ['e2e-owner'])
         self.assertIn('真实账号仍由你本人', context['authorizations_needed'][0]['question'])
-        self.assertTrue(context['next_action'].startswith('tw team approval-draft '))
+        self.assertTrue(prepared['next_action'].startswith('tw team run '))
         code, refused = self.cli('start', '--task', self.name('task'), '--design', self.name('design'), '--grant', 'synthetic-login')
         self.assertEqual(code, 1)
         self.assertIn('--confirmed-by', refused['problem'])
         code, granted = self.cli('start', '--task', self.name('task'), '--design', self.name('design'),
                                  '--grant', 'synthetic-login', '--confirmed-by', 'blur-yin')
-        context = json.loads((self.root / granted['artifact']['path']).read_text())
+        context = json.loads((self.root / granted['context']['path']).read_text())
         self.assertEqual(context['authorizations'][0]['confirmed_by'], 'blur-yin')
         self.assertEqual(context['authorizations_needed'], [])
-        code, status = self.cli('status', '--context', granted['artifact']['path'])
+        code, status = self.cli('status', '--context', granted['context']['path'])
         self.assertEqual(status['authorizations'][0]['accounts'], ['e2e-owner'])
 
     def test_request_id_rejects_changed_tool_override_and_login_authorization(self):
@@ -93,8 +93,9 @@ class TaskProgress(unittest.TestCase):
                 self.assertEqual((self.root / original['artifact']['path']).read_bytes(), original_file)
 
     def test_status_lists_steps_and_the_next_exact_command(self):
+        self.setup_task()
         code, prepared = self.cli('start', '--task', self.name('task'), '--design', self.name('design'))
-        context = prepared['artifact']['path']
+        context = prepared['context']['path']
         code, status = self.cli('status', '--context', context)
         states = {row['id']: row['state'] for row in status['steps']}
         self.assertEqual((states['prepare'], states['run']), ('done', 'pending'))
@@ -112,6 +113,34 @@ class TaskProgress(unittest.TestCase):
         (self.root / 'app.py').write_text('def add(a, b):\n    return a + b  # changed\n')
         code, stale = self.cli('status', '--context', context)
         self.assertEqual({row['id']: row['state'] for row in stale['steps']}['acceptance'], 'stale')
+
+    def test_scope_problem_names_globally_ignored_file_and_both_resolutions(self):
+        import os
+        config = self.root / '.tw/local/xdg'
+        (config / 'git').mkdir(parents=True)
+        (config / 'git/ignore').write_text('global.local\n')
+        (self.root / 'global.local').write_text('本机设置\n')
+        with patch.dict(os.environ, XDG_CONFIG_HOME=str(config), GIT_CONFIG_GLOBAL='/dev/null'):
+            self.setup_task()
+            code, result = self.cli('accept', '--task', self.name('task'), '--report', self.name('report'))
+        self.assertEqual(code, 1, result)
+        self.assertIn('global.local', result['problem'])
+        self.assertIn('本机文件加入项目 .gitignore', result['problem'])
+        self.assertIn('项目文件纳入任务范围', result['problem'])
+
+    def test_scope_problem_lists_first_ten_files_and_total(self):
+        names = [f'outside-{index:02d}.local' for index in range(12)]
+        for name in names:
+            (self.root / name).write_text('本机设置\n')
+        self.setup_task()
+        code, result = self.cli('accept', '--task', self.name('task'), '--report', self.name('report'))
+        self.assertEqual(code, 1, result)
+        for name in names[:10]:
+            self.assertIn(name, result['problem'])
+        for name in names[10:]:
+            self.assertNotIn(name, result['problem'])
+        self.assertIn('等 12 个文件', result['problem'])
+        self.assertIn('本机文件加入项目 .gitignore；项目文件纳入任务范围', result['problem'])
 
     def test_run_names_checks_whose_inputs_changed_while_they_ran(self):
         self.check("from pathlib import Path; Path('app.py').write_text(Path('app.py').read_text() + '# touched')")
@@ -139,6 +168,7 @@ class TaskProgress(unittest.TestCase):
         self.assertIn('run --root "$PROJECT" --task ' + self.name('task'), status['next_step']['next_command'])
 
     def test_status_marks_final_delivery_stale_after_source_changes(self):
+        self.setup_task()
         code, accepted = self.cli('accept', '--task', self.name('task'), '--report', self.name('report'),
                                   '--out', self.name('acceptance'))
         self.assertEqual(code, 0, accepted)
@@ -151,9 +181,14 @@ class TaskProgress(unittest.TestCase):
         self.assertEqual({row['id']: row['state'] for row in status['steps']}['delivery'], 'done')
         (self.root / 'app.py').write_text('def add(a,b): return a+b+0\n')
         code, status = self.cli('status', '--task', self.name('task'), '--design', self.name('design'))
+        self.assertEqual(status['task_phase'], 'delivered')
+        self.assertEqual(self.cli('start', '--task', self.name('task'), '--design', self.name('design'))[0], 0)
+        code, status = self.cli('status', '--task', self.name('task'), '--design', self.name('design'))
+        self.assertEqual(code, 0, status)
+        self.assertEqual(status['task_phase'], 'in-progress')
         states = {row['id']: row['state'] for row in status['steps']}
         self.assertEqual((states['acceptance'], states['delivery']), ('stale', 'stale'))
-        self.assertEqual(status['next_step']['id'], 'acceptance')  # final delivery needs a current acceptance first
+        self.assertEqual(status['next_step']['id'], 'scenarios')  # 产品变化先重新执行场景，再复核验收
 
     def test_status_respects_revision_sensitive_execution_sources(self):
         self.profile['checks']['unit']['revision_sensitive'] = True
@@ -169,6 +204,7 @@ class TaskProgress(unittest.TestCase):
         self.assertEqual({row['id']: row['state'] for row in status['steps']}['run'], 'stale')
 
     def test_status_records_delivery_disposition_step(self):
+        self.setup_task()
         code, accepted = self.cli('accept', '--task', self.name('task'), '--report', self.name('report'),
                                   '--out', self.name('acceptance'))
         self.assertEqual(code, 0, accepted)
@@ -178,13 +214,14 @@ class TaskProgress(unittest.TestCase):
         code, status = self.cli('status', '--task', self.name('task'), '--design', self.name('design'))
         self.assertEqual(code, 0, status)
         self.assertEqual({row['id']: row['state'] for row in status['steps']}['knowledge'], 'pending')
-        self.assertIn('交付报告引用的材料已变化', next(row for row in status['steps'] if row['id'] == 'knowledge')['incomplete_reason'])
+        self.assertIn('交付报告需要写明知识处置', next(row for row in status['steps'] if row['id'] == 'knowledge')['incomplete_reason'])
         (self.root / 'app.py').write_text('def add(a,b): return a+b+0\n')
         code, status = self.cli('status', '--task', self.name('task'), '--design', self.name('design'))
         self.assertEqual(code, 0, status)
         self.assertEqual({row['id']: row['state'] for row in status['steps']}['acceptance'], 'stale')
 
     def test_modified_installations_are_refused_with_tool_modified(self):
+        self.setup_task()
         import os
         from tw_runtime import install
         modified = {'ok': False, 'installed_ok': True, 'problems': ['scripts/tw_runtime/team/knowledge.py changed'],
@@ -198,6 +235,7 @@ class TaskProgress(unittest.TestCase):
             self.assertEqual((code, project['error_code']), (1, 'tool-modified'))
 
     def test_acceptance_output_explains_a_re_evaluated_registration(self):
+        self.setup_task()
         code, result = self.cli('accept', '--task', self.name('task'), '--report', self.name('report'))
         self.assertEqual(code, 0, result)
         self.assertIn('summary_markdown', result)  # shown directly, not only in the artifact
@@ -206,12 +244,12 @@ class TaskProgress(unittest.TestCase):
     def test_rule_changes_during_a_task_are_visible(self):
         code, prepared = self.cli('start', '--task', self.name('task'), '--design', self.name('design'))
         with patch.object(common, 'rules_digest', return_value='0' * 64):
-            code, status = self.cli('status', '--context', prepared['artifact']['path'], '--format', 'text')
+            code, status = self.cli('status', '--context', prepared['context']['path'], '--format', 'text')
         self.assertIn('团队流程规则已更新', status)
 
     def test_metrics_count_requests_reruns_and_failures(self):
         code, prepared = self.cli('start', '--task', self.name('task'), '--design', self.name('design'))
-        context = prepared['artifact']['path']
+        context = prepared['context']['path']
         for _ in range(2):
             self.cli('run', '--context', context)
         self.write('invalid-report', {'data_version': 1, 'task_id': self.task['id']})

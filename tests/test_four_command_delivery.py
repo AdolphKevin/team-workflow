@@ -62,6 +62,7 @@ class FourCommandDelivery(unittest.TestCase):
         return result
 
     def run_checks(self, *extra):
+        plans.submit_scenarios(self.root, self.task)
         code, result = self.command('run', '--task', self.task['id'], *extra)
         self.assertEqual(code, 0, result)
         self.ran = result
@@ -109,6 +110,57 @@ class FourCommandDelivery(unittest.TestCase):
         self.assertTrue(self.draft_path().is_file())
         self.assertIn('--submit', result['next_action'])
         self.assertIsNone(self.current()['review'])
+
+    def assert_start_matches_status(self, complexity, next_id):
+        self.configure(complexity)
+        code, started = self.command('start', '--task', '.tw/local/task.json', '--design', '.tw/local/design.md')
+        self.assertEqual(code, 0, started)
+        code, status = self.command('status', '--task', self.task['id'])
+        self.assertEqual(code, 0, status)
+        self.assertEqual(started['next_step'], status['next_step'])
+        self.assertEqual(started['steps'], status['steps'])
+        self.assertIn('场景验收', [row['label'] for row in started['steps']])
+        self.assertEqual(started['next_step']['id'], next_id)
+        self.assertEqual(started['next_action'], status['next_action'])
+        self.assertIn('--task ' + self.task['id'], started['next_action'])
+        code, continued = self.command('start', '--task', self.task['id'])
+        self.assertEqual(code, 0, continued)
+        code, latest = self.command('status', '--task', self.task['id'])
+        self.assertEqual(code, 0, latest)
+        self.assertEqual(continued['steps'], latest['steps'])
+        self.assertEqual(continued['next_step'], latest['next_step'])
+        self.assertEqual(continued['next_action'], latest['next_action'])
+
+    def test_simple_start_and_status_share_steps_and_next_command(self):
+        self.assert_start_matches_status('simple', 'run')
+
+    def test_medium_start_and_status_share_steps_and_next_command(self):
+        self.assert_start_matches_status('medium', 'approval')
+
+    def test_local_delivery_summary_states_ci_is_unverified(self):
+        self.reviewed()
+        code, result = self.command('deliver', '--task', self.task['id'], '--reason', '现有知识已覆盖')
+        self.assertEqual(code, 0, result)
+        self.assertEqual(result['ci_verified_checks'], [])
+        self.assertIn('检查只在本机运行，CI 未验证', result['summary_markdown'].split('**还没做或需要注意的**')[1].split('**状态**')[0])
+        group = self.current()
+        for key in ('acceptance', 'delivery_report', 'delivery'):
+            record = read(artifact_valid(self.root, group[key]))
+            self.assertEqual(record['task_id'], self.task['id'])
+        self.assertEqual(read(artifact_valid(self.root, group['acceptance']))['kind'], 'acceptance')
+        self.assertEqual(read(artifact_valid(self.root, group['delivery']))['kind'], 'delivery-verification')
+        self.assertTrue(result['business_accepted'])
+        self.assertTrue(result['delivery_complete'])
+        self.assertIn('场景汇总：', result['summary_markdown'])
+        self.assertIn('一次通过率：', result['summary_markdown'])
+
+    def test_start_text_has_one_next_step(self):
+        self.configure()
+        result = subprocess.run([sys.executable, str(TW), '--root', str(self.root), 'team', 'start',
+            '--task', '.tw/local/task.json', '--design', '.tw/local/design.md', '--format', 'text'],
+            capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stdout)
+        self.assertEqual(result.stdout.count('下一步：'), 1, result.stdout)
 
     def test_failed_run_does_not_create_review(self):
         self.start(passed=False)
@@ -369,6 +421,8 @@ class FourCommandDelivery(unittest.TestCase):
         code, result = self.command('deliver', '--task', self.task['id'])
         self.assertEqual(code, 1, result)
         self.assertEqual(result['stopped_at'], 'delivery-report')
+        self.assertFalse(result['overall_complete'])
+        self.assertEqual(result['summary'], '交付停在交付报告。')
         self.assertIn('--reason', result['next_action'])
         accepted = self.current()['acceptance']
         self.assertTrue(accepted)
@@ -385,8 +439,8 @@ class FourCommandDelivery(unittest.TestCase):
         report = self.current()['delivery_report']
         code, result = self.command('deliver', '--task', self.task['id'])
         self.assertEqual(code, 0, result)
-        self.assertTrue(result['steps'][0]['reused'])
-        self.assertTrue(result['steps'][1]['reused'])
+        self.assertTrue(result['reused'])
+        self.assertEqual(result['artifact'], self.current()['delivery'])
         self.assertEqual(self.current()['delivery_report'], report)
 
     def test_interrupted_deliver_reuses_the_completed_acceptance_and_report(self):
@@ -394,11 +448,11 @@ class FourCommandDelivery(unittest.TestCase):
         original = commands.dispatch
         interrupted = []
 
-        def dispatch(args, root):
+        def dispatch(args, root, **kwargs):
             if args.command == 'verify' and not interrupted:
                 interrupted.append(True)
                 raise KeyboardInterrupt('stop at the public verify entry')
-            return original(args, root)
+            return original(args, root, **kwargs)
 
         with patch.object(commands, 'dispatch', side_effect=dispatch), contextlib.redirect_stdout(io.StringIO()), self.assertRaises(KeyboardInterrupt):
             workflow.main(['deliver', '--root', str(self.root), '--task', self.task['id'], '--reason', 'No knowledge change.'])
@@ -418,11 +472,11 @@ class FourCommandDelivery(unittest.TestCase):
         original = commands.dispatch
         interrupted = []
 
-        def dispatch(args, root):
+        def dispatch(args, root, **kwargs):
             if args.command == 'delivery-template' and not interrupted:
                 interrupted.append(True)
                 raise KeyboardInterrupt('stop after business acceptance')
-            return original(args, root)
+            return original(args, root, **kwargs)
 
         with patch.object(commands, 'dispatch', side_effect=dispatch), contextlib.redirect_stdout(io.StringIO()), self.assertRaises(KeyboardInterrupt):
             workflow.main(['deliver', '--root', str(self.root), '--task', self.task['id'], '--reason', 'No knowledge change.'])
@@ -455,10 +509,10 @@ class FourCommandDelivery(unittest.TestCase):
         original = commands.dispatch
         inserted = []
 
-        def dispatch(args, root):
+        def dispatch(args, root, **kwargs):
             if args.command == 'verify' and not inserted:
                 inserted.append(self.rule('late-rule', '交付期间新增的规则'))
-            return original(args, root)
+            return original(args, root, **kwargs)
 
         output = io.StringIO()
         with patch.object(commands, 'dispatch', side_effect=dispatch), contextlib.redirect_stdout(output):
@@ -481,12 +535,12 @@ class FourCommandDelivery(unittest.TestCase):
         original = commands.dispatch
         removed = []
 
-        def dispatch(args, root):
+        def dispatch(args, root, **kwargs):
             if args.command == 'verify' and not removed:
                 path = artifact_valid(self.root, self.current()['delivery_report'])
                 removed.append((path, path.read_bytes()))
                 path.unlink()
-            return original(args, root)
+            return original(args, root, **kwargs)
 
         output = io.StringIO()
         try:
@@ -511,7 +565,8 @@ class FourCommandDelivery(unittest.TestCase):
         claims = sorted(self.current_path().parent.glob('requests/*/request.json'))
         code, again = self.command(*args)
         self.assertEqual(code, 0, again)
-        self.assertEqual(again['artifact'], first['artifact'])
+        self.assertTrue(again['reused'])
+        self.assertEqual(again['artifact'], self.current()['delivery'])
         self.assertEqual(sorted(self.current_path().parent.glob('requests/*/request.json')), claims)
 
     def test_combined_submission_same_request_is_idempotent(self):

@@ -5,9 +5,9 @@ import copy
 from common import Invalid, artifact_valid, digest, read
 import validation
 
-BINDINGS = ('task_id', 'task_digest', 'source_digest', 'validation_policy', 'sections', 'risks', 'selected_runs')
+BINDINGS = ('task_id', 'task_digest', 'source_digest', 'validation_policy', 'sections', 'risks', 'selected_runs', 'scenario_rounds', 'scenario_files')
 LABELS = {'task_digest': '任务', 'source_digest': '源码', 'validation_policy': '校验策略',
-          'sections': '章节', 'risks': '风险', 'selected_runs': '选中运行', 'approval_plan': '批准所用方案'}
+          'sections': '章节', 'risks': '风险', 'selected_runs': '选中运行', 'scenario_rounds': '场景轮次', 'scenario_files': '场景文件', 'approval_plan': '批准所用方案'}
 
 
 def same_group(left, right):
@@ -21,8 +21,9 @@ def approval_plan(design, history):
     return digest({'design': design, 'history': history})
 
 
-def source_record(root, profile, task):
-    state = validation.source(root, profile)
+def source_record(root, profile, task, *, workspace=None):
+    workspace = workspace or validation.Workspace(root, profile)
+    state = validation.source(root, profile, workspace=workspace)
     files = {}
 
     def collect(value, prefix=''):
@@ -69,15 +70,13 @@ def carry(candidate, previous, fields, baseline):
     """Carry only editable text; generated bindings/results always come from the current snapshot."""
     names = ['评审信息', '规范 standards', '需求 spec', '问题清单']
     names += ['验收 ' + row['id'] for row in candidate['template']['acceptance']]
-    names += ['人工观察 ' + key for key in candidate['manual']]
     names += [name for name in fields if name.startswith('问题 ')]
     candidate['prefill'] = {name: {key: item['value'] for key, item in fields[name]['fields'].items() if key != '复核'}
                             for name in names if name in fields}
     rechecks = []
     for name, values in candidate['prefill'].items():
         keys = ('结论', '理由', '证据文件') if name.startswith(('规范 ', '需求 ', '验收 ')) else (
-            ('观察人', '时间', '操作', '结果', '数据', '证据文件') if name.startswith('人工观察 ') else (
-            ('批准方案与代码', '批准说明') if name == '评审信息' and candidate.get('approval_needed') else ()))
+            ('批准方案与代码', '批准说明') if name == '评审信息' and candidate.get('approval_needed') else ())
         if any(values.get(key, '').strip() for key in keys):
             rechecks.append(name)
     candidate['rechecks'] = rechecks
@@ -96,7 +95,12 @@ def carry(candidate, previous, fields, baseline):
         changed = sorted(key for key, row in candidate['acceptance_results'].items()
                          if any(old_runs.get(check) != result['run'] for check, result in row['checks'].items()))
     bindings = [label for key, label in LABELS.items() if (previous or {}).get('bindings', {}).get(key) != candidate['bindings'].get(key)]
-    candidate['changes'] = {'files': files, 'acceptance': changed, 'bindings': bindings, 'baseline_complete': baseline is not None}
+    old_scenarios = (previous or {}).get('scenario_states', {})
+    new_scenarios = candidate.get('scenario_states', {})
+    changed_scenarios = sorted(key for key in old_scenarios.keys() | new_scenarios.keys()
+                               if {k: (old_scenarios.get(key) or {}).get(k) for k in ('state', 'fingerprint')}
+                               != {k: (new_scenarios.get(key) or {}).get(k) for k in ('state', 'fingerprint')})
+    candidate['changes'] = {'scenarios': changed_scenarios, 'files': files, 'acceptance': changed, 'bindings': bindings, 'baseline_complete': baseline is not None}
     lines = ['- 绑定变化：' + ('、'.join(bindings) or '工作草稿已过期')]
     if baseline is None:
         lines.append('- 上一轮未保存逐文件指纹，无法还原精确文件差异；预填内容均须重新核对。')
@@ -106,10 +110,12 @@ def carry(candidate, previous, fields, baseline):
         action = '新增' if name not in old_files else '删除' if name not in new_files else '修改'
         lines.append('- 文件：' + name + '（' + action + '）')
     lines.append('- 运行结果变化的验收项：' + ('、'.join(changed) or '无'))
+    lines.append('- 场景变化：' + ('、'.join(changed_scenarios) or '无'))
     candidate['generated']['changes'] = '\n'.join(lines)
 
 
-def status(root, profile, task, state, current, group=None, inputs=None):
+def status(root, profile, task, state, current, group=None, inputs=None, *, workspace=None):
+    workspace = workspace or validation.Workspace(root, profile)
     previous = latest(root, state, current, group)
     if not previous and not current:
         return None
@@ -117,25 +123,27 @@ def status(root, profile, task, state, current, group=None, inputs=None):
     import designs
     from commands import local
     binding = {'task_id': task['id'], 'task_digest': digest(task),
-               'source_digest': validation.source_digest(root, profile),
+               'source_digest': validation.source_digest(root, profile, workspace=workspace),
                'validation_policy': delivery.review_policy(root, profile, task), 'risks': task['risks']}
     try:
         design_path = getattr(inputs, 'design', None) or (group or {}).get('design', {}).get('path')
-        design = design_files.read(local(root, design_path))
+        design = design_files.read(local(root, design_path), workspace=workspace)
         hashes = designs.fingerprints(design)['sections']
         binding['sections'] = {key: hashes[key] for key in task['section_ids']}
         history_paths = getattr(inputs, 'design_history', None)
         if history_paths is None:
             history_paths = [row['path'] for row in (group or {}).get('design_history', [])]
-        binding['approval_plan'] = approval_plan(design, [design_files.read(local(root, path)) for path in history_paths])
+        binding['approval_plan'] = approval_plan(design, [design_files.read(local(root, path), workspace=workspace) for path in history_paths])
         paths = getattr(inputs, 'run', None)
         if paths is None:
             refs = (group or {}).get('selected_runs')
             paths = [row['path'] for row in refs if row] if refs is not None else [row['path'] for row in (group or {}).get('runs', [])]
         paths = [local(root, path).relative_to(root).as_posix() for path in paths]
-        execution = validation.verify_runs(root, profile, task, paths, live=False)
+        execution = validation.verify_runs(root, profile, task, paths, live=False, workspace=workspace)
         from common import artifact
         binding['selected_runs'] = {key: artifact(root, local(root, path)) for key, path in execution['selected_runs'].items()}
+        import scenario_acceptance
+        binding.update(scenario_acceptance.bindings(scenario_acceptance.current(root, profile, task, design, paths, workspace=workspace)[1]))
         valid = previous is not None and same_group(previous['value']['bindings'], binding)
     except (Invalid, OSError, ValueError, TypeError, KeyError):
         valid = False

@@ -8,8 +8,9 @@ import subprocess
 import tempfile
 from contextvars import ContextVar
 from datetime import datetime, timezone
+from error_codes import Code
 
-from tw_runtime import DATA_VERSION, VERSION, Invalid as RuntimeInvalid, install, repo_paths
+from tw_runtime import DATA_VERSION, VERSION, Invalid as RuntimeInvalid, gitutil, install, repo_paths
 from tw_runtime.project import CONFIG, MAPPING, TEAM_KEYS, config_problems, user_mapping_path
 from tw_runtime.project import location_settings as project_locations
 
@@ -21,26 +22,35 @@ LOCATIONS = ContextVar('workflow_locations', default={'repositories': {}, 'input
 
 
 class Invalid(RuntimeInvalid, ValueError):
-    error_code = 'invalid-or-incomplete-input'
+    error_code = Code.INVALID
     next_action = None
+
+    def __init__(self, message, *, error_code=None, next_action=None, section=None, line=None, key=None):
+        super().__init__(message)
+        for name, value in (('error_code', error_code), ('next_action', next_action),
+                            ('section', section), ('line', line), ('key', key)):
+            if value is not None:
+                setattr(self, name, value)
 
 
 class ToolModified(Invalid):
     """An installed skill differs from its release; the fix is a reinstall, never an input change."""
-    error_code = 'tool-modified'
+    error_code = Code.TOOL_MODIFIED
     next_action = ('Reinstall the named skill from its release (npx skills update -g) and report the defect; '
                    'do not patch installed files. --allow-modified-tool records an explicit team-workflow override.')
 
 
-def require(condition, message):
+def require(condition, message, **details):
     if not condition:
-        raise Invalid(message)
+        raise Invalid(message, **details)
 
 
-def obj(value, required, optional=()):
-    require(isinstance(value, dict), 'Expected an object')
-    require(set(required) <= value.keys(), 'Missing fields: ' + ', '.join(sorted(set(required) - value.keys())))
-    require(value.keys() <= set(required) | set(optional), 'Unknown fields: ' + ', '.join(sorted(value.keys() - set(required) - set(optional))))
+def obj(value, required, optional=(), *, error_code=Code.INVALID):
+    require(isinstance(value, dict), 'Expected an object', error_code=error_code)
+    missing = set(required) - value.keys()
+    require(not missing, 'Missing fields: ' + ', '.join(sorted(missing)), error_code=error_code)
+    unknown = value.keys() - set(required) - set(optional)
+    require(not unknown, 'Unknown fields: ' + ', '.join(sorted(unknown)), error_code=error_code)
     return value
 
 
@@ -168,7 +178,7 @@ def git(root, *args, input=None, local_only=False):
         environment = {**os.environ, 'GIT_OPTIONAL_LOCKS': '0'}
         if local_only:
             environment['GIT_NO_LAZY_FETCH'] = '1'
-        p = subprocess.run(['git', '-C', str(root), *args], capture_output=True, timeout=30, input=input,
+        p = subprocess.run(gitutil.command(root, *args), capture_output=True, timeout=30, input=input,
                            env=environment)
         require(p.returncode == 0, 'Cannot read Git state: ' + p.stderr.decode(errors='replace')[:300])
         return p.stdout
@@ -210,23 +220,29 @@ def local_write_guard(path):
             return
 
 
-def snapshot(root, profile):
+def snapshot(root, profile, *, include_names=False):
     root = root.resolve()
-    require(Path(git(root, 'rev-parse', '--show-toplevel').decode().strip()).resolve() == root, '--root must be the Git root')
-    head = git(root, 'rev-parse', 'HEAD').decode().strip()
-    staged = {}
-    for line in git(root, 'ls-files', '--stage', '-z').split(b'\0'):
+    top, head = git(root, 'rev-parse', '--show-toplevel', 'HEAD').decode().rstrip('\n').rsplit('\n', 1)
+    require(Path(top).resolve() == root, '--root must be the Git root')
+    staged, names = {}, set()
+    # 标签区分未跟踪路径与索引记录，一次列举同时取得两者，路径中的制表符保持原样。
+    for line in git(root, 'ls-files', '--stage', '--cached', '--others', '--exclude-standard', '-t', '-z').split(b'\0'):
         if not line:
             continue
-        header, raw_name = line.split(b'\t', 1)
+        tag, entry = line[:1], line[2:]
+        if tag == b'?':
+            names.add(os.fsdecode(entry))
+            continue
+        header, raw_name = entry.split(b'\t', 1)
         mode, oid, stage = header.decode().split()
         name = os.fsdecode(raw_name)
+        names.add(name)
         require(mode != '160000', 'Submodules must be verified as separate participating repositories')
         require(stage == '0', f'Unresolved merge: {name}')
         require(not (name == '.tw/local' or name.startswith('.tw/local/')), '.tw/local/ 本地证据不能被 Git 跟踪')
         if not reserved(name, profile['inputs']):
             staged[name] = header.decode()
-    names = {os.fsdecode(x) for x in git(root, 'ls-files', '--cached', '--others', '--exclude-standard', '-z').split(b'\0') if x}
+    listed_names = sorted(names)
     for name in profile['inputs']:
         path = inside(root, name)
         require(not (name == '.tw/local' or name.startswith('.tw/local/')), '.tw/local/ 本地证据不能作为 inputs')
@@ -261,7 +277,7 @@ def snapshot(root, profile):
             external[key] = snapshot(path, {'inputs': []})
     if external:
         data['external_inputs'] = external
-    return {'digest': digest(data), **data}
+    return {'digest': digest(data), **data, **({'names': listed_names} if include_names else {})}
 
 
 def accounts(values):
@@ -284,12 +300,46 @@ def accounts(values):
     return values
 
 
+def acceptance_entries(values, declared_accounts):
+    """项目的真实验收入口与已声明账号。"""
+    try:
+        require(isinstance(values, dict), 'acceptance_entries 应为对象')
+        account_rows = declared_accounts if isinstance(declared_accounts, list) else []
+        account_ids = {row['id'] for row in account_rows if isinstance(row, dict) and isinstance(row.get('id'), str)}
+        for name, row in values.items():
+            require(isinstance(name, str) and bool(name.strip()), '入口名应为非空字符串')
+            require(isinstance(row, dict), f'acceptance_entries.{name} 应为对象')
+            required = {'surface', 'operate', 'observe', 'evidence', 'isolation'}
+            require(required <= row.keys(), f'acceptance_entries.{name} 缺少字段：' + '、'.join(sorted(required - row.keys())))
+            require(row.keys() <= required | {'address_env', 'accounts'},
+                    f'acceptance_entries.{name} 格式外字段：' + '、'.join(sorted(row.keys() - required - {'address_env', 'accounts'})))
+            for field in ('surface', 'operate', 'isolation'):
+                require(isinstance(row[field], str) and bool(row[field].strip()), f'acceptance_entries.{name}.{field} 应为非空字符串')
+            for field in ('observe', 'evidence'):
+                require(isinstance(row[field], list) and bool(row[field])
+                        and all(isinstance(item, str) and item.strip() for item in row[field]),
+                        f'acceptance_entries.{name}.{field} 应为非空字符串数组')
+            if 'accounts' in row:
+                require(isinstance(row['accounts'], list) and all(isinstance(item, str) and item in account_ids for item in row['accounts']),
+                        f'acceptance_entries.{name}.accounts 引用已声明的账号 id')
+            if 'address_env' in row:
+                require(isinstance(row['address_env'], str) and re.fullmatch(r'[A-Za-z_][A-Za-z0-9_]*', row['address_env']),
+                        f'acceptance_entries.{name}.address_env 填环境变量名')
+    except (Invalid, TypeError) as exc:
+        raise Invalid('验收入口声明：' + str(exc), error_code=Code.ACCEPTANCE_ENTRY) from exc
+    return values
+
+
 def load_profile(root, check_context=True):
     """Read the single project config and adapt its name for existing team logic."""
+    require((Path(root) / CONFIG).exists(), '项目尚待初始化：缺少 .tw/config.json',
+            error_code=Code.PROJECT_UNINITIALIZED)
     config = read(Path(root) / CONFIG)
+    if isinstance(config, dict):
+        acceptance_entries(config.get('acceptance_entries', {}), config.get('accounts', []))
     problems = config_problems(config)
     require(not problems, '；'.join(problems))
-    optional = {'external_inputs': {}, 'accounts': []}
+    optional = {'external_inputs': {}, 'accounts': [], 'acceptance_entries': {}}
     missing = [key for key in TEAM_KEYS if key not in config and key not in optional]
     require(not missing, '.tw/config.json 尚未配置团队功能，缺少字段：' + ', '.join(missing))
     profile = {key: config.get(key, optional.get(key)) for key in TEAM_KEYS}
@@ -300,10 +350,12 @@ def load_profile(root, check_context=True):
 
 
 def profile_valid(profile, root, check_context=True):
+    profile.setdefault('acceptance_entries', {})
     obj(profile, {'data_version', 'project', 'context', *TEAM_KEYS}, {'platform'})
     require(type(profile['data_version']) is int and profile['data_version'] == DATA_VERSION,
             '项目数据只支持 data_version 1')
     accounts(profile['accounts'])
+    acceptance_entries(profile['acceptance_entries'], profile['accounts'])
     location_settings(root)
     text(profile['project'])
     for name in strings(profile['context']):
@@ -376,8 +428,8 @@ def profile_valid(profile, root, check_context=True):
         if check['format'] == 'command':
             require(not check['required_cases'], 'Plain commands cannot declare test cases')
         if check['format'] == 'junit':
-            require(check.get('report', '').startswith('{output}/'), 'JUnit report must use {output}/filename')
-            require(any('{output}' in arg for arg in argv), 'Command must generate a fresh JUnit report')
+            require(check.get('report', '').startswith('{output}/'), 'JUnit report must use {output}/filename', error_code=Code.CHECK_CONFIG)
+            require(any('{output}' in arg for arg in argv), 'Command must generate a fresh JUnit report', error_code=Code.CHECK_CONFIG)
         strings(check.get('artifacts', []))
         for name in check.get('artifacts', []):
             text(name)
@@ -468,7 +520,7 @@ def evidence_file(path, allow_large=False):
 def artifact(root, path):
     path = Path(path)
     relative = path.relative_to(root).as_posix()
-    require(inside(root, relative).is_file() and path.stat().st_size > 0, f'Missing/empty artifact: {relative}')
+    require(inside(root, relative).is_file(), f'Missing artifact: {relative}')
     return {'path': relative, 'sha256': sha(path)}
 
 

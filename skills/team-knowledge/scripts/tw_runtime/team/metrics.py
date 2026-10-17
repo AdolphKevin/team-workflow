@@ -13,7 +13,7 @@ def _seconds(claim, response):
         return None
 
 
-def task_metrics(root, task_id, since=None):
+def task_metrics(root, task_id, since=None, *, workspace=None):
     rows = [(c, r) for c, r in records(root, task_id) if not since or c.get('started_at', '') >= since]
     by_command, check_runs, total = {}, {}, 0.0
     for claim, response in rows:
@@ -38,10 +38,17 @@ def task_metrics(root, task_id, since=None):
     started = rows[0][0].get('started_at') if rows else None
     finished = [r.get('finished_at') for c, r in rows if r and c.get('command') == 'verify'
                 and c.get('phase') == 'delivery' and r.get('ok')]
-    return {'task_id': task_id, 'requests': len(rows), 'commands': by_command,
+    result = {'task_id': task_id, 'requests': len(rows), 'commands': by_command,
             'checks': {k: {**v, 'reruns': max(v['runs'] - 1, 0)} for k, v in sorted(check_runs.items())},
             'tool_seconds': round(total, 3), 'first_request_at': started,
             'delivered_at': finished[-1] if finished else None}
+    import materials
+    group = materials.load(root, task_id)
+    if group:
+        from common import load_profile
+        import scenario_rounds
+        result['scenarios'] = scenario_rounds.task_metrics(root, load_profile(root), group, since, workspace=workspace)
+    return result
 
 
 def render(value):
@@ -51,4 +58,12 @@ def render(value):
     for name, row in value['checks'].items():
         if row['reruns']:
             lines.append(f'- 检查 {name} 运行 {row["runs"]} 次（重跑 {row["reruns"]} 次）')
+    if value.get('scenarios'):
+        scenarios = value['scenarios']
+        first = scenarios['statistics']['first_pass']
+        lines.append(f'- 场景一次通过率：{first["numerator"]}/{first["denominator"]}')
+        for row in scenarios['rounds']:
+            count = row['statistics']
+            lines.append(f'- 第 {row["round"]} 轮：执行 {count["executed"]}，pass {count["pass"]}，fail {count["fail"]}，'
+                         f'blocked {count["blocked"]}，skip {count["skip"]}；通过率 {row["pass_rate"]["numerator"]}/{row["pass_rate"]["denominator"]}')
     return lines

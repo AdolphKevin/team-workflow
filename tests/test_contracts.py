@@ -36,6 +36,7 @@ class BusinessEvidence(unittest.TestCase):
         return delivery.verify(self.root, self.profile, self.task, self.report, 'acceptance')
 
     def refresh(self):
+        fixtures.write_config(self.root, self.profile)
         self.write('design', self.design)
         self.write('task', self.task)
         self.write('brief', knowledge.brief(self.root, self.task, [], []))
@@ -44,33 +45,33 @@ class BusinessEvidence(unittest.TestCase):
         self.report['runs'] = self.runs
         self.write('approval', designs.approval_draft(self.design, 'carol', 'Reviewed the current plan and code',
             code_digest=validation.source_digest(self.root, self.profile), run_refs=[artifact(self.root, run)]))
+        plans.submit_scenarios(self.root, self.task, self.report)
         review = delivery.review_template(self.root, self.profile, self.task, self.report)
         review.update(reviewer='carol', knowledge_conflicts_resolved=True)
         ref = artifact(self.root, run)
         for axis in ('standards', 'spec'):
             review[axis] = {'status': 'passed', 'summary': 'Inspected actual behavior', 'evidence': [ref]}
         review['acceptance'] = [{'id': 'A1', 'status': 'passed', 'summary': 'Executed the public operation',
-                                'evidence': [ref], 'observations': [plans.observation(ref)]}]
+                                'evidence': [ref], 'observations': plans.observations(self.root, ref)}]
         self.write('review', review)
         self.write('report', self.report)
 
     def test_missing_scenario_or_assessment_never_prepares_implementation(self):
         self.setup_task()
-        for field in ('scenario', 'verification'):
+        for field in ('scenarios', 'verification'):
             value = copy.deepcopy(self.design)
             del value['sections'][1]['data'][field]
-            with self.assertRaisesRegex(Invalid, 'scenario'):
+            with self.assertRaisesRegex(Invalid, 'scenarios|验证'):
                 designs.approval_status(value, [], changed_paths=[])
         self.design['assessment']['drivers'] = []
         with self.assertRaises(Invalid):
             designs.approval_status(self.design, [], changed_paths=[])
 
-    def test_local_unit_success_cannot_certify_a_business_journey(self):
+    def test_unit_check_and_black_box_scenarios_satisfy_separate_requirements(self):
         self.setup_task()
         self.profile['checks']['unit']['coverage']['level'] = 'unit'
         self.refresh()
-        with self.assertRaisesRegex(Invalid, 'journey'):
-            self.verify()
+        self.assertTrue(self.verify()['business_accepted'])
 
     def test_fresh_business_entry_catches_missing_creation_despite_seeded_test_success(self):
         self.setup_task()
@@ -94,10 +95,17 @@ class BusinessEvidence(unittest.TestCase):
         self.task['acceptance'][0]['checks'] = ['journey']
         self.design['sections'][0]['body'] = self.task['goal']
         self.design['sections'][1]['body'] = self.task['acceptance'][0]['expectation']
-        self.design['sections'][1]['data']['scenario'] = {'actor': 'buyer', 'initial_state': 'No installed shop',
-            'steps': ['Install through the public CLI', 'Send the first message'],
-            'expected': 'Message accepted after installation', 'negative_cases': ['A missing channel prevents accepting the message'],
-            'sources': plans.sources()}
+        self.task['paths'].append('tests/fixtures/scenarios.json')
+        self.design['sections'][2]['data']['scope'].append('tests/fixtures/scenarios.json')
+        scenario_path = self.root / 'tests/fixtures/scenarios.json'
+        scenario_file = read(scenario_path)
+        positive, negative = scenario_file['sops'][0]['scenarios']
+        positive.update(actor='buyer', initial_state=['No installed shop'],
+                        steps=['Install through the public CLI', 'Send the first message'],
+                        expected=['Message accepted after installation'])
+        negative.update(expected=['A missing channel prevents accepting the message'])
+        write(scenario_path, scenario_file)
+        self.design['sections'][1]['data']['scenarios'][0]['sha256'] = __import__('common').sha(scenario_path)
         self.design['sections'][1]['data']['checks'] = ['journey']
         self.refresh()
         first = read(self.root / self.runs[0])
@@ -114,13 +122,12 @@ class BusinessEvidence(unittest.TestCase):
         self.write('review', review)
         self.assertTrue(self.verify()['business_accepted'])
 
-    def test_repository_entry_cannot_certify_the_public_entry(self):
+    def test_interface_check_keeps_its_own_declared_scope(self):
         self.setup_task()
         self.profile['checks']['unit']['coverage']['entrypoints'] = ['repository.add']
         self.profile['checks']['unit']['coverage']['level'] = 'interface'
         self.refresh()
-        with self.assertRaisesRegex(Invalid, 'journey'):
-            self.verify()
+        self.assertTrue(self.verify()['business_accepted'])
 
     def test_allowed_substitutes_accept_different_entry_and_environment(self):
         self.setup_task()
@@ -157,9 +164,9 @@ class BusinessEvidence(unittest.TestCase):
         review = read(self.root / self.name('review'))
         review['acceptance'][0]['observations'] = []
         self.write('review', review)
-        with self.assertRaisesRegex(Invalid, 'actual execution'):
+        with self.assertRaisesRegex(Invalid, '场景轮次'):
             self.verify()
-        review['acceptance'][0]['observations'] = [plans.observation(artifact(self.root, self.root / 'app.py'))]
+        review['acceptance'][0]['observations'] = plans.observations(self.root, artifact(self.root, self.root / 'app.py'))
         self.write('review', review)
         with self.assertRaisesRegex(Invalid, 'run was not verified'):
             self.verify()
@@ -302,13 +309,15 @@ class BusinessEvidence(unittest.TestCase):
                     self.assertFalse(result.get('implementation_ready', False))
 
     def test_missing_brief_names_the_missing_argument(self):
-        self.setup_task()
+        self.setup_task(ready_scenarios=False)
         output = io.StringIO()
         with contextlib.redirect_stdout(output):
             code = workflow.main(['review', '--root', str(self.root),
                                   '--task', self.name('task'), '--design', self.name('design')])
         self.assertEqual(code, 1)
-        self.assertIn('Missing --brief', json.loads(output.getvalue())['problem'])
+        result = json.loads(output.getvalue())
+        self.assertEqual(result['error_code'], 'knowledge-brief-incomplete')
+        self.assertIn('--brief', result['problem'])
 
     def test_shared_reference_cannot_be_a_json_pass_without_original_outputs(self):
         self.setup_task()

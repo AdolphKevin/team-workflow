@@ -80,12 +80,13 @@ class UnifiedTeam(unittest.TestCase):
         code, drafted = self.command(*args)
         self.assertEqual(code, 0, drafted)
         report = read(self.root / drafted['artifact']['path'])
-        self.assertNotIn('acceptance', report)
+        self.assertEqual(report.pop('acceptance'), self.name('acceptance'))
         report['knowledge'] = {'files': [], 'reason': '现有规则已覆盖本任务'}
         self.write('final', report)
         code, refused = self.command('verify', '--task', self.name('task'), '--report', self.name('final'), *home)
         self.assertEqual(code, 1, refused)
-        self.assertIn('最终交付需要业务验收记录', refused['problem'])
+        self.assertEqual(refused['error_code'], 'acceptance-record-missing')
+        self.assertIn('tw team accept', refused['next_action'])
         code, drafted = self.command(*args, '--acceptance', self.name('acceptance'))
         self.assertEqual(code, 0, drafted)
         report = read(self.root / drafted['artifact']['path'])
@@ -163,7 +164,8 @@ class UnifiedTeam(unittest.TestCase):
                 '--brief', self.name('brief'), '--review', self.name('review'), '--request-id', 'template')
         code, first = self.command(*args)
         self.assertEqual(code, 0, first)
-        for extra in (('--acceptance', self.name('acceptance')), ()):
+        self.write('acceptance-copy', read(self.root / self.name('acceptance')))
+        for extra in (('--acceptance', self.name('acceptance-copy')), ()):
             if not extra:
                 self.rule()  # same arguments, different knowledge content
             with self.subTest(extra=extra):
@@ -325,6 +327,19 @@ class UnifiedTeam(unittest.TestCase):
         self.assertGreater(result['knowledge']['errors'], 0)
         self.assertTrue(result['installation']['ok'], result['installation'])
         self.assertNotIn('cs', result)
+
+    def test_project_warns_for_missing_or_empty_context_and_preserves_ok(self):
+        config = read(self.root / '.tw/config.json')
+        for context in (None, []):
+            if context is None:
+                config.pop('context', None)
+            else:
+                config['context'] = context
+            write(self.root / '.tw/config.json', config)
+            code, result = self.command('project', '--home', str(self.root / '.tw/local/empty-home'))
+            self.assertEqual(code, 0, result)
+            self.assertTrue(result['ok'])
+            self.assertIn('项目验收方案与真实验证操作手册尚未登记到 context', result['warnings'])
 
     def test_original_documents_are_read_from_configuration(self):
         config = read(self.root / '.tw/config.json')

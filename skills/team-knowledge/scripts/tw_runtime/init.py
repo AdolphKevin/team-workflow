@@ -2,6 +2,7 @@
 import json
 
 from . import DATA_VERSION, FORMAT, KB, Invalid, files, frontmatter, gitutil, install, require
+from .new import SOURCE_REQUIRED
 
 IGNORE = 'local/\n'
 POINTER = """## 项目知识
@@ -13,7 +14,7 @@ POINTER = """## 项目知识
 CLAUDE = '共享的项目规则与项目知识入口在 AGENTS.md，由此引入：\n@AGENTS.md'
 
 
-def plan(root, guidance=False):
+def plan(root, guidance=False, sources=()):
     actions = []
     config_path = root / KB / 'config.json'
     if config_path.exists():
@@ -48,10 +49,11 @@ def plan(root, guidance=False):
         actions.append({'path': f'{KB}/overview.md', 'action': 'unchanged'})
     else:
         title = f'{root.name} 项目总览'
-        source = ['self:README.md'] if (root / 'README.md').is_file() else []
+        source = list(sources) or (['self:README.md'] if (root / 'README.md').is_file() else [])
         body = f'# {title}\n\n（待填写：项目做什么、与谁协作、从哪里开始读代码；不超过 1200 字）\n'
         actions.append({'path': f'{KB}/overview.md', 'action': 'create',
-                        'text': frontmatter.dump({'title': title, 'source': source}, body)})
+                        **({'text': frontmatter.dump({'title': title, 'source': source}, body)}
+                           if source else {'requires': ['--source']})})
     if guidance:
         agents = root / 'AGENTS.md'
         text, action = files.merge(files.read_text(agents) if agents.is_file() else None, 'knowledge',
@@ -67,10 +69,11 @@ def plan(root, guidance=False):
     return actions
 
 
-def run(root, apply=False, guidance=False):
-    actions = plan(root, guidance)
+def run(root, apply=False, guidance=False, sources=()):
+    actions = plan(root, guidance, sources)
     changes = [a for a in actions if a['action'] in ('create', 'append', 'update')]
     if apply:
+        require(not any(a.get('requires') for a in actions), SOURCE_REQUIRED)
         for action in changes:
             files.write_text(root / action['path'], action['text'])
     for action in actions:
@@ -92,7 +95,8 @@ def run(root, apply=False, guidance=False):
 
 
 def render(result):
-    lines = [result['summary']] + [f'- {a["action"]}：{a["path"]}' for a in result['actions']]
+    lines = [result['summary']] + [f'- {a["action"]}：{a["path"]}'
+             + ('（需要 ' + '、'.join(a['requires']) + '）' if a.get('requires') else '') for a in result['actions']]
     if result.get('platform_hint'):
         lines.append(result['platform_hint'])
     return '\n'.join(lines) + '\n'

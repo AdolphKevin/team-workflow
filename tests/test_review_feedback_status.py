@@ -106,6 +106,7 @@ class ReviewFeedbackStatus(unittest.TestCase):
 
     def test_failed_execution_can_be_described_and_submitted_but_cannot_be_accepted(self):
         self.start('medium', passed=False)
+        plans.submit_scenarios(self.root, self.task)
         code, ran = self.command('run', '--task', self.task['id'])
         self.assertEqual(code, 1, ran)
         code, draft = self.command('review', '--task', self.task['id'])
@@ -164,8 +165,12 @@ class ReviewFeedbackStatus(unittest.TestCase):
         for key in ('business_accepted', 'delivery_complete', 'closable', 'regression_pending', 'delivery'):
             self.assertNotIn(key, status)
         self.assertEqual(status['verified_records'], {})
-        for row in status['steps'][3:]:
-            self.assertIn('tw team deliver', row['next_command'])
+        by_id = {row['id']: row for row in status['steps']}
+        # 保留原来的三个交付步骤断言；场景展示插入后按步骤身份核对。
+        for key in ('acceptance', 'knowledge', 'delivery'):
+            self.assertIn('tw team deliver', by_id[key]['next_command'])
+        self.assertEqual(by_id['scenarios']['state'], 'done')
+        self.assertNotIn('next_command', by_id['scenarios'])
         code, accepted = self.command('accept', '--task', self.task['id'])
         self.assertEqual(code, 0, accepted)
         code, status = self.command('status', '--task', self.task['id'])
@@ -177,7 +182,9 @@ class ReviewFeedbackStatus(unittest.TestCase):
         self.assertEqual(code, 0, delivered)
         code, status = self.command('status', '--task', self.task['id'])
         self.assertEqual(code, 0, status)
-        self.assertEqual(status['summary'], '已交付；关闭需要授权，工具不执行关闭')
+        self.assertEqual(status['summary'], '任务已交付')
+        self.assertEqual(status['task_phase'], 'delivered')
+        self.assertIn('关闭授权', status['next_action'])
         self.assertEqual(status['verified_records'], {key: self.current()[key] for key in ('acceptance', 'delivery')})
         self.assertIsNone(status['next_step'])
 
@@ -212,6 +219,13 @@ class ReviewFeedbackStatus(unittest.TestCase):
         (self.root / 'app.py').write_text('def add(a,b): return sum((a,b))\n')
         code, status = self.command('status', '--task', self.task['id'])
         self.assertEqual(code, 0, status)
+        self.assertEqual(status['task_phase'], 'delivered')
+        self.assertTrue(status['verified_records']['delivery'])
+        code, reopened = self.command('start', '--task', self.task['id'])
+        self.assertEqual(code, 0, reopened)
+        code, status = self.command('status', '--task', self.task['id'])
+        self.assertEqual(code, 0, status)
+        self.assertEqual(status['task_phase'], 'in-progress')
         self.assertEqual(status['verified_records'], {})
         states = {row['id']: row['state'] for row in status['steps']}
         for name in ('run', 'review', 'acceptance', 'knowledge', 'delivery'):
@@ -225,9 +239,20 @@ class ReviewFeedbackStatus(unittest.TestCase):
         fixtures.write_config(self.root, self.profile)
         code, status = self.command('status', '--task', self.task['id'])
         self.assertEqual(code, 0, status)
+        self.assertEqual(status['task_phase'], 'delivered')
+        self.assertTrue(status['verified_records']['delivery'])
+        code, reopened = self.command('start', '--task', self.task['id'])
+        self.assertEqual(code, 0, reopened)
+        code, status = self.command('status', '--task', self.task['id'])
+        self.assertEqual(code, 0, status)
+        self.assertEqual(status['task_phase'], 'in-progress')
         self.assertEqual(status['verified_records'], {})
-        for row in status['steps'][1:]:
-            self.assertEqual(row['state'], 'stale', row)
+        by_id = {row['id']: row for row in status['steps']}
+        for key in ('run', 'review', 'acceptance', 'knowledge', 'delivery'):
+            self.assertEqual(by_id[key]['state'], 'stale', by_id[key])
+        # 检查策略变化不改变已独立核对的产品与场景内容。
+        self.assertEqual(by_id['scenarios']['summary_counts']['pending'], 0)
+        self.assertEqual(by_id['scenarios']['summary_counts']['passed'], 2)
 
     def test_explicit_new_design_expires_material_dependent_steps(self):
         self.reviewed()
@@ -355,8 +380,11 @@ class WorkflowDocumentation(unittest.TestCase):
     def test_closing_instructions_require_completion_publication_and_named_authorization(self):
         root = Path(__file__).resolve().parents[1]
         text = (root / 'skills/team-workflow/references/team-delivery.md').read_text()
-        for required in ('close_authorization', 'confirmed_by', 'reference', '已发布', '不执行关闭'):
+        for required in ('close_authorization', 'confirmed_by', 'reference', '已发布', '(contracts.md#工具做什么)'):
             self.assertIn(required, text)
+        contracts = (root / 'skills/team-workflow/references/contracts.md').read_text()
+        self.assertIn('关闭任务', contracts)
+        self.assertIn('由成员按自己的授权执行；平台只读', contracts)
 
 
 class ClosingRules(unittest.TestCase):

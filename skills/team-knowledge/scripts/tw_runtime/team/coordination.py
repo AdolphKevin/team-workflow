@@ -3,6 +3,7 @@
 Drafts are values, never publications. Readiness concerns continuation only;
 business acceptance and permission to close belong to the delivery verifier.
 """
+from error_codes import Code, gap, gap_fields
 import json
 import re
 
@@ -35,6 +36,7 @@ class MissingTaskBlock(Invalid):
 
 class DesignHistoryGap(Invalid):
     """Distinguish a design-history reconciliation from other publication refusals."""
+    error_code = Code.PLATFORM_DESIGN
 
 
 def block(body, name, required=True):
@@ -68,7 +70,7 @@ def progress_history(issue):
             identifier = row['request_id']
             fingerprint = digest(row)
             require(identifier not in records or records[identifier]['digest'] == fingerprint,
-                    'Progress request ID reused with different content')
+                    'Progress request ID reused with different content', error_code=Code.REQUEST_CONFLICT)
             records.setdefault(identifier, {'id': identifier, 'digest': fingerprint, 'url': comment['html_url'],
                                             'recorded_by': comment.get('user', {}).get('login'), 'record': row})
         except (Invalid, ValueError, KeyError, TypeError) as exc:
@@ -222,7 +224,8 @@ def _read(issue, root=None):
         except Invalid as exc:
             legacy = re.search(r'```team-workflow-(design|approval|handoff)', comment['body'])
             name = legacy[1] if legacy else 'design'
-            problems[name].append('Invalid ' + name + ' ' + comment['url'] + ': ' + str(exc))
+            problems[name].append(gap('Invalid ' + name + ' ' + comment['url'] + ': ' + str(exc),
+                                      record_error_code(name)))
             seen.append(comment)
             continue
         for name in present:
@@ -252,8 +255,8 @@ def _read(issue, root=None):
                 elif name == 'approval':
                     obj(row, required | {'approval'}, {'resolution'})
                     require(row['kind'] == 'approval-record' and isinstance(row['approval'], dict),
-                            'Expected approval-record envelope')
-                    require(row['approval'].get('task_id') == issue['html_url'], 'Approval belongs to another task')
+                            'Expected approval-record envelope', error_code=Code.APPROVAL_INCOMPLETE)
+                    require(row['approval'].get('task_id') == issue['html_url'], 'Approval belongs to another task', error_code=Code.APPROVAL_INCOMPLETE)
                     text(row['approval'].get('reviewer'))
                 else:
                     _validate_handoff(row)
@@ -292,14 +295,20 @@ def _read(issue, root=None):
                                    'recorded_by': comment.get('author'),
                                    **({'source': source_reference, 'markdown': source_markdown} if name == 'design' else {})})
             except (Invalid, ValueError, KeyError, TypeError) as exc:
-                problems[name].append('Invalid ' + name + ' ' + comment['url'] + ': ' + str(exc))
+                problems[name].append(gap('Invalid ' + name + ' ' + comment['url'] + ': ' + str(exc),
+                                          record_error_code(name)))
                 if getattr(exc, 'next_action', None):
                     repairs[name].append(exc.next_action)
         seen.append(comment)
     return {'source': source, 'requirements': requirements, 'rows': rows,
-            'gaps': [value for group in problems.values() for value in group],
+            **gap_fields([value for group in problems.values() for value in group]),
             'problems': problems, 'repairs': repairs,
             'history_digest': digest(seen), 'platform_history': seen}
+
+
+def record_error_code(name):
+    return {'design': Code.PLATFORM_DESIGN, 'approval': Code.PLATFORM_APPROVAL,
+            'handoff': Code.PLATFORM_HANDOFF}[name]
 
 
 def load(url, issue=None, root=None):
@@ -316,12 +325,12 @@ def load(url, issue=None, root=None):
     entries = design_state['rows']['design']
     latest = entries[-1] if entries else None
     design = latest['record']['design'] if latest else None
-    gaps = list(state['gaps'])
-    design_gaps = design_state['problems']['design'] + design_state['problems']['approval']
+    errors = list(state['gap_errors'])
+    design_errors = design_state['problems']['design'] + design_state['problems']['approval']
     if design_state is not state:
-        gaps += design_gaps
+        errors += design_errors
     if latest and latest['record']['requirements'] != design_state['requirements']:
-        design_gaps.append('Requirements changed after the current design; append a reviewed revision')
+        design_errors.append(gap('Requirements changed after the current design; append a reviewed revision'))
     task = state['source']['task']
     if design:
         try:
@@ -329,15 +338,15 @@ def load(url, issue=None, root=None):
             import task_inputs
             task = task_inputs.expand(task, design)
         except (Invalid, KeyError, TypeError) as exc:
-            design_gaps.append(str(exc))
-    gaps += design_gaps
+            design_errors.append(gap(str(exc), exc.error_code if isinstance(exc, Invalid) else Code.INVALID))
+    errors += design_errors
     approvals = [item['record']['approval'] for item in design_state['rows']['approval']
                  if reusable_approval(item, design_state)]
     current = state['rows']['handoff'][-1] if state['rows']['handoff'] else None
     progress, pending, progress_gaps = pending_progress(issue, current['record'] if current else None)
-    gaps += progress_gaps
+    errors += [gap(message) for message in progress_gaps]
     if current and current['record']['requirements'] != state['requirements']:
-        gaps.append('Requirements changed after this handoff')
+        errors.append(gap('Requirements changed after this handoff', Code.HANDOFF_REQUIREMENTS))
     from contracts import reconcile
     known = {v['id']: v for v in (design or {}).get('issues', [])}
     for entry in state['rows']['handoff']:
@@ -355,12 +364,14 @@ def load(url, issue=None, root=None):
                 if latest and descriptions and descriptions[-1].get('body', '')
                 != design_files.display(latest['markdown'], latest['record']['design'], latest['source'],
                                         root=platform_read.project_root(root)) else [])
-    return {'data_version': 1, 'kind': 'platform-task', 'ok': not gaps, 'issue': url,
+    return {'data_version': 1, 'kind': 'platform-task', 'ok': not errors, 'issue': url,
+            'task_state': issue.get('state', 'open'),
             'assurance': 'continuation-only', 'delivery': 'not-evaluated',
             'known_issues': list(known.values()), 'warnings': warnings,
             'task': task, 'source': state['source'], 'parent': parent,
             'requirements': state['requirements'], 'history_digest': state['history_digest'],
             'platform_history': state['platform_history'], 'design': design,
+            'design_source': latest['source'] if latest else None,
             'history': [entry['record']['design'] for entry in entries[:-1]],
             'approvals': approvals, 'roles': dict(design['roles']) if design else {},
             'approval_records': [{'url': item['url'], 'reviewer': item['record']['approval']['reviewer'],
@@ -371,9 +382,9 @@ def load(url, issue=None, root=None):
             'design_history_digest': design_state['history_digest'],
             'current': current['record'] if current else None, 'previous': _pointer(current),
             'owners': [row['login'] for row in issue.get('assignees', [])],
-            'design_gaps': sorted(set(design_gaps)),
+            'design_gaps': gap_fields(design_errors)['gaps'], 'design_errors': design_errors,
             'design_repair': next(iter(design_state['repairs']['design']), None),
-            'progress': list(progress.values()), 'pending_progress': pending, 'gaps': sorted(set(gaps))}
+            'progress': list(progress.values()), 'pending_progress': pending, **gap_fields(errors)}
 
 
 def approval_sentence(approval, design=None):
@@ -443,13 +454,13 @@ def draft_design(url, design, resolution=None, issue=None, *, path=None, root=No
         require(resolution.get('history_digest') == state['history_digest'], 'History changed since reconciliation')
         text(resolution.get('reason'))
         row.update(resolution=resolution, previous=None)
-    if any('Invalid design ' in gap for gap in state['gaps']) and not resolution:
+    if any(row['error_code'] == Code.PLATFORM_DESIGN for row in state['gap_errors']) and not resolution:
         raise DesignHistoryGap('方案历史有缺口；请核对全部方案分支，用 design-draft --reconcile "<原因>" 发布对账记录')
     return {**_draft_result('design', url, row), 'pr_description': markdown,
             'next_steps': list(DESIGN_PUBLICATION_STEPS)}
 
 
-def draft_approval(url, value, *, root=None):
+def draft_approval(url, value, *, root=None, workspace=None):
     obj(value, {'reviewer'}, {'confirmation', 'decision', 'section_ids', 'code_digest', 'run_refs', 'mode', 'deletion_ids', 'resolution', 'revision'})
     root = platform_read.project_root(root)
     state = load(url, root=root)
@@ -463,19 +474,20 @@ def draft_approval(url, value, *, root=None):
         obj(resolution, {'history_digest', 'reason'})
         require(resolution['history_digest'] == state['history_digest'], 'History changed since reconciliation')
         text(resolution['reason'])
-    gaps = [gap for gap in state['design_gaps'] if not (resolution and gap.startswith('Invalid approval '))]
+    gaps = [row['problem'] for row in state['design_errors']
+            if not (resolution and row['error_code'] == Code.PLATFORM_APPROVAL)]
     require(not gaps, '; '.join(gaps))
     kwargs = {key: item for key, item in value.items() if key != 'resolution'}
     if resolution and 'section_ids' not in kwargs:
         status = designs.approval_status(state['design'], state['approvals'], history=state['history'],
-                                         section_ids=task_sections, changed_paths=[])
+                                         section_ids=task_sections, changed_paths=[], workspace=workspace)
         kwargs['section_ids'] = status['required_sections']
     profile = None
     if root is not None:
         from common import load_profile
         profile = load_profile(root)
     kwargs = designs.approval_selection(state['design'], state['approvals'], task_sections, state['history'], kwargs,
-                                       root=root, profile=profile)
+                                       root=root, profile=profile, workspace=workspace)
     if kwargs is None:
         return {'ok': True, 'summary': '没有需要批准的章节'}
     approval = designs.approval_draft(state['design'], history=state['history'], **kwargs)
@@ -507,11 +519,11 @@ def closable_alone(state, profile):
     return reasons
 
 
-def closing(root, profile, url, completed_tasks, close, questions=()):
+def closing(root, profile, url, completed_tasks, close, questions=(), *, workspace=None):
     """The record that hands over or closes delivered work: a posted handoff, or a drafted close note.
 
     questions: the review's findings, which the close note must carry with their dispositions."""
-    continuation = resume(root, profile, url, completed_tasks)
+    continuation = resume(root, profile, url, completed_tasks, workspace=workspace)
     current = continuation.get('current')
     if current and current['handoff_kind'] in ('implementation', 'close') and not current['remaining']:
         require(continuation['ok'], 'Delivery handoff incomplete: ' + str(continuation['gaps']))
@@ -520,7 +532,8 @@ def closing(root, profile, url, completed_tasks, close, questions=()):
     require(not current or current['handoff_kind'] == 'design',
             'Handoff still has unfinished work or unconfirmed progress')
     reasons = closable_alone(continuation, profile)
-    gaps = [gap for gap in continuation['gaps'] if gap not in (NO_HANDOFF, 'New progress has not been confirmed in the current handoff')]
+    gaps = [row['problem'] for row in continuation['gap_errors']
+            if row['error_code'] not in (Code.HANDOFF_MISSING, Code.PROGRESS_UNCONFIRMED)]
     require(not reasons and not gaps, 'Delivery handoff incomplete: ' + '; '.join(gaps + reasons)
             + ('; post an implementation handoff instead of a close note' if reasons else ''))
     implementer = continuation['roles']['implementation_owner']
@@ -529,7 +542,7 @@ def closing(root, profile, url, completed_tasks, close, questions=()):
         'verified': [close['acceptance']], 'remaining': [],
         'next': 'Close the issue once the named close authorization is recorded.', 'questions': list(questions),
         'included_progress': [{'id': item['id'], 'digest': item['digest']} for item in continuation['progress']]},
-        kind='close', completed_tasks=completed_tasks, close=close)
+        kind='close', completed_tasks=completed_tasks, close=close, workspace=workspace)
     require(note['ok'], 'Close note incomplete: ' + '; '.join(note['gaps']))
     return note['record'], note
 
@@ -631,21 +644,22 @@ def _knowledge(root, task, design):
     return knowledge.brief(root, task, knowledge.relative_paths(root, sorted(paths)), task.get('symbols', []))
 
 
-def _approval(root, profile, state, completed_tasks=()):
+def _approval(root, profile, state, completed_tasks=(), *, workspace=None):
+    workspace = workspace or validation.Workspace(root, profile)
     require(state['design'] is not None, 'Missing versioned design')
     validate_task_design(state['task'], state['design'])
     return designs.approval_status(state['design'], state['approvals'], history=state['history'],
         root=root, profile=profile,
-        changed_paths=validation.changed_paths(root, state['task'], profile, state['design']),
-        code_digest=validation.source_digest(root, profile), section_ids=state['task']['section_ids'], completed_tasks=completed_tasks)
+        changed_paths=validation.changed_paths(root, state['task'], profile, state['design'], workspace=workspace),
+        code_digest=validation.source_digest(root, profile, workspace=workspace), section_ids=state['task']['section_ids'], completed_tasks=completed_tasks, workspace=workspace)
 
 
-def _shared(root, profile):
+def _shared(root, profile, *, workspace=None):
     from portable import source_state
-    return source_state(root, profile)
+    return source_state(root, profile, workspace=workspace)
 
 
-def _handoff_gaps(root, profile, state, row, status, documents):
+def _handoff_gaps(root, profile, state, row, status, documents, *, workspace=None):
     gaps = []
     if row['requirements'] != state['requirements']:
         gaps.append('Requirements changed after this handoff')
@@ -675,9 +689,9 @@ def _handoff_gaps(root, profile, state, row, status, documents):
         gaps.append('Handoff cites approval fingerprints that are no longer approved')
     if status['review_mode'] != 'combined' and not required <= row['approved_sections'].keys():
         gaps.append('Handoff does not record approval for all selected sections')
-    if row['source_digest'] != validation.source_digest(root, profile):
+    if row['source_digest'] != validation.source_digest(root, profile, workspace=workspace):
         gaps.append('Source content changed after this handoff')
-    current = _shared(root, profile)
+    current = _shared(root, profile, workspace=workspace)
     versions = {value['repository']: value for value in row['versions']}
     for repo, version in current['repositories'].items():
         if versions.get(repo) != {'repository': repo, 'commit': version['commit'], 'content': version['content']}:
@@ -807,55 +821,56 @@ def _handoff_gaps(root, profile, state, row, status, documents):
     return gaps
 
 
-def resume(root, profile, url, completed_tasks=()):
+def resume(root, profile, url, completed_tasks=(), *, workspace=None):
+    workspace = workspace or validation.Workspace(root, profile)
     state = load(url, root=root)
     task_valid(state['task'], profile, root)
-    gaps = list(state['gaps'])
+    errors = list(state['gap_errors'])
     from validation_session import active
     if active(root):
-        gaps.append('Validation is active; keep the shared workspace unchanged')
+        errors.append(gap('Validation is active; keep the shared workspace unchanged', Code.VALIDATION_ACTIVE))
     status, brief = None, None
     if state['design'] is None:
-        gaps.append('Missing versioned design')
+        errors.append(gap('Missing versioned design'))
     else:
         try:
-            status = _approval(root, profile, state, completed_tasks)
-            gaps += status['gaps']
+            status = _approval(root, profile, state, completed_tasks, workspace=workspace)
+            errors += [gap(message) for message in status['gaps']]
             if not status['implementation_ready']:
-                gaps.append('Selected task sections are not ready for implementation; resolve approval, decisions or assignment')
+                errors.append(gap('Selected task sections are not ready for implementation; resolve approval, decisions or assignment'))
             if not status['scope']['complete']:
-                gaps.append('Changed source paths cannot all be assigned to declared design task scopes')
+                errors.append(gap('Changed source paths cannot all be assigned to declared design task scopes'))
             brief = _knowledge(root, state['task'], state['design'])
             documents = knowledge.documents(root)
             if state['current']:
-                gaps += _handoff_gaps(root, profile, state, state['current'], status, documents)
+                errors += [gap(message) for message in _handoff_gaps(root, profile, state, state['current'], status, documents, workspace=workspace)]
         except (Invalid, KeyError, TypeError) as exc:
-            gaps.append(str(exc))
+            errors.append(gap(str(exc), exc.error_code if isinstance(exc, Invalid) else Code.INVALID))
     if not state['current']:
-        gaps.append(NO_HANDOFF)
+        errors.append(gap(NO_HANDOFF, Code.HANDOFF_MISSING))
     if not state['owners']:
-        gaps.append('Task has no assigned owner')
+        errors.append(gap('Task has no assigned owner', Code.OWNER_MISSING))
     if state['pending_progress']:
-        gaps.append('New progress has not been confirmed in the current handoff')
+        errors.append(gap('New progress has not been confirmed in the current handoff', Code.PROGRESS_UNCONFIRMED))
     fresh = load(url, root=root)
     observed = ('requirements', 'history_digest', 'design_history_digest', 'owners')
     if any(fresh[key] != state[key] for key in observed):
-        gaps.append('Platform changed while reading; refresh requirements, responsibilities and progress')
-    gaps += fresh['gaps']
-    gaps = sorted(set(gaps))
+        errors.append(gap('Platform changed while reading; refresh requirements, responsibilities and progress'))
+    errors += fresh['gap_errors']
     closed = bool(state['current'] and state['current']['handoff_kind'] == 'close')
-    return {**state, 'kind': 'continuation', 'ok': not gaps, 'scope': 'continuation-only',
-            'knowledge': brief, 'approval_status': status, 'ready_to_implement': not gaps and not closed,
-            'closed': closed, 'closable': False, 'delivery': 'not-evaluated', 'gaps': gaps}
+    return {**state, 'kind': 'continuation', 'ok': not errors, 'scope': 'continuation-only',
+            'knowledge': brief, 'approval_status': status, 'ready_to_implement': not errors and not closed,
+            'closed': closed, 'closable': False, 'delivery': 'not-evaluated', **gap_fields(errors)}
 
 
-def draft(root, profile, url, progress, kind='implementation', completed_tasks=(), close=None):
+def draft(root, profile, url, progress, kind='implementation', completed_tasks=(), close=None, *, workspace=None):
+    workspace = workspace or validation.Workspace(root, profile)
     state = load(url, root=root)
     task_valid(state['task'], profile, root)
     require(kind in HANDOFF_KINDS, 'Handoff kind must be design, implementation or close')
     require((kind == 'close') == (close is not None), 'A close note is drafted by final delivery verification')
     require(state['design'] is not None, 'Missing versioned design')
-    status = _approval(root, profile, state, completed_tasks)
+    status = _approval(root, profile, state, completed_tasks, workspace=workspace)
     allowed = {'creator', 'owner', 'done', 'verified', 'remaining', 'questions', 'next',
                'references', 'participants', 'contracts', 'dependencies', 'joint_owner', 'included_progress', 'resolution'}
     obj(progress, {'creator', 'owner', 'next'}, allowed)
@@ -864,9 +879,9 @@ def draft(root, profile, url, progress, kind='implementation', completed_tasks=(
         obj(resolution, {'history_digest', 'reason'})
         require(resolution['history_digest'] == state['history_digest'], 'History changed since reconciliation')
         text(resolution['reason'])
-    conflicts = [gap for gap in state['gaps'] if 'Invalid handoff ' in gap]
+    conflicts = [row['problem'] for row in state['gap_errors'] if row['error_code'] == Code.PLATFORM_HANDOFF]
     require(not conflicts or resolution, '; '.join(conflicts) + '; provide an explicit resolution')
-    sources = _shared(root, profile)
+    sources = _shared(root, profile, workspace=workspace)
     included = {row['id']: row for row in (state['current'] or {}).get('included_progress', [])}
     included.update({row['id']: row for row in progress.get('included_progress', [])})
     dependencies = [{'repository': value['repository'], 'role': value.get('role', 'build'),
@@ -882,7 +897,7 @@ def draft(root, profile, url, progress, kind='implementation', completed_tasks=(
            'approved_sections': {key: {'own': value['own'], 'effective': value['effective']}
                                  for key, value in status['sections'].items()
                                  if key in status['required_sections'] and value['state'] == 'approved'},
-           'source_digest': validation.source_digest(root, profile),
+           'source_digest': validation.source_digest(root, profile, workspace=workspace),
            'versions': [{'repository': repo, 'commit': value['commit'], 'content': value['content']}
                         for repo, value in sorted(sources['repositories'].items())],
            'done': progress.get('done', []), 'verified': progress.get('verified', []),
@@ -898,14 +913,14 @@ def draft(root, profile, url, progress, kind='implementation', completed_tasks=(
     _validate_handoff(row)
     brief = _knowledge(root, state['task'], state['design'])
     documents = knowledge.documents(root)
-    gaps = [gap for gap in state['gaps'] if not gap.startswith('Requirements changed after this handoff')
-            and not (resolution and gap in conflicts)]
+    gaps = [row['problem'] for row in state['gap_errors'] if row['error_code'] != Code.HANDOFF_REQUIREMENTS
+            and not (resolution and row['error_code'] == Code.PLATFORM_HANDOFF)]
     gaps += status['gaps']
     if not status['implementation_ready']:
         gaps.append('Selected task sections require approval, decisions or assignment before implementation')
     if not status['scope']['complete']:
         gaps.append('Changed source paths cannot all be assigned to declared design task scopes')
-    gaps += _handoff_gaps(root, profile, state, row, status, documents)
+    gaps += _handoff_gaps(root, profile, state, row, status, documents, workspace=workspace)
     available = {item['id']: item for item in state['progress']}
     for identifier, item in included.items():
         if identifier not in available or available[identifier]['digest'] != item['digest']:
@@ -913,6 +928,30 @@ def draft(root, profile, url, progress, kind='implementation', completed_tasks=(
     if set(available) - set(included):
         gaps.append('New progress must be read and explicitly included before handoff')
     result = _draft_result('handoff', url, row, sorted(set(gaps)))
+    if kind != 'close':
+        from delivery import evidence
+        from execution import output_excerpt
+        from common import external_path
+        excerpts = []
+        for ref in row['verified']:
+            try:
+                value = read(evidence(root, profile, ref))
+                evidence_root = root
+                if 'repository' in ref:
+                    entry = next(item for item in profile['external_inputs'].values()
+                                 if item.get('repository') == ref['repository'])
+                    evidence_root = external_path(root, ref['repository'], entry)
+                rows = value.get('results', []) if value.get('kind') == 'execution' else (
+                    [value['result']] if value.get('kind') == 'imported-execution' else [])
+                outputs = {item['id']: output_excerpt(evidence_root, item['artifacts']) for item in rows}
+                outputs.update(value.get('output_excerpts', {}))
+                for key, lines in outputs.items():
+                    excerpts += ['- ' + key + ' 原始输出摘录：'] + ['    ' + line for line in lines]
+            except (Invalid, OSError, ValueError, TypeError, KeyError, StopIteration):
+                continue  # 证据缺口已由交接核对列出。
+        if excerpts:
+            result['markdown'] = result['markdown'].replace('\n\n<!-- tw-record',
+                '\n\n' + records.prose('\n'.join(excerpts)) + '\n\n<!-- tw-record', 1)
     result.update(knowledge=brief, approval_status=status)
     return result
 
@@ -927,5 +966,5 @@ def progress_draft(root, profile, url, progress, request_id):
     validate_progress(row)
     records, gaps = progress_history(issue)
     if request_id in records:
-        require(records[request_id]['digest'] == digest(row), 'Progress request ID already has different content')
+        require(records[request_id]['digest'] == digest(row), 'Progress request ID already has different content', error_code=Code.REQUEST_CONFLICT)
     return _draft_result('progress', url, row, gaps)

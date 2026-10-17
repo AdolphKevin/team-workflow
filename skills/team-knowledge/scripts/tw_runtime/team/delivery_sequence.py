@@ -1,5 +1,6 @@
 """Sequential composition of the existing acceptance, report, and final verification commands."""
 import copy
+import repairs
 import hashlib
 import shlex
 
@@ -7,6 +8,7 @@ from common import Invalid, artifact_valid, digest, read, require, write
 import delivery
 import knowledge
 import materials
+from error_codes import Code
 
 
 def platform_task(root, task_id):
@@ -30,23 +32,23 @@ def child_args(args, task_id, command, request_id=None):
     return child
 
 
-def current_report(args, root, task, include_knowledge=False):
+def current_report(args, root, task, include_knowledge=False, *, workspace=None):
     from commands import report_input
     current = child_args(args, task['id'], 'delivery-template')
-    materials.resolve(current, root)
+    materials.resolve(current, root, workspace=workspace)
     return report_input(current, root, task, include_knowledge=include_knowledge)
 
 
-def usable_acceptance(args, root, profile, task, group):
+def usable_acceptance(args, root, profile, task, group, *, workspace=None):
     if not group.get('acceptance'):
         return None
     try:
         accepted = read(artifact_valid(root, group['acceptance']))
         if not (accepted.get('kind') == 'acceptance' and accepted.get('business_accepted') is True):
             return None
-        report = current_report(args, root, task)
+        report = current_report(args, root, task, workspace=workspace)
         report.pop('acceptance', None)
-        checked = delivery.verify(root, profile, task, report, 'acceptance', live=False)
+        checked = delivery.verify(root, profile, task, report, 'acceptance', live=False, workspace=workspace)
         keys = ('task_id', 'task_digest', 'source_digest', 'sections')
         if all(accepted.get(key) == checked.get(key) for key in keys) and delivery.contents(accepted.get('materials')) == delivery.contents(checked['materials']):
             return {'ok': True, 'artifact': group['acceptance'], 'business_accepted': True,
@@ -56,12 +58,12 @@ def usable_acceptance(args, root, profile, task, group):
     return None
 
 
-def usable_report(args, root, task, group):
+def usable_report(args, root, task, group, *, workspace=None):
     if not group.get('delivery_report'):
         return None
     try:
         report = read(artifact_valid(root, group['delivery_report']))
-        expected = current_report(args, root, task, include_knowledge=True)
+        expected = current_report(args, root, task, include_knowledge=True, workspace=workspace)
         for key in ('task_id', 'design', 'approvals', 'design_history', 'brief', 'runs', 'review', 'acceptance', 'dependencies'):
             if report.get(key) != expected.get(key):
                 return None
@@ -82,10 +84,10 @@ def validate_retry(root, task, cached):
         role = expected[step['step']]
         old, current = step['result'].get('artifact'), group.get(role)
         require(old is not None and current is not None and old['sha256'] == current['sha256'],
-                'Request ID already belongs to different inputs; use a new request ID')
+                'Request ID already belongs to different inputs; use a new request ID', error_code=Code.REQUEST_CONFLICT)
 
 
-def deliver(args, root, profile, task, request):
+def deliver(args, root, profile, task, request, *, workspace=None):
     import commands
     steps = []
     task_arg = '--task ' + shlex.quote(task['id'])
@@ -94,7 +96,7 @@ def deliver(args, root, profile, task, request):
         key = hashlib.sha256((request.directory.name + ':' + step).encode('utf-8')).hexdigest()[:32]
         child = child_args(args, task['id'], command, 'deliver-' + key)
         try:
-            return commands.dispatch(child, root)
+            return commands.dispatch(child, root, workspace=workspace)
         except Exception as exc:
             # Material/platform preconditions can fail before dispatch creates its request.
             # Retain that step's diagnosis as well as the sequence's stopping point.
@@ -103,10 +105,7 @@ def deliver(args, root, profile, task, request):
             from tw_runtime import Invalid as RuntimeInvalid
             if isinstance(exc, (RuntimeInvalid, OSError, ValueError, TypeError, KeyError)):
                 import repairs
-                result = {'ok': False, 'status': 'incomplete', 'problem': str(exc),
-                          'error_code': getattr(exc, 'error_code', 'invalid-or-incomplete-input'),
-                          'next_action': repairs.action(child, str(exc), getattr(exc, 'next_action', None),
-                                                        getattr(exc, 'error_code', None))}
+                result = repairs.failure(child, exc)
             else:
                 result = commands.tool_defect(exc)
             with guard(root):
@@ -125,13 +124,16 @@ def deliver(args, root, profile, task, request):
                  'delivery_complete': bool(result.get('delivery_complete')) if not stopped else False,
                  'closable': bool(result.get('closable')) if not stopped else False,
                  'summary_markdown': result.get('summary_markdown', ''),
-                 'summary': '交付完成。' if not stopped else '交付停在' + {'review': '平台评审', 'acceptance': '业务验收', 'delivery-report': '交付报告', 'delivery': '最终核查'}[stopped] + '。'}
-        for key in ('close_note', 'acceptance_scope', 'scope', 'automation_status', 'regression_pending'):
+                 'summary': ('交付停在' + {'review': '平台评审', 'acceptance': '业务验收', 'delivery-report': '交付报告',
+                              'delivery': '最终核查'}[stopped] + '。') if stopped else ''}
+        for key in ('ci_verified_checks', 'unverified_scope', 'close_note', 'acceptance_scope', 'scope', 'automation_status', 'regression_pending', 'summary_counts', 'statistics', 'scenario_rounds', 'scenario_files'):
             if key in result:
                 value[key] = result[key]
+        from summary import delivery_status
+        value.update(delivery_status(value))
         if stopped:
             value['problem'] = problem or result.get('problem', '本步骤尚未完成。')
-            for key in ('review_failures', 'review_file'):
+            for key in ('error_code', 'review_failures', 'review_file', 'scenario_states'):
                 if key in result:
                     value[key] = result[key]
             if stopped == 'delivery-report':
@@ -139,10 +141,10 @@ def deliver(args, root, profile, task, request):
             elif stopped == 'review':
                 command = 'tw team review ' + task_arg + ' --from-platform'
             elif stopped == 'acceptance':
-                if 'source' in value['problem'].lower() or '源码' in value['problem']:
+                if result.get('error_code') in (Code.SOURCE_STALE, Code.RUN_BINDING_STALE):
                     command = 'tw team run ' + task_arg
                 else:
-                    command = 'tw team review ' + task_arg + ' --submit'
+                    command = reviews.submission_action(root, task['id'])
             else:
                 command = 'tw team verify ' + task_arg
             if result.get('next_action') and not result.get('ok'):
@@ -152,20 +154,23 @@ def deliver(args, root, profile, task, request):
         return value
 
     group = materials.load(root, task['id'])
-    require(group is not None, '请先运行 tw team start --task <任务文件> --design <方案文件>')
+    require(group is not None, '当前任务尚缺开工材料组',
+            next_action=repairs.command(args, 'start', '--design <方案文件>'))
     # An interrupted deliver continues with the reason it was given; an explicit new reason replaces it.
     pending = materials.path(root, task['id']).parent / 'deliver-reason.json'
     if args.reason is None and pending.is_file():
         args.reason = read(pending).get('reason')
     elif args.reason is not None:
         write(pending, {'data_version': 1, 'kind': 'pending-delivery-reason', 'task_id': task['id'], 'reason': args.reason})
-    if not group.get('review') and profile.get('platform') and platform_task(root, task['id']):
+    import reviews
+    if (profile.get('platform') and platform_task(root, task['id'])
+            and reviews.platform_is_newer(root, task['id'], group.get('review'))):
         reviewed = execute('review', 'review')
         append('review', reviewed)
         if not reviewed.get('ok'):
             return finish(reviewed, 'review')
         group = materials.load(root, task['id'])
-    accepted = usable_acceptance(args, root, profile, task, group)
+    accepted = usable_acceptance(args, root, profile, task, group, workspace=workspace)
     reused = accepted is not None
     accepted = accepted or execute('accept', 'acceptance')
     append('acceptance', accepted, reused)
@@ -173,7 +178,7 @@ def deliver(args, root, profile, task, request):
         return finish(accepted, 'acceptance')
 
     group = materials.load(root, task['id'])
-    report = usable_report(args, root, task, group)
+    report = usable_report(args, root, task, group, workspace=workspace)
     reused = report is not None
     report = report or execute('delivery-template', 'delivery-report')
     append('delivery-report', report, reused)

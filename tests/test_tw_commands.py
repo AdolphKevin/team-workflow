@@ -7,6 +7,38 @@ from tw_runtime import install
 
 
 class Init(Case):
+    def test_without_readme_preview_lists_source_and_apply_waits_for_it(self):
+        (self.root / 'README.md').unlink()
+        before = tree_state(self.root)
+        code, output, err = self.tw('init')
+        self.assertEqual(code, 0, err)
+        self.assertIn('--source', output)
+        self.assertEqual(tree_state(self.root), before)
+        code, result = self.tw_json('init')
+        overview = next(row for row in result['actions'] if row['path'] == '.tw/overview.md')
+        self.assertEqual(overview['requires'], ['--source'])
+        code, output, err = self.tw('init', '--apply', '--guidance')
+        self.assertEqual(code, 2)
+        self.assertIn('至少需要一个 --source', err)
+        self.assertEqual(tree_state(self.root), before)
+
+    def test_explicit_sources_take_priority_and_generated_overview_only_has_placeholder_error(self):
+        for readme in (True, False):
+            with self.subTest(readme=readme):
+                if not readme:
+                    (self.root / 'README.md').unlink()
+                    (self.root / '.tw/overview.md').unlink(missing_ok=True)
+                code, output, err = self.tw('init', '--apply', '--source', 'https://example.com/issues/5',
+                                            '--source', 'self:internal/orders/service.go')
+                self.assertEqual(code, 0, err)
+                from tw_runtime import frontmatter
+                overview, _, _ = frontmatter.parse((self.root / '.tw/overview.md').read_text())
+                self.assertEqual(overview['source'], ['https://example.com/issues/5', 'self:internal/orders/service.go'])
+                code, result = self.tw_json('check')
+                self.assertEqual(code, 1, result)
+                self.assertEqual(len(result['errors']), 1, result)
+                self.assertIn('残留占位内容', result['errors'][0]['message'])
+
     def test_remote_without_platform_points_to_onboarding(self):
         for flags in ((), ('--guidance',), ('--apply',), ('--apply', '--guidance')):
             with self.subTest(flags=flags):

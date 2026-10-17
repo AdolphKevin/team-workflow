@@ -33,7 +33,7 @@ class Check(Case):
         code, errors, _ = self.errors()
         self.assertEqual(code, 1)
         joined = '\n'.join(errors)
-        self.assertIn('缺少 config.json', joined)
+        self.assertTrue(any(error.startswith('.tw/config.json：') for error in errors))
         self.assertIn('.codestable：旧系统目录仍存在', joined)
         self.assertIn('.team-workflow.json：旧系统目录仍存在', joined)
 

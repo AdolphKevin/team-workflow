@@ -84,13 +84,21 @@ class MarkdownRecordCases(unittest.TestCase):
 
     def test_display_omits_missing_config_or_checks(self):
         self.setup_record()
+        reference = self.draft()['record']['design']
         for missing in ('checks', 'config'):
             with self.subTest(missing=missing):
                 if missing == 'config':
                     (self.root / '.tw/config.json').unlink()
                     self.git('add', '.tw/config.json')
                     self.git('commit', '-qm', 'fixture without config')
-                self.assertNotIn('本方案引用的检查', self.draft()['pr_description'])
+                if missing == 'config':
+                    with self.assertRaisesRegex(Invalid, 'config.json'):
+                        self.draft()
+                    import design_files
+                    reference = {**reference, 'commit': self.git('rev-parse', 'HEAD').strip()}
+                    self.assertNotIn('本方案引用的检查', design_files.display(self.raw, self.design, reference, root=self.root))
+                else:
+                    self.assertNotIn('本方案引用的检查', self.draft()['pr_description'])
 
     def test_m5_missing_commit_missing_file_and_bad_sha_are_separate_gaps(self):
         self.setup_record()

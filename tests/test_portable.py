@@ -401,6 +401,10 @@ class AggregateCases(unittest.TestCase):
                  'data': {'acceptance': ['A1'], 'scope': ['app.py'], 'blocked_by': []}, 'depends_on': []}]}
         plans.plan(design)
         def save(name, value):
+            if isinstance(value, dict) and value.get('kind') == 'design':
+                path = root / '.tw/local' / (prefix + name + '.md')
+                plans.write_design(path, value)
+                return path.relative_to(root).as_posix()
             write(root / '.tw/local' / (prefix + name + '.json'), value)
             return '.tw/local/' + prefix + name + '.json'
         fixtures.write_config(root, profile)
@@ -418,12 +422,13 @@ class AggregateCases(unittest.TestCase):
         report = {'data_version': 1, 'task_id': task['id'], 'design': save('design', design),
             'approvals': [save('approval', approval)], 'brief': brief, 'runs': [run.relative_to(root).as_posix()],
             'review': '.tw/local/' + prefix + 'review.json'}
+        plans.submit_scenarios(root, task, report)
         review = delivery.review_template(root, profile, task, report)
         ref = artifact(root, run)
         review.update(reviewer='carol', knowledge_conflicts_resolved=True)
         for axis in ('standards', 'spec'):
             review[axis] = {'status': 'passed', 'summary': 'Read actual public behavior and executed results', 'evidence': [ref]}
-        review['acceptance'] = [{'id': 'A1', 'status': 'passed', 'summary': 'Observed the declared arithmetic result', 'evidence': [ref], 'observations': [plans.observation(ref)]}]
+        review['acceptance'] = [{'id': 'A1', 'status': 'passed', 'summary': 'Observed the declared arithmetic result', 'evidence': [ref], 'observations': plans.observations(root, ref)}]
         save('review', review)
         accepted = delivery.verify(root, profile, task, report, 'acceptance')
         acceptance = save('acceptance', accepted)
@@ -462,7 +467,7 @@ class AggregateCases(unittest.TestCase):
         review = read(path)
         review['acceptance'][0]['observations'] = []
         write(path, review)
-        with self.assertRaisesRegex(Invalid, 'actual execution'):
+        with self.assertRaisesRegex(Invalid, '场景轮次'):
             self.aggregate()
 
     def test_omitted_build_input_or_missing_joint_source_capture_is_rejected(self):

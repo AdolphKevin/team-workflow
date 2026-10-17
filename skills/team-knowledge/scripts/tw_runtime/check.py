@@ -27,7 +27,7 @@ def run(project, base=None):
 
     root, names = project.root, project.source.names
     if project.config is None and not project.config_errors:
-        error(projects.CONFIG, '缺少 config.json，先运行 `tw init --apply`')
+        error(projects.CONFIG, 'config.json 尚待创建')
     for message in project.config_errors:
         error(projects.CONFIG, message)
     for name in projects.legacy_paths(root):

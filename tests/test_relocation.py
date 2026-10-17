@@ -1,5 +1,7 @@
 """Execution evidence remains current when an unchanged checkout changes location."""
 from copy import deepcopy
+from datetime import datetime, timezone
+import json
 from pathlib import Path
 import shutil
 import tempfile
@@ -9,6 +11,7 @@ import test_four_command_delivery as four
 import test_workflow as fixtures
 from common import Invalid, read
 import validation
+import plan_fixtures as plans
 
 
 class RelocationCases(unittest.TestCase):
@@ -113,6 +116,7 @@ class RelocationCases(unittest.TestCase):
 
     def test_completed_delivery_and_preparation_continue_after_copy(self):
         accepted = self.accepted()
+        # accepted 夹具已逐场景提交结果，再沿用该验收测试搬迁。
         code, delivered = self.command('deliver', '--task', self.task['id'], '--reason', 'No reusable knowledge changed.')
         self.assertEqual(code, 0, delivered)
         before = self.current()
@@ -139,6 +143,8 @@ class RelocationCases(unittest.TestCase):
         for args in commands:
             with self.subTest(command=args[0]):
                 request_id = 'relocatable-' + args[0]
+                if args[0] == 'run':
+                    plans.submit_scenarios(self.root, self.task)
                 if args[0] == 'review':
                     code, result = self.submit(request_id=request_id)
                 else:
@@ -150,7 +156,12 @@ class RelocationCases(unittest.TestCase):
                 self.relocate(copy=True)
                 code, retried = self.command(*args, '--request-id', request_id)
                 self.assertEqual(code, 0, retried)
-                self.assertEqual(retried, result)
+                if args[0] == 'deliver':
+                    self.assertTrue(retried['reused'])
+                    self.assertEqual(retried['artifact'], self.current()['delivery'])
+                    self.assertEqual(retried['summary_markdown'], result['summary_markdown'])
+                else:
+                    self.assertEqual(retried, result)
                 self.assertEqual((self.root / directory / 'request.json').read_bytes(), claim)
                 self.assertEqual((self.root / directory / 'response.json').read_bytes(), response)
 

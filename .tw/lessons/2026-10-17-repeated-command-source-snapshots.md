@@ -1,0 +1,19 @@
+---
+title: "派生状态重复读取源码使回归超时"
+scope: ["self:skills/team-knowledge/scripts/tw_runtime/team/**"]
+source: ["self:tests/test_command_snapshots.py", "self:tests/test_review_recheck.py"]
+verified: {"self": {"commit": "e38d5d4630c17ffbe613839cd137cd20b6dae7be", "date": "2026-10-17"}}
+guards: ["self:tests/test_command_snapshots.py#test_command_snapshot_budgets", "self:tests/test_command_snapshots.py#test_next_command_reads_current_source", "self:tests/test_review_recheck.py#test_every_confirmation_allows_submission_and_accept_with_new_run"]
+tags: ["源码快照", "产品指纹", "命令", "性能退化", "超时"]
+---
+# 派生状态重复读取源码使回归超时
+
+现象：加入场景状态后，同一条命令的待执行清单、状态步骤、评审和验收反复列举文件并计算全文指纹，回归执行时间增长，持续集成超时。
+
+根因：工作区内容属于命令稳定阶段的共同事实，却由每个派生计算分别读取；源码指纹与产品指纹还各读一次，验收材料清单再次列举文件。
+
+修复与防护：命令入口持有工作区对象，向派生计算显式传递。同一稳定阶段从一份快照派生源码和产品指纹，验收材料清单及方案读取共用该阶段的事实。运行、场景提交、评审生成、业务验收和最终核查的前后比较，在结束处显式刷新后重新读取；下一条命令建立自己的对象。
+
+发现方法：通过真实命令入口统计快照获取及材料列举次数，按显式前后比较限定次数；同一进程连续执行命令并修改源码，后一次读取应采用新内容；在业务步骤中途修改源码，命令应拒绝写入有效结果。
+
+适用条件：多个派生状态共同依赖工作区内容，或准备在状态、统计、评审和验收中新增源码读取时。

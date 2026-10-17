@@ -31,8 +31,18 @@ class MarkdownReview(unittest.TestCase):
             self.task['kind'] = 'docs'
             self.task['acceptance'][0]['checks'] = []
             self.design['sections'][1]['data']['checks'] = []
-            self.design['sections'][1]['data']['verification'] = {
-                'method': 'manual', 'substitutes': [], 'cases': []}
+            self.design['sections'][1]['data'].pop('verification')
+            self.profile['acceptance_entries'] = {'doc': {'surface': 'doc', 'operate': '阅读文档',
+                'observe': ['文档内容'], 'evidence': ['核对记录'], 'isolation': '临时目录'}}
+            value = read(self.root / 'tests/fixtures/scenarios.json')
+            for node in value['sops']:
+                for scene in node['scenarios']:
+                    scene['verify'] = 'doc'
+            from common import write, sha
+            path = self.root / '.tw/local/document-scenarios.json'
+            write(path, value)
+            self.design['sections'][1]['data']['scenarios'] = [{'path': '.tw/local/document-scenarios.json',
+                'sha256': sha(path), 'nodes': ['SYNTH-01']}]
         else:
             code = "import app; from pathlib import Path; assert app.add(1,2)==3; print('sum=3'); Path('{output}/results.xml').write_text('<testsuite tests=\"1\"><testcase classname=\"Arithmetic\" name=\"adds\"/></testsuite>')"
             self.check(code, format='junit', report='{output}/results.xml', required_cases=['Arithmetic::adds'])
@@ -49,8 +59,11 @@ class MarkdownReview(unittest.TestCase):
         self.assertEqual(code, 0, started)
         code, ran = self.command('run', '--task', self.task['id'])
         self.assertEqual(code, 0, ran)
-        self.ran = ran
-        return started, ran
+        plans.submit_scenarios(self.root, self.task)
+        code, refreshed = self.command('run', '--task', self.task['id'])
+        self.assertEqual(code, 0, refreshed)
+        self.ran = refreshed
+        return started, refreshed
 
     def draft(self, **options):
         self.prepared(**options)
@@ -76,13 +89,6 @@ class MarkdownReview(unittest.TestCase):
         for section in ('## 规范 standards', '## 需求 spec', '## 验收 A1'):
             text = self.field(text, section, '结论', '通过')
             text = self.field(text, section, '理由', '已核对业务要求、实际入口和原始结果。')
-        if manual:
-            evidence = self.root / '.tw/local/manual-result.txt'
-            evidence.write_text('result=3; count=1\n')
-            for key, value in {'观察人': 'carol', '时间': '2026-01-01T00:00:00+00:00',
-                               '操作': '从实际入口读取算术结果', '结果': '观察到结果为 3',
-                               '数据': 'result=3; count=1', '证据文件': '.tw/local/manual-result.txt'}.items():
-                text = self.field(text, '### 人工观察 A1', key, value)
         return text
 
     def submit(self, path, text, *options):
@@ -157,6 +163,7 @@ class MarkdownReview(unittest.TestCase):
         self.assertEqual(code, 0, started)
         code, ran = self.command('run', '--task', self.task['id'])
         self.assertEqual(code, 0, ran)
+        plans.submit_scenarios(self.root, self.task)
         code, result = self.command('review', '--task', self.task['id'])
         self.assertEqual(code, 0, result)
         text = (self.root / result['review_file']).read_text()
@@ -280,25 +287,20 @@ class MarkdownReview(unittest.TestCase):
                 self.assert_position(refused, '规范')
                 self.assertIsNone(self.current()['review'])
 
-    def test_manual_observations_are_blank_and_missing_actor_or_result_is_rejected(self):
+    def test_document_scenarios_replace_manual_observation_fields(self):
         path, _ = self.draft(manual=True)
         text = path.read_text()
-        for field in ('观察人', '时间', '操作', '结果', '数据', '证据文件'):
-            self.assertRegex(text, r'(?m)^- ' + field + r'：\s*$')
-        complete = self.completed(text, manual=True)
-        for field in ('观察人', '结果'):
-            with self.subTest(field=field):
-                broken = self.field(complete, '### 人工观察 A1', field, '')
-                code, refused = self.submit(path, broken)
-                self.assertEqual(code, 1, refused)
-                self.assert_position(refused, '人工观察 A1')
-                self.assertIsNone(self.current()['review'])
+        self.assertIn('场景执行', text)
+        self.assertNotIn('人工观察', text)
+        complete = self.completed(text)
+        code, refused = self.submit(path, complete + '\n### 人工观察 A1\n- 观察人：carol\n')
+        self.assertEqual(code, 1, refused)
+        self.assertIn('submit 登记', refused['problem'])
         code, result = self.submit(path, complete)
         self.assertEqual(code, 0, result)
         row = read(self.root / result['artifact']['path'])['acceptance'][0]['observations'][0]
-        self.assertEqual(set(row), {'kind', 'observer', 'at', 'steps', 'result', 'evidence'})
-        self.assertEqual(row['observer'], 'carol')
-        self.assertIn('result=3; count=1', row['result'])
+        self.assertEqual(row['kind'], 'scenarios')
+        self.assertTrue(row['rounds'])
 
     def test_known_issue_identity_fields_cannot_be_changed(self):
         issue = {'id': 'Q1', 'owner': 'carol', 'affects': ['A1'], 'blocks': ['acceptance'],
@@ -312,6 +314,18 @@ class MarkdownReview(unittest.TestCase):
                 self.assertEqual(code, 1, refused)
                 self.assert_position(refused, '问题 Q1')
                 self.assertIsNone(self.current()['review'])
+
+    def test_disposition_evidence_uses_indented_lines_for_multiple_references(self):
+        issue = {'id': 'Q-multi', 'owner': 'carol', 'affects': ['A1'], 'blocks': ['acceptance'],
+                 'state': 'resolved', 'summary': '核对两项来源',
+                 'resolution': {'reason': '两项原文已核对', 'evidence': ['https://example.invalid/spec#1', 'SOP#2']}}
+        path, _ = self.draft(issues=[issue])
+        self.assertIn('- 处置证据：https://example.invalid/spec#1\n  SOP#2', path.read_text())
+        text = self.completed(path.read_text())
+        code, submitted = self.submit(path, text)
+        self.assertEqual(code, 0, submitted)
+        issue = read(self.root / submitted['artifact']['path'])['findings'][0]
+        self.assertEqual(issue['resolution']['evidence'], ['https://example.invalid/spec#1', 'SOP#2'])
 
     def test_implementer_review_is_still_rejected_by_accept(self):
         path, _ = self.draft()

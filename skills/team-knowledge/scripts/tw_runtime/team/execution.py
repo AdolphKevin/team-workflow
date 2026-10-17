@@ -1,4 +1,5 @@
 """Explicit project command execution and native result decoding."""
+from error_codes import Code
 import html
 import json
 import os
@@ -7,6 +8,7 @@ import signal
 import subprocess
 import time
 import xml.etree.ElementTree as ET
+from typing import NamedTuple
 
 from common import Invalid, inside, require
 
@@ -40,7 +42,9 @@ def execute(argv, cwd, timeout):
             out, err = p.communicate()
             state = 'timeout'
         return {'state': state, 'exit_code': p.returncode, 'seconds': round(time.monotonic()-start, 3),
-                'stdout': redact(out.decode(errors='replace')), 'stderr': redact(err.decode(errors='replace'))}
+                'stdout': redact(out.decode(errors='replace')), 'stderr': redact(err.decode(errors='replace')),
+                'raw': {key: redact(value.decode(errors='surrogateescape')).encode(errors='surrogateescape')
+                        for key, value in (('stdout', out), ('stderr', err))}}
     except OSError as exc:
         return {'state': 'unavailable', 'exit_code': None, 'seconds': round(time.monotonic()-start, 3),
                 'stdout': '', 'stderr': redact(str(exc))}
@@ -52,6 +56,22 @@ def execute(argv, cwd, timeout):
                 p.kill()
             p.communicate()
         raise
+
+
+def output_excerpt(root, artifacts, tail_lines=12):
+    """显示原文件的双通道末尾；空输出说明只属于显示层。"""
+    from common import artifact_valid
+    contents = {}
+    for channel in ('stdout', 'stderr'):
+        refs = [ref for ref in artifacts if ref['path'].endswith('/' + channel + '.txt')]
+        contents[channel] = artifact_valid(root, refs[0]).read_text(errors='replace') if refs else ''
+    if not any(contents.values()):
+        return ['（无输出）']
+    lines = []
+    for channel, content in contents.items():
+        lines += [channel + ('：' if content else '：（空输出）')]
+        lines += content.splitlines()[-tail_lines:]
+    return lines
 
 
 def go_cases(output):
@@ -101,13 +121,21 @@ def junit_cases(path):
     return cases
 
 
+class Decoded(NamedTuple):
+    """原始检查结果及其错误类别。"""
+    status: str
+    cases: dict
+    detail: str
+    error_code: str | None = None
+
+
 def decode(check, result, report_path=None):
     if result['state'] != 'finished':
-        return result['state'], {}, result['state']
+        return Decoded(result['state'], {}, result['state'], Code.CHECK_RESULT)
     if result['exit_code'] != 0:
-        return 'failed', {}, f'Command exit {result["exit_code"]}'
+        return Decoded('failed', {}, f'Command exit {result["exit_code"]}', Code.CHECK_RESULT)
     if check['format'] == 'command':
-        return 'passed', {}, 'Command completed; behavior is assessed separately in review'
+        return Decoded('passed', {}, 'Command completed; behavior is assessed separately in review')
     try:
         cases = go_cases(result['stdout']) if check['format'] == 'go-json' else junit_cases(report_path)
         require(bool(cases), 'Zero test cases')
@@ -120,13 +148,15 @@ def decode(check, result, report_path=None):
                 raise Invalid(f'Required case missing or not passed: {key}'
                               + (f' (state: {cases[key]})' if key in cases else
                                  f'; the report has {len(cases)} cases, e.g. {", ".join(found)}'
-                                 + ('. Check the registered name (package or class prefix).' if similar else '')))
+                                 + ('. Check the registered name (package or class prefix).' if similar else '')),
+                              error_code=Code.CHECK_RESULT if key in cases else Code.CHECK_CONFIG)
             # Selecting a Go parent must not hide a skipped child.
             if check['format'] == 'go-json':
                 require(all(v == 'passed' for k, v in cases.items() if k.startswith(key + '/')), f'Required child did not pass: {key}')
-        return 'passed', cases, 'Required test cases executed and passed'
+        return Decoded('passed', cases, 'Required test cases executed and passed')
     except (Invalid, OSError, ValueError, TypeError, ET.ParseError) as exc:
-        return 'incomplete', {}, str(exc)
+        code = getattr(exc, 'error_code', Code.CHECK_RESULT)
+        return Decoded('incomplete', {}, str(exc), Code.CHECK_RESULT if code == Code.INVALID else code)
 
 
 def output_path(root, directory, value):

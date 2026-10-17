@@ -4,9 +4,11 @@ import json
 import re
 
 from common import Invalid, obj, require, strings, text
+from error_codes import Code
 
 HEADER = {'design': 'id', 'task': 'task_id', 'revision': 'revision', 'assessment': 'assessment', 'roles': 'roles'}
-LABELS = {'需求级验收', '角色', '初始状态', '步骤', '预期', '反例', '依据', '检查', '验证', '验收', '范围', '前置任务', '评估'}
+RETIRED_LABELS = {'角色', '初始状态', '步骤', '预期', '反例'}
+LABELS = {'需求级验收', '场景', '依据', '检查', '验证', '验收', '范围', '前置任务', '评估'}
 IMPACT = ('仓库', '入口', '操作', '产生方', '使用方', '提交负责方', '验收')
 IMPACT_KEYS = ('repository', 'entrypoint', 'operations', 'producer', 'consumer', 'commit_owner', 'acceptance')
 ISSUES = ('编号', '问题', '负责人', '影响章节', '阻塞阶段', '状态', '原因', '证据', '确认人', '确认依据', '后续任务', '范围调整')
@@ -17,7 +19,7 @@ MARKER = re.compile(r'<!-- tw-section id=([^\s]+) type=([^\s]+)(?: depends=([^\s
 
 
 def fail(line, message):
-    raise Invalid(f'第 {line} 行：{message}')
+    raise Invalid(f'第 {line} 行：{message}', error_code=Code.DESIGN_MARKDOWN, line=line)
 
 
 def dumps(value):
@@ -136,24 +138,24 @@ def sources(value):
 
 
 def verification_text(value):
-    return '；'.join(['自动' if value['method'] == 'automatic' else '人工'] +
+    return '；'.join(['自动'] +
                     [label + ' ' + listing(value[key], outer=('；',))
                      for label, key in (('用例', 'cases'), ('替身', 'substitutes')) if value[key]])
 
 
 def verification(value):
     parts = split(value, '；', fields=True, arrays=True)
-    require(parts[0] in ('自动', '人工'), '验证方式应为自动或人工')
+    require(parts[0] != '人工', '人工执行按场景逐条记录，用 tw team scenarios submit 登记')
+    require(parts[0] == '自动', '验证方式填写自动')
     fields = {}
     for item in parts[1:]:
         label, sep, val = item.partition(' ')
         require(label not in {'层级', '入口', '环境', '隔离', '隔离依据'},
-                '请改为“验证：自动；用例 <用例>；替身 <替身>”或“验证：人工”；覆盖范围写在 .tw/config.json 的 checks.<编号>.coverage')
+                '请改为“验证：自动；用例 <用例>；替身 <替身>”；覆盖范围写在 .tw/config.json 的 checks.<编号>.coverage')
         require(sep and label not in fields, '验证标签缺值或重复：' + label)
         fields[label] = val.strip()
     require(fields.keys() <= {'替身', '用例'}, '未知验证标签')
-    require(parts[0] != '人工' or not fields, '人工验证不能填写用例或替身；请写“验证：人工”')
-    result = {'method': 'automatic' if parts[0] == '自动' else 'manual',
+    result = {'method': 'automatic',
               'cases': array(fields.get('用例', '无'), outer=('；',)),
               'substitutes': array(fields.get('替身', '无'), outer=('；',))}
     strings(result['cases']); strings(result['substitutes'])
@@ -216,7 +218,7 @@ def body_transform(body, escape):
             continue
         bare = line.lstrip('\\')
         match = LABEL.fullmatch(bare)
-        reserved = ((match and (match[1] in LABELS or match[1].startswith('数据 ')))
+        reserved = ((match and (match[1] in LABELS | RETIRED_LABELS or match[1].startswith('数据 ')))
                     or bare.startswith('<!-- tw-section') or bare == '<!-- tw-issues -->'
                     or re.match(r'^ {0,3}(`{3,}|~{3,})', bare))
         if fence is None and reserved:
@@ -250,14 +252,13 @@ def render(value):
             lines.append(table(IMPACT, [[listing(r[k], '；' if k == 'operations' else '、') if isinstance(r[k], list)
                                         else display(r[k]) for k in IMPACT_KEYS] for r in data['impact']]))
         elif row['type'] == 'acceptance':
-            s = data['scenario']
-            for name, key in (('角色', 'actor'), ('初始状态', 'initial_state'), ('步骤', 'steps'), ('预期', 'expected'), ('反例', 'negative_cases')):
-                label(name, listing(s[key], '；') if isinstance(s[key], list) else inline(s[key]))
-            if 'sources' in s:
-                label('依据', source_text(s['sources']))
+            label('场景', '；'.join(inline(ref['path']) + '#' + listing(ref['nodes']) for ref in data['scenarios']))
+            if 'sources' in data:
+                label('依据', source_text(data['sources']))
             label('检查', listing(data['checks']))
-            label('验证', verification_text(data['verification']))
-            used.update(('scenario', 'checks', 'verification'))
+            if 'verification' in data:
+                label('验证', verification_text(data['verification']))
+            used.update(('scenarios', 'sources', 'checks', 'verification'))
         elif row['type'] == 'task':
             for name, key in (('验收', 'acceptance'), ('范围', 'scope'), ('前置任务', 'blocked_by')):
                 label(name, listing(data[key]))
@@ -279,7 +280,7 @@ def render(value):
     return '\n'.join(lines) + '\n'
 
 
-def load(raw):
+def load(raw, *, scenario_reader):
     from designs import SECTION_TYPES, validate_design, validate_assessment, _path
     from contracts import issue as validate_issue, material, sources as validate_sources
     if raw.lstrip().startswith(('{', '[')):
@@ -369,7 +370,7 @@ def load(raw):
                     value['issues'].append(item)
                     issue_lines[item['id']] = number
             except (Invalid, ValueError, StopIteration) as exc:
-                if isinstance(exc, Invalid) and str(exc).startswith('第 '):
+                if getattr(exc, 'line', None) is not None:
                     raise
                 fail(start + 1, str(exc) or '缺少已知问题表')
             continue
@@ -386,7 +387,7 @@ def load(raw):
         row_lines[identifier] = start + 1
         labels, data, body_end = {}, {}, len(content)
         allowed = ({'需求级验收'} if kind == 'global-scope' else
-                   {'角色', '初始状态', '步骤', '预期', '反例', '依据', '检查', '验证'} if kind == 'acceptance' else
+                   {'场景', '依据', '检查', '验证'} if kind == 'acceptance' else
                    {'验收', '范围', '前置任务', '评估'} if kind == 'task' else set())
         nested_start = next((h - start - 1 for h, _, depth, _, m in marked[position + 1:]
                              if h < stop and depth > level), len(content))
@@ -401,6 +402,8 @@ def load(raw):
             if fence:
                 continue
             match = LABEL.fullmatch(line.removesuffix('\r'))
+            if kind == 'acceptance' and match and match[1] in RETIRED_LABELS:
+                fail(start + offset + 2, '场景写在场景文件，验收节用 `- 场景：<路径>#<节点>`')
             if match and (match[1] in allowed or match[1].startswith('数据 ')):
                 name, val = match.groups()
                 if name in labels:
@@ -413,10 +416,8 @@ def load(raw):
             val, number = labels[name]
             try:
                 result = parser(val)
-                if name in {'需求级验收', '步骤', '反例', '检查', '验收', '范围', '前置任务'}:
-                    strings(result, name in {'需求级验收', '步骤', '反例', '验收'})
-                elif name in {'角色', '初始状态', '预期'}:
-                    material(result)
+                if name in {'需求级验收', '检查', '验收', '范围', '前置任务'}:
+                    strings(result, name in {'需求级验收', '验收'})
                 if name == '范围':
                     for path in result:
                         _path(path)
@@ -443,11 +444,23 @@ def load(raw):
             except (Invalid, ValueError, StopIteration) as exc:
                 fail(start + 2 + (first if first is not None else 0), str(exc) or '缺少影响范围表')
         elif kind == 'acceptance':
-            scenario = {key: field(name, (lambda v: array(v, '；')) if key in ('steps', 'negative_cases') else html.unescape)
-                        for name, key in (('角色', 'actor'), ('初始状态', 'initial_state'), ('步骤', 'steps'), ('预期', 'expected'), ('反例', 'negative_cases'))}
+            def references(val):
+                result = []
+                for item in split(val, '；'):
+                    filename, separator, nodes = item.partition('#')
+                    require(separator and filename.strip(), '场景引用使用 <仓内路径>#<节点>')
+                    filename = scalar(filename.strip())
+                    _path(filename)
+                    selected = array(nodes)
+                    strings(selected, True)
+                    from scenario_files import reference
+                    result.append(reference(filename, selected, scenario_reader))
+                return result
+            data.update(scenarios=field('场景', references), checks=field('检查', array))
+            if data['checks'] or '验证' in labels:
+                data['verification'] = field('验证', verification)
             if '依据' in labels:
-                scenario['sources'] = field('依据', sources)
-            data.update(scenario=scenario, checks=field('检查', array), verification=field('验证', verification))
+                data['sources'] = field('依据', sources)
         elif kind == 'task':
             data = {key: field(name, array) for name, key in (('验收', 'acceptance'), ('范围', 'scope'), ('前置任务', 'blocked_by'))}
             if '评估' in labels:
@@ -512,7 +525,6 @@ def load(raw):
     try:
         return validate_design(value)
     except (Invalid, ValueError, TypeError, KeyError) as exc:
-        number = next((number for key, number in row_lines.items() if str(exc).endswith(key)), end + 1)
-        if 'Role' in str(exc):
-            number = locations['roles']
+        key = getattr(exc, 'key', None)
+        number = row_lines.get(key, locations['roles'] if key == 'roles' else end + 1)
         fail(number, str(exc))

@@ -42,6 +42,7 @@ class CloseNote(unittest.TestCase):
             'run_refs': [artifact(self.root, self.root / path) for path in self.runs]})
         self.publish(approval, 'carol')
         self.write('approval', approval['record']['approval'])
+        plans.submit_scenarios(self.root, self.task, self.report)
 
     def github(self, endpoint, paginate=False, binary=False):
         if endpoint == 'repos/example/project/issues/149':
@@ -81,6 +82,8 @@ class CloseNote(unittest.TestCase):
         self.assertIn('未指明用例，证据为整项检查通过', result['summary_markdown'])
         self.assertEqual(record['close']['close_authorization']['confirmed_by'], 'blur-yin')
         self.assertIn('## 收尾说明', note['markdown'])
+        self.assertIn('原始输出摘录', note['markdown'])
+        self.assertIn('（无输出）', note['markdown'])
         self.assertIn('draft-only', note['publication'])
         self.assertEqual(self.issue['comments_data'][-1]['user']['login'], 'carol')  # nothing was posted
         self.publish(note, 'bob')
@@ -139,6 +142,7 @@ class CloseNote(unittest.TestCase):
             'run_refs': [artifact(self.root, self.root / path) for path in self.runs]})
         self.publish(approval, 'carol')
         self.write('approval', approval['record']['approval'])
+        plans.submit_scenarios(self.root, self.task, self.report)
         self.accept_and_record_knowledge()
         result = delivery.verify(self.root, self.profile, self.task, self.report)
         self.assertTrue(result['delivery_complete'])

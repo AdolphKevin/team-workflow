@@ -299,4 +299,6 @@ def check(root, identity, commit_id=None, reference_url=None, locator=None):
         row['seconds'] = round(time.monotonic() - started, 3)
         rows.append(row)
     return {'ok': all(row['ok'] for row in rows), 'scope': 'platform-check', 'checks': rows,
+            **({'problem': '；'.join(row['operation'] + '：' + row['problem'] for row in rows if not row['ok'])}
+               if any(not row['ok'] for row in rows) else {}),
             'summary': '平台脚本一致性检查；仅报告结果和耗时'}

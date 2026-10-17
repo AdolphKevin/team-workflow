@@ -15,32 +15,33 @@ from artifacts import directory
 from common import (Invalid, artifact, artifact_valid, create, create_text, digest, inside, now,
                     load_profile, read, sha, write)
 import delivery
+import scenario_acceptance
 import review_history
 import validation
+from error_codes import Code
 
 BIND_START = '<!-- tw-review:binding:start -->'
 BIND_END = '<!-- tw-review:binding:end -->'
 
 
 class ReviewError(Invalid):
-    error_code = 'review-incomplete'
+    error_code = Code.REVIEW_INCOMPLETE
 
-    def __init__(self, section, line, reason):
-        super().__init__(f'第 {line} 行（{section}）：{reason}')
-        self.next_action = '按位置修正 Markdown，再运行 tw team review --task <身份> --submit。'
+    def __init__(self, section, line, reason, *, error_code=None):
+        super().__init__(f'第 {line} 行（{section}）：{reason}', section=section, line=line, error_code=error_code)
 
 
 class ReviewNotSubmitted(Invalid):
-    error_code = 'review-not-submitted'
+    error_code = Code.REVIEW_NOT_SUBMITTED
 
     def __init__(self, root, task, missing_run=False):
         path = locations(root, task['id'])[0]
         self.review_file = path.relative_to(root).as_posix()
         selected = '--task ' + shlex.quote(task['id'])
         self.next_action = (('先生成草稿：tw team run ' + selected + '；' if missing_run or not path.exists() else '')
-                            + '填写后提交：tw team review ' + selected + ' --submit')
-        super().__init__('尚未提交评审；请填写 ' + self.review_file + ' 后提交。'
-                         + ('还没有运行记录（--run），请先执行检查。' if missing_run else ''))
+                            + submission_action(root, task['id'], self.review_file))
+        super().__init__('尚未提交评审，评审文件：' + self.review_file
+                         + ('；本任务尚缺运行记录。' if missing_run else ''))
 
 
 def locations(root, task_id):
@@ -48,20 +49,77 @@ def locations(root, task_id):
     return base / 'review.md', base / 'reviews' / 'editor.json'
 
 
+def submission_action(root, task_id, review_file=None, *, recheck=False, register=False, disposition=False):
+    """任务的评审提交方式在此选择，所有下一步共用。"""
+    from tw_runtime.team import platform_script
+    path = review_file or locations(root, task_id)[0].relative_to(root).as_posix()
+    options = '--task ' + shlex.quote(task_id) + ' --root ' + shlex.quote(str(root))
+    prepare = ('先核对当前运行并生成复核稿：tw team run ' + options
+               + '；tw team review ' + options + '；') if recheck else ''
+    if platform_script.is_task(root, task_id, required=False):
+        imported = 'tw team review ' + options + ' --from-platform；' if register else ''
+        instruction = '在问题小节填写处置：' if disposition else '逐项核对并填写 '
+        return (prepare + instruction + shlex.quote(str(path))
+                + '，作为变更请求评审发布，再运行：' + imported + 'tw team deliver ' + options)
+    if recheck:
+        return prepare.rstrip('；')
+    file_option = ' --file ' + shlex.quote(str(path)) if review_file else ''
+    instruction = '在评审的问题小节填写处置后提交：' if disposition else '填写后提交：'
+    return (prepare + instruction + 'tw team review --task ' + shlex.quote(task_id)
+            + ' --submit' + file_option + ' --root ' + shlex.quote(str(root)))
+
+
 def source_path(args, root, task_id):
     path = Path(args.file).expanduser() if args.file else locations(root, task_id)[0]
     return (root / path).resolve() if not path.is_absolute() else path.resolve()
 
 
-def platform_source(root, task_id):
+def latest_platform_source(root, task_id):
     from tw_runtime.team import platform_script
     value = platform_script.task(root, task_id)
     rows = [row for row in value['items'] if row['kind'] == 'review' and BIND_START in row['body']]
-    if not rows:
-        raise ReviewError('平台评审', 1, '没有含评审绑定区的 review 条目；请将填好的完整 Markdown 作为变更请求评审提交。')
-    item = rows[-1]
+    return max(rows, key=lambda row: platform_script.timestamp(row['updated_at']), default=None)
+
+
+def platform_source(root, task_id):
+    item = latest_platform_source(root, task_id)
+    if item is None:
+        raise ReviewNotSubmitted(root, {'id': task_id})
     _binding(root, task_id, item['body'], current_only=True)
     return item
+
+
+def platform_is_newer(root, task_id, review_ref):
+    """按提交时间选择评审；绑定核对由登记入口完成。"""
+    from tw_runtime.team import platform_script
+    item = latest_platform_source(root, task_id)
+    if not review_ref:
+        return True  # 登记入口会给出缺少平台评审的具体原因。
+    if item is None:
+        return False
+    state = _state(root, task_id)
+    entry = next((row for row in state['submitted'].values()
+                  if row['review'] == review_ref), {})
+    submitted_at = entry.get('submitted_at')
+    if not submitted_at:
+        # 旧登记沿用原始提交响应的完成时间；原评审与平台条目相同时可还原平台时间。
+        review = read(artifact_valid(root, review_ref))
+        markdown = entry.get('markdown')
+        if (review.get('platform_url') == item['url'] and markdown
+                and markdown['sha256'] == hashlib.sha256(item['body'].encode('utf-8')).hexdigest()):
+            submitted_at = item['updated_at']
+        else:
+            from checklist import records
+            submitted_at = next((response.get('finished_at') or claim.get('started_at')
+                                 for claim, response in reversed(records(root, task_id))
+                                 if response and response.get('artifact') == review_ref
+                                 and (response.get('finished_at') or claim.get('started_at'))), None)
+        if not submitted_at:
+            error = Invalid('评审登记记录缺少提交时间：' + review_ref['path'] + '；请重新登记该评审。')
+            error.next_action = ('tw team review --task ' + shlex.quote(task_id) + ' --from-platform'
+                                 if review.get('platform_url') else submission_action(root, task_id, register=True))
+            raise error
+    return platform_script.timestamp(item['updated_at']) > platform_script.timestamp(submitted_at)
 
 
 def source_text(args, root, task_id):
@@ -85,10 +143,8 @@ def case_repair(root, task_id, review_ref=None):
     path = Path(original) if original else locations(root, task_id)[0]
     path = (root / path).resolve() if not path.is_absolute() else path
     name = path.relative_to(root).as_posix() if path.is_relative_to(root) else str(path)
-    command = ('tw team review --task ' + shlex.quote(task_id) + ' --submit --file ' + shlex.quote(name)
-               + ' --root ' + shlex.quote(str(root)))
     return {'review_file': name,
-            'next_action': f'修正评审 Markdown {name} 中的“用例”字段后重新提交：' + command}
+            'next_action': f'修正评审 Markdown {name} 中的“用例”字段后，' + submission_action(root, task_id, name)}
 
 
 def published_approval(root, task_id, review):
@@ -134,7 +190,7 @@ def _protected(name, text):
     return f'<!-- tw-review:{name}:start -->\n{text.rstrip()}\n<!-- tw-review:{name}:end -->'
 
 
-def preview_execution(root, profile, task, paths):
+def preview_execution(root, profile, task, paths, *, workspace=None):
     """Display original failed/missing results without treating them as verified evidence."""
     from common import task_valid
     required = task_valid(task, profile, root)
@@ -143,7 +199,7 @@ def preview_execution(root, profile, task, paths):
 
     def current(key):
         if key not in bindings:
-            bindings[key] = validation.check_binding(root, profile, profile['checks'][key], live=False)
+            bindings[key] = validation.check_binding(root, profile, profile['checks'][key], live=False, workspace=workspace)
         return bindings[key]
 
     for name in paths:
@@ -158,8 +214,9 @@ def preview_execution(root, profile, task, paths):
                 continue
             out, _ = validation.original_files(root, check, row)
             native = out / check['report'][len('{output}/'):] if check.get('report') else None
-            status, cases, detail = validation.decode(check, {'state': row['state'], 'exit_code': row['exit_code'],
-                'stdout': (out / 'stdout.txt').read_text()}, native)
+            decoded = validation.decode(check, {'state': row['state'], 'exit_code': row['exit_code'],
+                'stdout': (out / 'stdout.txt').read_text(errors='replace')}, native)
+            status, cases, detail = decoded.status, decoded.cases, decoded.detail
             if not cases:
                 try:
                     if check['format'] == 'junit':
@@ -179,7 +236,7 @@ def preview_execution(root, profile, task, paths):
             if record.get('kind') == 'imported-execution' and usable:
                 import portable
                 try:
-                    portable.validate_import(root, profile, record, live=False)
+                    portable.validate_import(root, profile, record, live=False, workspace=workspace)
                 except Invalid:
                     usable = False
             candidates[key].append((record.get('started_at', ''), name,
@@ -193,46 +250,51 @@ def preview_execution(root, profile, task, paths):
     return {'results': results, 'selected_runs': selected, 'checks': sorted(required)}
 
 
-def snapshot(args, root, profile, task, draft_id, allow_incomplete=False):
+def snapshot(args, root, profile, task, draft_id, allow_incomplete=False, *, workspace=None):
+    workspace = workspace or validation.Workspace(root, profile)
     from commands import report_input
     report = report_input(args, root, task, include_knowledge=False)
-    template = delivery.review_template(root, profile, task, report)
-    design, _, status, selected = delivery.design_material(root, profile, task, report)
+    template = delivery.review_template(root, profile, task, report, workspace=workspace)
+    design, _, status, selected = delivery.design_material(root, profile, task, report, workspace=workspace)
     try:
-        execution = validation.verify_runs(root, profile, task, report['runs'], live=False)
+        execution = validation.verify_runs(root, profile, task, report['runs'], live=False, workspace=workspace)
     except Invalid as exc:
         if not allow_incomplete:
-            raise ReviewError('运行结果', 1, '运行尚不能用于正式评审：' + str(exc)) from exc
-        execution = preview_execution(root, profile, task, report['runs'])
+            raise ReviewError('运行结果', 1, '运行尚不能用于正式评审：' + str(exc),
+                              error_code=exc.error_code if exc.error_code in (Code.CHECK_CONFIG, Code.CHECK_RESULT)
+                              else Code.REVIEW_RUN_INCOMPLETE) from exc
+        execution = preview_execution(root, profile, task, report['runs'], workspace=workspace)
         execution['gap'] = str(exc)
     chosen = {key: artifact(root, inside(root, path)) for key, path in execution['selected_runs'].items()}
     bindings = {key: template[key] for key in ('task_id', 'task_digest', 'source_digest', 'validation_policy', 'sections', 'risks')}
+    bindings.update({key: template[key] for key in ('scenario_rounds', 'scenario_files')})
     bindings.update(format_version=2, draft_id=draft_id,
                     runs=[artifact(root, inside(root, p)) for p in report['runs']], selected_runs=chosen)
-    source = review_history.source_record(root, profile, task)
+    workspace.refresh()
+    source = review_history.source_record(root, profile, task, workspace=workspace)
     if source['source_digest'] != bindings['source_digest']:
         raise ReviewError('绑定', 1, '生成评审期间源码已改变，请保持工作区稳定后重试。')
     value = {'data_version': 1, 'kind': 'review-draft-binding', 'bindings': bindings, 'template': template,
-             'automatic': {}, 'manual': {}, 'generated': {}, 'at': now(), 'previous_review': None,
+             'automatic': {}, 'generated': {}, 'at': now(), 'previous_review': None,
              'previous_markdown': None, 'source_snapshot': source, 'acceptance_results': {}, 'rechecks': []}
     value['approval_needed'] = (status.get('review_mode') == 'combined'
                                 and not (status.get('fully_approved') and status.get('combined_complete')))
     if status.get('review_mode') == 'combined':
         from commands import local
         bindings['approval_plan'] = review_history.approval_plan(
-            design, [design_files.read(local(root, path)) for path in args.design_history])
+            design, [design_files.read(local(root, path), workspace=workspace) for path in args.design_history])
     from contracts import execution_environment
     sections = {row['id']: row for row in design['sections']}
+    _, scenario_state = scenario_acceptance.current(root, profile, task, design, report['runs'], workspace=workspace)
+    value['scenario_states'] = {row['id']: {'state': row['state'], 'fingerprint': row['fingerprint'],
+        'result': row.get('result')} for row in scenario_state['scenarios']}
     for row in task['acceptance']:
         key = row['id']
         section = sections[key]
-        requirement = section['data']['verification']
+        requirement = section['data'].get('verification', {'cases': []})
         value['acceptance_results'][key] = {'checks': {check: {'run': chosen.get(check),
             **{name: execution['results'].get(check, {}).get(name) for name in ('status', 'cases', 'exit_code')}}
             for check in section['data']['checks']}}
-        if requirement['method'] == 'manual':
-            value['manual'][key] = True
-            continue
         observations, evidence = [], []
         lines = ['- ' + gap for gap in execution_environment(profile, {**task, 'acceptance': [row]}, design)]
         if not requirement['cases']:
@@ -269,11 +331,15 @@ def snapshot(args, root, profile, task, draft_id, allow_incomplete=False):
             if execution.get('gap'):
                 lines.append('  - 此处仅展示原始结果，当前运行材料未通过验收核查；完整意见可提交，验收前仍需修复。')
             lines.append('  - 命令：' + ' '.join(str(v) for v in result.get('argv', [])))
-            for item in result.get('artifacts', []):
-                if item['path'].endswith('/stdout.txt'):
-                    content = artifact_valid(root, item).read_text(errors='replace')
-                    lines += ['  - 原始输出摘录：'] + ['    ' + line for line in content[:4000].splitlines()]
+            from execution import output_excerpt
+            lines += ['  - 原始输出摘录：'] + ['    ' + line for line in output_excerpt(root, result.get('artifacts', []))]
             observations.append({'kind': 'execution', 'run': ref, 'check': check, 'cases': cases})
+            if ref not in evidence:
+                evidence.append(ref)
+        scene_rows = scenario_acceptance.selected(section, scenario_state)
+        lines += scenario_acceptance.result_lines(scene_rows)
+        observations.append({'kind': 'scenarios', 'rounds': template['scenario_rounds']})
+        for ref in template['scenario_rounds'] + [ref for scene in scene_rows for ref in scene.get('result', {}).get('evidence', [])]:
             if ref not in evidence:
                 evidence.append(ref)
         value['automatic'][key] = {'observations': observations, 'evidence': evidence}
@@ -292,7 +358,8 @@ def render(value):
         return [_field('复核', '待复核')] if section in value.get('rechecks', []) else []
 
     lines = ['# 任务评审', '', '只填写下方评审字段；工具绑定、运行结果和风险列表保持原样。',
-             '结论填写“通过”或“不通过”；证据文件可留空，补充时每行一个项目内路径。', '',
+             '结论填写“通过”或“不通过”；证据文件可留空，补充时每行一个项目内路径。知识冲突已处理在没有冲突时填“是”。', '',
+             '处置证据每行一项来源引用；首项写在字段后，其余项各缩进两个空格续行。', '',
              BIND_START, records.comment(binding), BIND_END, '']
     if value.get('changes'):
         lines += ['## 变化', _protected('changes', value['generated']['changes']), '',
@@ -309,14 +376,8 @@ def render(value):
         if key in value['automatic']:
             lines += [_protected('results-' + key, value['generated']['results-' + key])]
             lines += [filled('验收 ' + key, '用例')]
-        else:
-            lines += ['本项要求人工观察；工具未代填操作或结果。']
         name = '验收 ' + key
         lines += [filled(name, field) for field in ('结论', '理由', '证据文件')] + recheck(name)
-        if key in value['manual']:
-            name = '人工观察 ' + key
-            lines += ['', '### ' + name] + [filled(name, field) for field in
-                      ('观察人', '时间', '操作', '结果', '数据', '证据文件')] + recheck(name)
         lines.append('')
     lines += ['## 问题清单', '状态使用 open、resolved、accepted、deferred；已知问题的身份字段保持原样。', '']
     issues = {'问题 ' + issue['id']: issue for issue in value['template']['findings']}
@@ -367,6 +428,8 @@ def _sections(text, value):
         heading = re.match(r'^(#{2,3}) (.+)$', line)
         if heading:
             section = heading[2].strip()
+            if section.startswith('人工观察 '):
+                raise ReviewError(section, number, '人工执行按场景逐条记录，用 tw team scenarios submit 登记')
             if section in sections:
                 raise ReviewError(section, number, '小节重复。')
             sections[section] = {'line': number, 'fields': {}}
@@ -445,20 +508,6 @@ def compile_review(root, value, sections):
             row.update(copy.deepcopy(value['automatic'][key]))
             row['cases'] = [part.strip().removeprefix('- ').strip() for part in
                             re.split('[、\n]', _value(sections, name, '用例', False)) if part.strip()]
-        else:
-            name = '人工观察 ' + key
-            data = {field: _value(sections, name, field) for field in ('观察人', '时间', '操作', '结果', '数据', '证据文件')}
-            try:
-                at = datetime.fromisoformat(data['时间'])
-                if at.tzinfo is None or at > datetime.now(timezone.utc):
-                    raise ValueError('时间须带时区且不能晚于当前时间')
-            except ValueError as exc:
-                raise ReviewError(name, sections[name]['line'], '观察时间无效：' + str(exc)) from exc
-            refs = _evidence(root, data['证据文件'], name, sections[name]['line'])
-            row['evidence'] = refs
-            row['observations'] = [{'kind': 'manual', 'observer': data['观察人'], 'at': data['时间'],
-                'steps': [line.strip().removeprefix('- ').strip() for line in data['操作'].splitlines() if line.strip()],
-                'result': data['结果'] + '\n数据：' + data['数据'], 'evidence': refs}]
         for ref in row['evidence']:
             if ref not in defaults:
                 defaults.append(ref)
@@ -515,8 +564,6 @@ def progress(text, value):
     fields = [('评审信息', '评审人'), ('评审信息', '知识冲突已处理')]
     for name in ['规范 standards', '需求 spec'] + ['验收 ' + row['id'] for row in value['template']['acceptance']]:
         fields += [(name, '结论'), (name, '理由')]
-    for key in value['manual']:
-        fields += [('人工观察 ' + key, field) for field in ('观察人', '时间', '操作', '结果', '数据', '证据文件')]
     completed = sum(bool(sections.get(name, {}).get('fields', {}).get(field, {}).get('value', '').strip()) for name, field in fields)
     pending = pending_rechecks(value, sections)
     return {'completed': completed, 'total': len(fields), 'pending_rechecks': pending}
@@ -557,7 +604,7 @@ def _existing(root, task_id, target, state, current, fresh):
               'recheck': bool((current or {}).get('changes')), 'review_current': False,
               'progress': progress(raw, current) if current else {'completed': 0, 'total': 1},
               'summary': '已有评审草稿，未覆盖；请填写并提交。',
-              'next_action': 'tw team review --task ' + shlex.quote(task_id) + ' --submit'}
+              'next_action': submission_action(root, task_id, target.relative_to(root).as_posix())}
     if not fresh:
         result['next_action'] = '草稿绑定已变化，原文件未覆盖；先将 review.md 移到别处，再运行 tw team review --task <身份>。'
     if (current or {}).get('changes'):
@@ -567,11 +614,11 @@ def _existing(root, task_id, target, state, current, fresh):
     return result
 
 
-def generate(args, root, profile, task, request):
+def generate(args, root, profile, task, request, *, workspace=None):
     from cleanup import guard
     from materials import load
     target, state_path = locations(root, task['id'])
-    candidate, _, _, candidate_execution = snapshot(args, root, profile, task, uuid.uuid4().hex, allow_incomplete=True)
+    candidate, _, _, candidate_execution = snapshot(args, root, profile, task, uuid.uuid4().hex, allow_incomplete=True, workspace=workspace)
     with guard(root):
         state = _state(root, task['id'])
         current = read(artifact_valid(root, state['current'])) if state['current'] else None
@@ -641,7 +688,7 @@ def generate(args, root, profile, task, request):
               'binding': ref, 'recheck': bool(candidate.get('changes')), 'review_current': False,
               'progress': progress(raw, candidate),
               'summary': '复核稿已生成；预填内容均须逐项确认。' if candidate.get('changes') else '评审草稿已生成；请填写结论和理由，再提交。',
-              'next_action': 'tw team review --task ' + shlex.quote(task['id']) + ' --submit'}
+              'next_action': submission_action(root, task['id'], target.relative_to(root).as_posix())}
     if archived:
         result['archived_draft'] = archived
     if candidate.get('changes'):
@@ -673,41 +720,42 @@ def _binding(root, task_id, text, *, current_only=False):
         if ref is None:
             raise ValueError('该草稿不属于本任务')
         if current_only and ref != state['current']:
-            raise ValueError('平台评审对应的草稿不是当前本地草稿')
+            raise Invalid('平台评审绑定的是此前的草稿', error_code=Code.REVIEW_BINDING_STALE)
         return read(artifact_valid(root, ref))
     except (Invalid, ValueError, TypeError, KeyError) as exc:
-        raise ReviewError('绑定', normalized[:left].count('\n') + 1, '无法核对工具绑定：' + str(exc) + '；请重新生成复核稿。') from exc
+        raise ReviewError('绑定', normalized[:left].count('\n') + 1, '工具绑定核对有误：' + str(exc),
+                          error_code=Code.REVIEW_BINDING_STALE if getattr(exc, 'error_code', None) == Code.REVIEW_BINDING_STALE else None) from exc
 
 
-def require_current_runs(root, profile, bindings):
+def require_current_runs(root, profile, bindings, *, workspace=None):
     for key, ref in bindings['selected_runs'].items():
         record = read(artifact_valid(root, ref))
         rows = record.get('results', []) if record.get('kind') == 'execution' else [record.get('result', {})]
         row = next((row for row in rows if row.get('id') == key), None)
-        current = validation.check_binding(root, profile, profile['checks'][key], live=False)
+        current = validation.check_binding(root, profile, profile['checks'][key], live=False, workspace=workspace)
         if (row is None or not record.get('source_unchanged', row.get('source_unchanged'))
                 or not row.get('source_unchanged')
                 or any(row.get('binding', {}).get(part) != val for part, val in current.items())):
-            raise ReviewError('运行结果绑定', 1, '选中运行的源码或配置已变化，请重跑后生成复核稿。')
+            raise ReviewError('运行结果绑定', 1, '选中运行的源码或配置已变化，请重跑后生成复核稿。', error_code=Code.REVIEW_BINDING_STALE)
 
 
-def submit(args, root, profile, task, request):
+def submit(args, root, profile, task, request, *, workspace=None):
     item = getattr(args, 'platform_review', None) if getattr(args, 'from_platform', False) else None
     source = item['url'] if item else source_path(args, root, task['id'])
     try:
         raw = source_text(args, root, task['id'])
     except (OSError, UnicodeError) as exc:
-        raise ReviewError('评审文件', 1, '无法读取 Markdown：' + str(exc)) from exc
+        raise ReviewError('评审文件', 1, '无法读取 Markdown：' + str(exc), error_code=Code.REVIEW_FILE_UNREADABLE) from exc
     expected = getattr(args, 'review_source_ref', None)
     if expected and hashlib.sha256(raw.encode('utf-8')).hexdigest() != expected['sha256']:
         raise ReviewError('评审文件', 1, '读取期间 Markdown 已改变，请停止编辑后用新请求编号提交。')
     value = _binding(root, task['id'], raw, current_only=bool(item))
     sections = _sections(raw, value)
     require_rechecks(value, sections)
-    fresh, design, status, execution = snapshot(args, root, profile, task, value['bindings']['draft_id'], allow_incomplete=True)
+    fresh, design, status, execution = snapshot(args, root, profile, task, value['bindings']['draft_id'], allow_incomplete=True, workspace=workspace)
     if not _usable_draft(value, fresh):
-        raise ReviewError('绑定', 1, '任务、方案、批准状态、源码、策略、章节或运行已变化；请保留原草稿后重新生成复核稿：tw team review --task <身份>。')
-    require_current_runs(root, profile, fresh['bindings'])
+        raise ReviewError('绑定', 1, '评审绑定的任务、方案、批准状态、源码、策略、章节或运行与当前材料不同。', error_code=Code.REVIEW_BINDING_STALE)
+    require_current_runs(root, profile, fresh['bindings'], workspace=workspace)
     review = compile_review(root, value, sections)
     if item:
         review.update(platform_author=item['author'], platform_url=item['url'])
@@ -715,12 +763,10 @@ def submit(args, root, profile, task, request):
     if approval_choice not in ('', '是', '否'):
         raise ReviewError('评审信息', sections['评审信息']['line'], '批准方案与代码只能填写“是”或“否”，也可留空。')
     try:
-        delivery.check_review_format(root, profile, task, review, fresh['bindings']['sections'], design)
+        delivery.check_review_format(root, profile, task, review, fresh['bindings']['sections'], design, workspace=workspace)
     except (Invalid, ValueError, TypeError, KeyError) as exc:
         message = str(exc)
-        section = ('评审信息' if 'Reviewer' in message or 'Knowledge conflicts' in message else
-                   '规范 standards' if 'standards' in message else '需求 spec' if 'spec' in message else
-                   '问题清单' if 'issue' in message.lower() else next(('人工观察 ' + key for key in value['manual']), '验收 ' + task['acceptance'][0]['id']))
+        section = getattr(exc, 'section', None) or '验收 ' + task['acceptance'][0]['id']
         raise ReviewError(section, sections.get(section, {'line': 1})['line'], '评审核查未通过：' + message) from exc
     approved, refs = None, []
     from contracts import identity
@@ -733,7 +779,7 @@ def submit(args, root, profile, task, request):
             _value(sections, '评审信息', '批准说明', False), mode='combined',
             section_ids=status['required_sections'],
             deletion_ids=[row['id'] for row in status['deletions'] if row['required']],
-            history=[design_files.read(local(root, path)) for path in args.design_history],
+            history=[design_files.read(local(root, path), workspace=workspace) for path in args.design_history],
             code_digest=fresh['bindings']['source_digest'], run_refs=refs)
     import issue_history
     issue_history.capture(request, task, review, [row['id'] for row in design['sections']])
@@ -744,6 +790,9 @@ def submit(args, root, profile, task, request):
               'review_file': str(source), 'summary': '评审已提交；业务验收仍由 accept 核查。',
               'next_action': 'tw team deliver --task ' + shlex.quote(task['id']) + ' --reason <不需要更新知识的理由>',
               'knowledge_next_action': '要更新知识时先验收：tw team accept --task ' + shlex.quote(task['id'])}
+    result['submitted_at'] = item['updated_at'] if item else now()
+    if item:
+        result['platform_review'] = {key: item[key] for key in ('url', 'updated_at')}
     if approved is not None:
         result.update(approval=request.publish('approval.json', approved), approval_runs=refs)
     elif approval_choice == '是' and self_review:
@@ -762,7 +811,10 @@ def mark_submitted(root, task_id, result):
     original = (original_path.relative_to(root).as_posix() if original_path.is_relative_to(root) else str(original_path))
     entry = {'review': result['artifact'], 'markdown': result['review_markdown'], 'source': result['review_source'],
              'input_markdown': original if not result['review_file'].startswith(('http://', 'https://')) else None,
-             'binding': state['generations'][result['draft_id']], 'default_sha': marker}
+             'binding': state['generations'][result['draft_id']], 'default_sha': marker,
+             'submitted_at': result['submitted_at']}
+    if result.get('platform_review'):
+        entry['platform_review'] = result['platform_review']
     if result.get('approval'):
         entry['approval'] = result['approval']
     state['submitted'][result['draft_id']] = entry
@@ -793,7 +845,7 @@ def exclude_own_approval(args, root, task_id):
         return  # The normal submission path reports malformed Markdown and material errors.
 
 
-def from_run(args, root, profile, task, result, request):
+def from_run(args, root, profile, task, result, request, *, workspace=None):
     """Prepare an editable review after real execution; the review draft is a separate request."""
     selection = getattr(args, 'material_selection', None) or {}
     group = selection.get('effective') or selection.get('value')
@@ -808,14 +860,20 @@ def from_run(args, root, profile, task, result, request):
     if result['artifact'] not in refs:
         refs.append(result['artifact'])
     child_args.run = [Path(ref['path']) for ref in refs]
+    from scenario_rounds import pending_action
+    _, scenario_state = scenario_acceptance.current(root, profile, task, design_files.read(Path(root) / args.design, workspace=workspace),
+                                                   [ref['path'] for ref in refs], workspace=workspace)
     try:
-        validation.verify_runs(root, profile, task, [ref['path'] for ref in refs], live=False)
+        validation.verify_runs(root, profile, task, [ref['path'] for ref in refs], live=False, workspace=workspace)
     except Invalid as exc:
         result['review_gap'] = str(exc)
-        result['next_action'] = '补齐必需检查后提交评审：tw team run --task ' + shlex.quote(task['id'])
+        result['next_action'] = pending_action(root, task['id'])
+        return result
+    if scenario_state['summary_counts']['pending'] or scenario_state['summary_counts']['failed']:
+        result['next_action'] = pending_action(root, task['id'])
         return result
     inputs = {'command': 'review', 'task': digest(task), 'profile': digest(profile),
-              'source': validation.source_digest(root, profile), 'runs': refs,
+              'source': validation.source_digest(root, profile, workspace=workspace), 'runs': refs,
               'options': {'submit': False, 'automatic': True},
               'history': history_inputs(root, task['id'], group),
               'context': group['context'], 'approvals': group['approvals']}
@@ -826,7 +884,7 @@ def from_run(args, root, profile, task, result, request):
         reviewed = child.cached
     else:
         try:
-            reviewed = child.finish(generate(child_args, root, profile, task, child))
+            reviewed = child.finish(generate(child_args, root, profile, task, child, workspace=workspace))
         except (Invalid, OSError, ValueError, TypeError, KeyError) as exc:
             reviewed = child.finish({'ok': False, 'problem': str(exc),
                 'next_action': 'tw team review --task ' + shlex.quote(task['id'])})

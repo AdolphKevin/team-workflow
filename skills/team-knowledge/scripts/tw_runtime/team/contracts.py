@@ -2,13 +2,11 @@
 
 These checks establish declared coverage, not the truth of a reviewer's prose.
 """
+from error_codes import Code
 from common import Invalid, obj, require, strings, text
 
 LEVELS = {'unit', 'interface', 'journey', 'manual'}
 STATES = {'open', 'resolved', 'accepted', 'deferred'}
-COVERS = {'unit': {'unit', 'interface', 'journey'}, 'interface': {'interface', 'journey'}, 'journey': {'journey'}, 'manual': {'manual'}}
-AUTOMATION = {'automated': {'check', 'cases'}, 'manual-only': {'reason', 'owner', 'trigger'},
-              'pending-automation': {'reason', 'finding', 'due'}}
 
 
 def material(value):
@@ -38,13 +36,13 @@ def issue(value, section_ids=None):
         material(value[key])
     strings(value['affects'])
     if section_ids is not None and value.get('state') == 'open':
-        require(set(value['affects']) <= set(section_ids), 'Issue references an unknown section')
+        require(set(value['affects']) <= set(section_ids), 'Issue references an unknown section', section='问题清单')
     strings(value['blocks'], True)
-    require(set(value['blocks']) <= {'implementation', 'acceptance'}, 'Unknown issue blocking phase')
-    require(value['state'] in STATES, 'Unknown issue disposition')
+    require(set(value['blocks']) <= {'implementation', 'acceptance'}, 'Unknown issue blocking phase', section='问题清单')
+    require(value['state'] in STATES, 'Unknown issue disposition', section='问题清单')
     resolution = value['resolution']
     if value['state'] == 'open':
-        require(resolution == {}, 'An open issue cannot claim a resolution')
+        require(resolution == {}, 'An open issue cannot claim a resolution', section='问题清单')
     else:
         obj(resolution, {'reason', 'evidence'}, {'confirmed_by', 'confirmation', 'follow_up', 'scope_change'})
         material(resolution['reason'])
@@ -63,11 +61,11 @@ def issue(value, section_ids=None):
 
 
 def issues(values, section_ids=None):
-    require(isinstance(values, list), 'Issues must be an array')
+    require(isinstance(values, list), 'Issues must be an array', section='问题清单')
     seen = set()
     for value in values:
         issue(value, section_ids)
-        require(value['id'] not in seen, 'Duplicate issue identifier: ' + value['id'])
+        require(value['id'] not in seen, 'Duplicate issue identifier: ' + value['id'], section='问题清单')
         seen.add(value['id'])
     return values
 
@@ -85,10 +83,10 @@ def reconcile(known, current):
     issues(current)
     by_id = {v['id']: v for v in current}
     for old in known:
-        require(old['id'] in by_id, 'Known issue disappeared: ' + old['id'])
+        require(old['id'] in by_id, 'Known issue disappeared: ' + old['id'], section='问题清单')
         new = by_id[old['id']]
         require(all(old[k] == new[k] for k in ('summary', 'owner', 'affects', 'blocks')),
-                'Known issue identity or affected scope changed: ' + old['id'])
+                'Known issue identity or affected scope changed: ' + old['id'], section='问题清单')
     return current
 
 
@@ -110,33 +108,35 @@ def design(value):
     identifiers = {row['id'] for row in value['issues']}
     assessments = [value['assessment']] + [r['data']['assessment'] for r in rows.values() if r['type'] == 'task' and 'assessment' in r['data']]
     for assessment in assessments:
-        require(set(assessment['uncertainties']) <= identifiers, 'Assessment uncertainties must reference shared issue IDs')
+        require(set(assessment['uncertainties']) <= identifiers, 'Assessment uncertainties must reference shared issue IDs', section='问题清单')
     for row in rows.values():
         material(row['title']); material(row['body'])
         if row['type'] != 'acceptance':
             continue
         data = row['data']
-        require({'scenario', 'verification'} <= data.keys(), 'Acceptance needs a business scenario and verification requirements: ' + row['id'])
-        scenario = obj(data['scenario'], {'actor', 'initial_state', 'steps', 'expected', 'negative_cases'}, {'sources'})
-        for key in ('actor', 'initial_state', 'expected'):
-            material(scenario[key])
-        if 'sources' in scenario:
-            sources(scenario['sources'])
-        for key in ('steps', 'negative_cases'):
-            strings(scenario[key], True)
-            for item in scenario[key]:
-                material(item)
+        require('scenario' not in data, '场景写在场景文件，验收节用 `- 场景：<路径>#<节点>`')
+        require('scenarios' in data, '验收填写 scenarios 场景引用：' + row['id'])
+        require(isinstance(data['scenarios'], list) and bool(data['scenarios']), '验收至少引用一份场景文件')
+        for reference in data['scenarios']:
+            obj(reference, {'path', 'sha256', 'nodes'})
+            from designs import _path
+            _path(reference['path'])
+            import re
+            require(isinstance(reference['sha256'], str) and re.fullmatch(r'[a-f0-9]{64}', reference['sha256']), '场景引用填写 sha256')
+            strings(reference['nodes'], True)
+        if 'sources' in data:
+            sources(data['sources'])
+        if not data['checks']:
+            require('verification' not in data, '检查为无时省略验证；人工执行按场景逐条记录，用 tw team scenarios submit 登记')
+            continue
+        require('verification' in data, '检查非空时填写验证：自动；用例 <用例>；替身 <替身>')
         verification = data['verification']
         require(isinstance(verification, dict) and 'coverage' not in verification,
                 'verification 不再接受 coverage；验证：自动；用例 <用例>；替身 <替身>；覆盖范围写在 .tw/config.json 的 checks.<编号>.coverage')
         obj(verification, {'method', 'cases', 'substitutes'})
-        require(verification['method'] in {'automatic', 'manual'}, 'Unknown verification method')
+        require(verification['method'] == 'automatic', '人工执行按场景逐条记录，用 tw team scenarios submit 登记')
         strings(verification['cases'])
         strings(verification['substitutes'])
-        if verification['method'] == 'automatic':
-            require(bool(data['checks']), 'Automatic acceptance needs an executable check')
-        else:
-            require(not verification['cases'] and not verification['substitutes'], '人工验证不能填写用例或替身')
     for identifier in scope['requirement_acceptance']:
         require(identifier in rows and rows[identifier]['type'] == 'acceptance', 'Missing requirement acceptance section')
     strings(value['assessment']['drivers'], True)
@@ -162,7 +162,7 @@ def sources(values):
 
 def unsourced(task, plan):
     rows = {v['id']: v for v in plan['sections']}
-    return sorted(a['id'] for a in task['acceptance'] if not rows[a['id']]['data']['scenario'].get('sources'))
+    return sorted(a['id'] for a in task['acceptance'] if not rows[a['id']]['data'].get('sources'))
 
 
 def identity(value):
@@ -172,9 +172,9 @@ def identity(value):
 def independent(plan, actor, label):
     """Recorded identities must differ; the tool cannot prove two names are different people."""
     owner = plan['roles']['implementation_owner']
-    require(bool(owner.strip()), 'Acceptance needs the recorded implementation owner to check independence')
+    require(bool(owner.strip()), 'Acceptance needs the recorded implementation owner to check independence', error_code=Code.INDEPENDENCE)
     material(actor)
-    require(identity(actor) != identity(owner), label + ' must not be the implementation owner: ' + actor)
+    require(identity(actor) != identity(owner), label + ' must not be the implementation owner: ' + actor, error_code=Code.INDEPENDENCE)
 
 
 def match_coverage(required, actual):
@@ -198,10 +198,9 @@ def execution_environment(profile, task, plan):
     """Preparation is read-only: inspect declarations without running environment commands."""
     rows = {v['id']: v for v in plan['sections']}
     gaps = ['Acceptance scenario needs confirmed business sources: ' + key for key in unsourced(task, plan)]
-    requirement_acceptance = rows['scope-global']['data']['requirement_acceptance']
     for a in task['acceptance']:
-        required = rows[a['id']]['data']['verification']
-        if required['method'] == 'automatic':
+        required = rows[a['id']]['data'].get('verification')
+        if required is not None:
             checks = rows[a['id']]['data']['checks']
             for key in checks:
                 actual = profile['checks'][key].get('coverage')
@@ -215,53 +214,6 @@ def execution_environment(profile, task, plan):
                     line = '- 验证：' + verification_text({**required, 'substitutes': allowed})
                     gaps.append(f'把 {a["id"]} 的验证行改为：{line}（检查 {key} 还使用了未允许的替身：{listing(missing, outer=("；",))}）')
             names = '、'.join(checks)
-            if a['id'] in requirement_acceptance and not any(
-                    profile['checks'][key].get('coverage', {}).get('level') == 'journey' for key in checks):
-                gaps.append(f'改用 journey 层级的检查，或改为人工验收（需求级验收 {a["id"]}，检查 {names}：均未声明完整业务路径层级）')
             if required['cases'] and all(profile['checks'][key]['format'] == 'command' for key in checks):
                 gaps.append(f'删除用例，或改用报告用例的检查（验收 {a["id"]}，检查 {names}：命令型检查没有逐项用例结果）')
     return list(dict.fromkeys(gaps))
-
-
-def automation(value, task, findings, profile, execution):
-    """Declared regression state per scenario; structure and references only, not proof of protection."""
-    from datetime import date
-    obj(value, {'scenarios'})
-    require(isinstance(value['scenarios'], list) and bool(value['scenarios']), 'Automation needs declared scenarios')
-    acceptance = {a['id'] for a in task['acceptance']}
-    deferred = {f['id'] for f in findings if f['state'] == 'deferred'}
-    status, seen = {'automated': [], 'manual_only': [], 'pending_automation': []}, set()
-    for entry in value['scenarios']:
-        require(isinstance(entry, dict) and entry.get('status') in AUTOMATION, 'Unknown automation status')
-        obj(entry, {'id', 'acceptance', 'guarantee', 'status', 'level'} | AUTOMATION[entry['status']])
-        material(entry['id']); material(entry['guarantee'])
-        require(entry['id'] not in seen, 'Duplicate automation scenario: ' + entry['id'])
-        seen.add(entry['id'])
-        strings(entry['acceptance'], True)
-        require(set(entry['acceptance']) <= acceptance, 'Automation references an unknown acceptance')
-        require(entry['level'] in LEVELS, 'Unknown verification level')
-        require((entry['level'] == 'manual') == (entry['status'] == 'manual-only'),
-                'Only manual-only scenarios use the manual level')
-        if entry['status'] == 'automated':
-            key = entry['check']
-            require(key in profile['checks'] and key in execution['results'], 'Automated scenario needs an executed check: ' + key)
-            require(profile['checks'][key].get('coverage', {}).get('level') in COVERS[entry['level']],
-                    'Automated check level does not cover the declared regression level')
-            strings(entry['cases'])
-            require(all(execution['results'][key].get('cases', {}).get(c) == 'passed' for c in entry['cases']),
-                    'Automated case is missing, failed or skipped')
-            status['automated'].append({'id': entry['id'], 'acceptance': entry['acceptance'], 'level': entry['level'], 'check': key})
-        elif entry['status'] == 'manual-only':
-            for key in ('reason', 'owner', 'trigger'):
-                material(entry[key])
-            status['manual_only'].append({'id': entry['id'], 'acceptance': entry['acceptance'], 'owner': entry['owner']})
-        else:
-            material(entry['reason'])
-            require(entry['finding'] in deferred, 'Pending automation needs a deferred issue with follow-up: ' + entry['id'])
-            try:
-                date.fromisoformat(entry['due'])
-            except (TypeError, ValueError):
-                raise Invalid('Pending automation needs an ISO due date: ' + entry['id'])
-            status['pending_automation'].append({'id': entry['id'], 'acceptance': entry['acceptance'], 'level': entry['level'],
-                                                 'finding': entry['finding'], 'due': entry['due']})
-    return status

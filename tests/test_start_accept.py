@@ -31,6 +31,9 @@ class StartAccept(unittest.TestCase):
     setUp, git, check, setup_task, write, name = (base.setUp, base.git, base.check,
                                                base.setup_task, base.write, base.name)
 
+    def setup_task(self, *args, **kwargs):
+        return test_delivery.DeliveryCases.setup_task(self, *args, ready_scenarios=False, **kwargs)
+
     def command(self, *args):
         result = subprocess.run([sys.executable, str(TW), '--root', str(self.root), 'team', *args],
                                 text=True, capture_output=True)
@@ -42,7 +45,7 @@ class StartAccept(unittest.TestCase):
     def contexts(self):
         return sorted((self.root / '.tw/local/tasks').glob('*/requests/*/context.json'))
 
-    def test_first_start_creates_context_and_points_to_pending_approval(self):
+    def test_first_simple_start_creates_context_and_points_to_run(self):
         self.setup_task()
         code, result = self.start('--design', self.name('design'))
         self.assertEqual(code, 0, result)
@@ -52,10 +55,10 @@ class StartAccept(unittest.TestCase):
         self.assertEqual(result['task_directory'], str(self.contexts()[0].parent.parent.parent.relative_to(self.root)))
         self.assertTrue(result['implementation_ready'])
         self.assertEqual(result['gaps'], [])
-        self.assertEqual(result['next_step']['id'], 'approval')
-        self.assertIn('tw team approval-draft', result['next_step']['next_command'])
+        self.assertEqual(result['next_step']['id'], 'run')
+        self.assertIn('tw team run', result['next_step']['next_command'])
         self.assertIn(self.task['id'], result['next_step']['next_command'])
-        self.assertIn(self.name('design'), result['next_step']['next_command'])
+        self.assertIn('--task ' + self.task['id'], result['next_step']['next_command'])
 
     def test_same_start_continues_without_another_context(self):
         self.setup_task()
@@ -70,7 +73,7 @@ class StartAccept(unittest.TestCase):
         self.assertEqual(self.contexts(), contexts)
         self.assertNotEqual(again['brief']['path'], first['brief']['path'])
         self.assertTrue(again['brief']['path'].startswith(again['request_directory'] + '/'))
-        self.assertEqual(again['next_step']['id'], 'approval')
+        self.assertEqual(again['next_step']['id'], 'run')
         code, status = self.command('status', '--context', again['context']['path'])
         self.assertEqual(code, 0, status)
         prepared = next(row for row in status['steps'] if row['id'] == 'prepare')
@@ -116,7 +119,8 @@ class StartAccept(unittest.TestCase):
         self.assertEqual(again['context'], first['context'])
         code, refused = self.command('accept', '--task', self.task['id'])
         self.assertEqual(code, 1, refused)
-        self.assertIn('--run', refused['problem'])
+        self.assertEqual(refused['error_code'], 'review-not-submitted')
+        self.assertIn('tw team run', refused['next_action'])
 
     def test_id_only_acceptance_is_saved_and_bound_as_the_completed_task(self):
         self.setup_task()
@@ -177,6 +181,7 @@ class StartAccept(unittest.TestCase):
         ref = ran['artifact']
         self.write('approval-new', designs.approval_draft(self.design, 'carol', 'Approved actual execution',
                    code_digest=validation.source_digest(self.root, self.profile), run_refs=[ref]))
+        plans.submit_scenarios(self.root, self.task)
         code, drafted = self.command('review', '--context', context, '--run', ref['path'])
         self.assertEqual(code, 0, drafted)
         review = read(self.root / drafted['binding']['path'])['template']
@@ -184,7 +189,7 @@ class StartAccept(unittest.TestCase):
         for axis in ('standards', 'spec'):
             review[axis] = {'status': 'passed', 'summary': 'Read actual command and exact assertion', 'evidence': [ref]}
         review['acceptance'] = [{'id': 'A1', 'status': 'passed', 'summary': 'Actual addition returned 3',
-                                 'evidence': [ref], 'observations': [plans.observation(ref)]}]
+                                 'evidence': [ref], 'observations': plans.observations(self.root, ref)}]
         self.write('review-new', review)
         return context, ref
 
@@ -239,7 +244,7 @@ class StartAccept(unittest.TestCase):
         code, changed = self.start('--design', self.name('design-2'), '--design-history', self.name('design'))
         self.assertEqual(code, 0, changed)
         self.assertFalse(changed['continued'])
-        self.assertEqual(changed['next_step']['id'], 'approval')
+        self.assertEqual(changed['next_step']['id'], 'run')
         self.assertEqual(next(row for row in changed['steps'] if row['id'] == 'acceptance')['state'], 'pending')
 
     def test_accept_task_file_refuses_explicit_changes_since_start(self):
@@ -260,6 +265,7 @@ class StartAccept(unittest.TestCase):
         context = started['context']['path']
         code, ran = self.command('run', '--context', context)
         self.assertEqual(code, 0, ran)
+        plans.submit_scenarios(self.root, self.task)
         code, drafted = self.command('review', '--context', context, '--run', ran['artifact']['path'])
         self.assertEqual(code, 0, drafted)
         ref = ran['artifact']
@@ -268,7 +274,7 @@ class StartAccept(unittest.TestCase):
         for axis in ('standards', 'spec'):
             review[axis] = {'status': 'passed', 'summary': 'Read command and exact result', 'evidence': [ref]}
         review['acceptance'] = [{'id': 'A1', 'status': 'passed', 'summary': '1 + 2 returned 3',
-                                 'evidence': [ref], 'observations': [plans.observation(ref)]}]
+                                 'evidence': [ref], 'observations': plans.observations(self.root, ref)}]
         self.write('review-new', review)
         code, accepted = self.command('accept', '--task', self.task['id'], '--run', ref['path'],
                                       '--review', self.name('review-new'))
@@ -303,7 +309,7 @@ class StartAccept(unittest.TestCase):
         self.assertTrue(resumed['continued'])
         self.assertEqual(resumed['context'], first['context'])
         self.assertEqual(len(self.contexts()), 1)
-        self.assertEqual(resumed['next_step']['id'], 'approval')
+        self.assertEqual(resumed['next_step']['id'], 'run')
         code, status = self.command('status', '--context', first['context']['path'])
         self.assertEqual(code, 0, status)
         self.assertEqual(next(row for row in status['steps'] if row['id'] == 'prepare')['state'], 'done')

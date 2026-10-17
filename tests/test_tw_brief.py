@@ -340,7 +340,7 @@ class Brief(Case):
         common = make_repo(self.base, 'common', 'https://github.com/acme/common.git')
         write(common, 'protos/brand.proto', 'syntax = "proto3";\n')
         common_head = commit(common, 'init')
-        self.tw('init', '--apply', root=common)
+        self.tw('init', '--apply', '--source', 'self:protos/brand.proto', root=common)
         write(common, '.tw/overview.md', entry('公共协议', '跨服务协议。', source=['s']))
         write(common, '.tw/config.json', (common / '.tw/config.json').read_text().rstrip().rstrip('}') +
               ', "shared": {"orders": {"id": "github.com/acme/orders"}}}\n')

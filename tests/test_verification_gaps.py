@@ -39,21 +39,20 @@ class VerificationGaps(unittest.TestCase):
         self.assertTrue(result['ok'], result)
         self.assertEqual(result.get('gaps', []), [])
         gaps = result['verification_gaps']
-        self.assertEqual(len(gaps), 4, gaps)
+        self.assertEqual(len(gaps), 3, gaps)
         for gap in gaps:
             self.assertIn('A1', gap)
             self.assertIn('unit', gap)
         self.assertIn('checks.unit.coverage', gaps[0])
         self.assertIn('把 A1 的验证行改为：- 验证：自动；用例 Suite::case；替身 existing、recorder', gaps[1])
-        self.assertIn('journey', gaps[2])
-        self.assertIn('删除用例', gaps[3])
+        self.assertIn('删除用例', gaps[2])
         if result.get('pending_sections'):
             self.assertTrue(result['next_action'].startswith('tw team approval-draft '), result)
         else:
             self.assertTrue(result['next_action'].startswith(gaps[0]), result)
 
     def test_early_gaps_are_actionable_and_report_only_in_local_commands(self):
-        self.setup_task()
+        self.setup_task(ready_scenarios=False)
         self.incompatible()
         self.write('design', self.design)
         fixtures.write_config(self.root, self.profile)
@@ -89,19 +88,19 @@ class VerificationGaps(unittest.TestCase):
                     self.assert_gaps(json.loads(out))
 
     def test_missing_coverage_names_the_acceptance_and_config_fix(self):
-        self.setup_task()
+        self.setup_task(ready_scenarios=False)
         del self.profile['checks']['unit']['coverage']
         gaps = contracts.execution_environment(self.profile, self.task, self.design)
-        self.assertEqual(len(gaps), 2, gaps)
+        self.assertEqual(len(gaps), 1, gaps)
         self.assertIn('A1', gaps[0])
         self.assertIn('checks.unit.coverage', gaps[0])
-        self.assertIn('journey', gaps[1])
         manual = copy.deepcopy(self.design)
-        manual['sections'][1]['data']['verification'] = {'method': 'manual', 'cases': [], 'substitutes': []}
+        manual['sections'][1]['data'].pop('verification')
+        manual['sections'][1]['data']['checks'] = []
         self.assertEqual(contracts.execution_environment(self.profile, self.task, manual), [])
 
     def test_substitute_fix_is_paste_ready_with_list_delimiters(self):
-        self.setup_task()
+        self.setup_task(ready_scenarios=False)
         allowed, missing = '缓存、记录器', '队列；替身'
         self.design['sections'][1]['data']['verification']['substitutes'] = [allowed]
         self.profile['checks']['unit']['coverage']['substitutes'] = [missing]
@@ -109,5 +108,5 @@ class VerificationGaps(unittest.TestCase):
         fix = gap.split('改为：', 1)[1].split('（检查 ', 1)[0]
         raw = designs.render(self.design)
         line = next(line for line in raw.splitlines() if line.startswith('- 验证：'))
-        loaded = designs.load(raw.replace(line, fix))
+        loaded = designs.load(raw.replace(line, fix), scenario_reader=plans.scenario_reader)
         self.assertEqual(loaded['sections'][1]['data']['verification']['substitutes'], [allowed, missing])

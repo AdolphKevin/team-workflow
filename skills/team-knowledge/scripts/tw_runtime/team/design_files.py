@@ -6,6 +6,8 @@ from pathlib import Path
 
 from common import Invalid, require
 import designs
+from error_codes import Code, fields
+from scenario_files import FileProblems
 
 
 def path_label(path):
@@ -16,9 +18,11 @@ def path_label(path):
 
 
 class DesignReadError(Invalid):
-    def __init__(self, path, reason):
+    error_code = Code.DESIGN_INPUT
+
+    def __init__(self, path, reason, **location):
         name = path_label(path)
-        super().__init__(name + ' ' + reason)
+        super().__init__(name + ' ' + reason, **location)
         self.next_action = '修正方案文件 ' + name + ' 中指出的行，再重试原命令。'
 
 
@@ -46,8 +50,38 @@ def declares(path, design):
     return head.get('design') == design['id'] and head.get('task') == design['task_id']
 
 
-def read(path, *, internal=True):
+def scenario_reader(root, commit=None):
+    """本地方案读取工作区；提交方案读取该提交中的场景与配置。"""
+    import hashlib
+    import scenario_files
+    root = Path(root)
+    def payload(name):
+        designs._path(name)
+        if commit is None:
+            from common import inside
+            return inside(root, name).read_bytes()
+        result = _git(root, 'show', commit + ':' + name)
+        require(result.returncode == 0, '提交中的文件可读取：' + commit + ':' + name)
+        return result.stdout
+    def read_scenario(name):
+        try:
+            config = json.loads(payload('.tw/config.json').decode('utf-8'))
+            from common import acceptance_entries
+            acceptance_entries(config.get('acceptance_entries', {}), config.get('accounts', []))
+            raw = payload(name)
+            value = scenario_files.load(raw.decode('utf-8'), Path(name).suffix, config)
+            return value, hashlib.sha256(raw).hexdigest()
+        except (OSError, UnicodeError, ValueError) as exc:
+            if isinstance(exc, Invalid):
+                raise
+            raise Invalid('读取场景文件 ' + name + '：' + str(exc)) from exc
+    return read_scenario
+
+
+def read(path, *, internal=True, workspace=None, checkout=None):
     path = Path(path)
+    if workspace is not None:
+        return workspace.design(path, internal=internal)
     try:
         raw = path.read_bytes().decode('utf-8')
     except (OSError, UnicodeError) as exc:
@@ -58,12 +92,37 @@ def read(path, *, internal=True):
             local = any(parent.name == 'local' and parent.parent.name == '.tw' for parent in path.resolve().parents)
             require(internal and local, '第 1 行：JSON 方案已停用，请改写为 Markdown，格式见 references/designs.md')
             try:
-                return designs.validate_design(json.loads(raw))
+                design = designs.validate_design(json.loads(raw))
+                context_path = path.parent / 'context.json'
+                if context_path.is_file():
+                    context = json.loads(context_path.read_text(encoding='utf-8'))
+                    from tw_runtime import gitutil
+                    root = checkout or gitutil.toplevel(path.resolve().parent)
+                    if root and context.get('design', {}).get('path') == path.resolve().relative_to(root).as_posix():
+                        origin = context.get('design_source')
+                        reader = (scenario_reader(_checkout(root, origin['repository']), origin['commit']) if origin
+                                  else scenario_reader(root))
+                        from scenario_files import reference
+                        for section in design['sections']:
+                            if section['type'] == 'acceptance':
+                                section['data']['scenarios'] = [reference(ref['path'], ref['nodes'], reader)
+                                                               for ref in section['data']['scenarios']]
+                return design
             except ValueError as exc:
+                if isinstance(exc, Invalid):
+                    raise
                 raise Invalid(f'无法读取内部方案快照：{exc}') from exc
-        return designs.load(raw)
+        from tw_runtime import gitutil
+        checkout = gitutil.toplevel(path.resolve().parent) or path.resolve().parent
+        return designs.load(raw, scenario_reader=scenario_reader(checkout))
     except Invalid as exc:
-        raise DesignReadError(path, str(exc)) from exc
+        if isinstance(exc, FileProblems):
+            raise
+        error = DesignReadError(path, str(exc), **{key: value for key, value in fields(exc).items() if key != 'error_code'})
+        if internal and raw.lstrip().startswith(('{', '[')) and path.suffix == '.json':
+            error.error_code = Code.DESIGN_SNAPSHOT
+            error.next_action = '用当前格式的方案重新开工：tw team start --task <身份> --design <当前格式方案.md>'
+        raise error from exc
 
 
 def _checkout(root, repository):
@@ -118,7 +177,7 @@ def source(root, reference):
     except UnicodeError as exc:
         raise Invalid('方案原文必须是 UTF-8 Markdown') from exc
     try:
-        design = designs.load(raw)
+        design = designs.load(raw, scenario_reader=scenario_reader(checkout, commit))
     except Invalid as exc:
         error = Invalid(f'{reference["path"]} 第 {reference["revision"]} 版 ' + str(exc)
                         + '；已发布方案不可读，请用 design-draft --reconcile "<原因>" 发布对账记录，从第 1 版重新开始并重新批准')
@@ -149,8 +208,9 @@ def publication(root, path, design):
     require(result.returncode == 0 and result.stdout == path.read_bytes()
             and not gitutil.output(checkout, 'status', '--porcelain=v1', '-z', '--', name),
             '方案文件尚未提交或工作区中已修改，请先提交：' + name)
-    require(read(path, internal=False) == design, '发布文件与所选方案不同')
     raw = result.stdout.decode('utf-8')
+    committed = designs.load(raw, scenario_reader=scenario_reader(checkout, revision))
+    require(committed == design, '发布方案及其场景与源提交内容一致后继续；请先提交场景文件，再重新生成草稿')
     reference = {'id': design['id'], 'revision': design['revision'], 'repository': repository_id(checkout),
                  'path': name, 'commit': revision, 'sha256': hashlib.sha256(result.stdout).hexdigest()}
     return reference, display(raw, design, reference, root=root)

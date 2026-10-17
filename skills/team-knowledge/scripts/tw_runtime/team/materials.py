@@ -1,4 +1,5 @@
 """One explicit, content-bound material group per task; no latest-file inference."""
+from error_codes import Code
 import design_files
 from tw_runtime.team import platform_script as platform_read
 import copy
@@ -14,6 +15,8 @@ COMMANDS = {'start', 'run', 'status', 'review', 'approval-draft', 'accept', 'del
             'verify', 'handoff', 'progress', 'task-export'}
 SINGLE = ('context', 'task', 'design', 'brief', 'review', 'acceptance', 'delivery_report', 'delivery')
 OPTIONAL = ('review_markdown', 'review_source')
+OPTIONAL_ARRAY = ('case_imports', 'scenario_rounds')
+OPTIONAL_SCENARIOS = ('case_coverage',)
 ARRAY = ('design_history', 'approvals', 'runs')
 OPTIONS = {'context': 'context', 'design': 'design', 'brief': 'brief', 'design_history': 'design_history',
            'approvals': 'approval', 'runs': 'run', 'review': 'review', 'acceptance': 'acceptance',
@@ -26,15 +29,15 @@ LABELS = {'context': '准备上下文', 'task': '任务', 'design': '方案', 'b
 
 
 class MaterialGap(Invalid):
-    error_code = 'current-materials-incomplete'
+    error_code = Code.CURRENT_MATERIALS
 
-    def __init__(self, role, detail, task_id):
+    def __init__(self, role, detail, task_id, *, next_action=None):
         option = OPTIONS.get(role)
         repair = ('显式指定 --' + option.replace('_', '-') + ' <材料路径>，或' if option else '')
         self.next_action = repair + '重新开工：tw team start --task <任务文件> --design <方案文件>'
         if str(task_id).startswith(('http://', 'https://')):
             self.next_action += '；平台任务用 tw team start --issue ' + shlex.quote(task_id)
-        super().__init__(f'{LABELS.get(role, role)}（{role}）{detail}。{self.next_action}')
+        super().__init__(f'{LABELS.get(role, role)}（{role}）{detail}。', next_action=next_action)
 
 
 def path(root, task_id):
@@ -54,11 +57,11 @@ def load_snapshot(root, task_id):
         return None, None
     try:
         value = json.loads(payload.decode('utf-8'))
-        obj(value, {'data_version', 'kind', 'task_id', *SINGLE, *ARRAY}, {'platform', 'selected_runs', *OPTIONAL})
+        obj(value, {'data_version', 'kind', 'task_id', *SINGLE, *ARRAY}, {'platform', 'selected_runs', *OPTIONAL, *OPTIONAL_ARRAY, *OPTIONAL_SCENARIOS})
         if type(value['data_version']) is not int or value['data_version'] != 1 or value['kind'] != 'current-materials' or value['task_id'] != task_id:
             raise Invalid('记录类型、版本或任务身份不符')
-        for key in ARRAY:
-            if not isinstance(value[key], list):
+        for key in ARRAY + OPTIONAL_ARRAY:
+            if not isinstance(value.get(key, []), list):
                 raise Invalid(key + ' 必须是列表')
         return value, hashlib.sha256(payload).hexdigest()
     except (Invalid, OSError, UnicodeError, ValueError, TypeError, KeyError) as exc:
@@ -76,10 +79,10 @@ def validate(root, value, replaced=()):
     replaced = set(replaced)
     if 'review' in replaced:
         replaced.update(OPTIONAL)
-    for key in SINGLE + OPTIONAL + ARRAY:
+    for key in SINGLE + OPTIONAL + OPTIONAL_SCENARIOS + ARRAY + OPTIONAL_ARRAY:
         if key in replaced:
             continue
-        refs = value[key] if key in ARRAY else [value[key]] if value.get(key) is not None else []
+        refs = value.get(key, []) if key in ARRAY + OPTIONAL_ARRAY else [value[key]] if value.get(key) is not None else []
         for ref in refs:
             checked(root, ref, key, value['task_id'])
     if value.get('selected_runs') is not None and 'runs' not in replaced:
@@ -93,7 +96,7 @@ def platform_signature(value):
     return {'design': digest(value['design']), 'approvals': [digest(v) for v in value['approvals']]}
 
 
-def resolve(args, root):
+def resolve(args, root, *, workspace=None):
     """Resolve only roles consumed by this command; publication never fingerprints its own output."""
     if args.command not in COMMANDS:
         return None
@@ -142,12 +145,12 @@ def resolve(args, root):
             if field in supplied_report:
                 replaced.add(key)
     switched = bool(explicit.get('context') and artifact(root, local(root, args.context)) != value['context'])
-    defaults = initial(root, task_id, artifact(root, local(root, args.context))) if switched else value
+    defaults = initial(root, task_id, artifact(root, local(root, args.context)), previous=value) if switched else value
     snapshot.update(effective=defaults, context_switched=switched)
     snapshot['stale_roles'] = []
     validate(root, defaults, replaced)
     if args.command == 'status' and args.design and defaults.get('design'):
-        if digest(design_files.read(local(root, args.design))) != digest(design_files.read(checked(root, defaults['design'], 'design', task_id))):
+        if digest(design_files.read(local(root, args.design), workspace=workspace)) != digest(design_files.read(checked(root, defaults['design'], 'design', task_id), workspace=workspace)):
             snapshot['stale_roles'].append('design')
     if not value['context']:
         raise MaterialGap('context', '不存在；请先 start', task_id)
@@ -189,7 +192,7 @@ def resolve(args, root):
             platform = coordination.load(task_id, root=root)
         except (Invalid, OSError, ValueError, TypeError, KeyError) as exc:
             raise MaterialGap('current', '无法核对平台材料：' + str(exc), task_id) from exc
-        stored = defaults.get('platform') or {'design': digest(design_files.read(root / defaults['design']['path'])),
+        stored = defaults.get('platform') or {'design': digest(design_files.read(root / defaults['design']['path'], workspace=workspace)),
                                              'approvals': [digest(read(root / ref['path'])) for ref in defaults['approvals']]}
         fresh = platform_signature(platform)
         for role in ('design', 'approvals'):
@@ -198,7 +201,7 @@ def resolve(args, root):
                     snapshot['stale_roles'].append(role)
                 else:
                     raise MaterialGap(role, '平台材料比记录更新，须重新 start', task_id)
-        selected_design = design_files.read(local(root, args.design)) if args.design else None
+        selected_design = design_files.read(local(root, args.design), workspace=workspace) if args.design else None
         if selected_design != platform['design']:
             if args.command == 'status':
                 snapshot['stale_roles'].append('design')
@@ -215,21 +218,29 @@ def resolve(args, root):
             import designs
             status = designs.approval_status(selected_design, selected_approvals,
                 root=root, profile=load_profile(root),
-                history=[design_files.read(local(root, p)) for p in args.design_history],
-                section_ids=read(args.task)['section_ids'], changed_paths=[])
+                history=[design_files.read(local(root, p), workspace=workspace) for p in args.design_history],
+                section_ids=read(args.task)['section_ids'], changed_paths=[], workspace=workspace)
             if set(status['stale']) & set(status['required_sections']) and args.command != 'status':
                 raise MaterialGap('approvals', '所选批准已过期，不能覆盖平台当前批准', task_id)
         args.issue = task_id
     return snapshot
 
 
-def fingerprint(args, root):
+def fingerprint(args, root, *, workspace=None):
     """The resolved roles enter the same request fingerprint as explicit files."""
     from commands import local
     if not getattr(args, 'material_selection', None) or args.command == 'start':
         return None
     result = {'context': artifact(root, local(root, args.context))} if args.context else {}
     selection = args.material_selection
+    value = selection.get('effective') or selection.get('value') or {}
+    result['scenarios'] = {key: value.get(key) for key in OPTIONAL_ARRAY + OPTIONAL_SCENARIOS}
+    if getattr(args, 'design', None):
+        from scenario_acceptance import bindings, current
+        from common import load_profile
+        design = design_files.read(local(root, args.design), workspace=workspace)
+        task = read(local(root, args.task))
+        result['scenario_bindings'] = bindings(current(root, load_profile(root), task, design, workspace=workspace)[1])
     if args.command == 'review' and not args.submit:
         import reviews
         result['review_history'] = reviews.history_inputs(root, selection['task_id'], selection.get('effective') or selection['value'])
@@ -247,7 +258,7 @@ def fingerprint(args, root):
     return result
 
 
-def initial(root, task_id, context_ref, platform=None):
+def initial(root, task_id, context_ref, platform=None, *, previous=None):
     context = read(checked(root, context_ref, 'context', task_id))
     value = {'data_version': 1, 'kind': 'current-materials', 'task_id': task_id, 'selected_runs': None,
              'review_markdown': None,
@@ -256,6 +267,8 @@ def initial(root, task_id, context_ref, platform=None):
     value.update(context=context_ref, **{key: context[key] for key in ('task', 'design', 'brief', 'approvals', 'design_history')})
     if platform:
         value['platform'] = platform_signature(platform)
+    if previous:
+        value.update({key: previous[key] for key in OPTIONAL_ARRAY + OPTIONAL_SCENARIOS if key in previous})
     return value
 
 
@@ -270,8 +283,8 @@ def report_matches(args, root, report):
         refs = value.get('selected_runs') if key == 'runs' and value.get('selected_runs') is not None else value[key]
         expected = [r['path'] for r in refs] if key in ARRAY else refs['path'] if refs else None
         if report.get(field, [] if key in ARRAY else None) != expected:
-            raise MaterialGap('delivery_report', '引用的 ' + key + ' 与当前组不同；请运行 tw team delivery-template --task '
-                              + shlex.quote(value['task_id']), value['task_id'])
+            raise MaterialGap('delivery_report', '引用的 ' + key + ' 与当前组不同', value['task_id'],
+                              next_action='按当前材料生成交付报告：tw team delivery-template --task ' + shlex.quote(value['task_id']))
 
 
 def select_runs(value, refs):
@@ -279,6 +292,25 @@ def select_runs(value, refs):
         if ref not in value['runs']:
             value['runs'].append(ref)
     value['selected_runs'] = refs
+
+
+def select_review(root, value, ref, approval=None):
+    """评审携带自己的合并批准；方案批准继续保留。"""
+    from checklist import records
+    previous = value.get('review')
+    if previous != ref:
+        for _, response in records(root, value['task_id']):
+            if response and response.get('artifact') == previous and response.get('review_submitted'):
+                old = response.get('approval')
+                value['approvals'] = [item for item in value['approvals'] if item != old]
+        value['review_markdown'] = None
+        value['review_source'] = None
+    if approval is None:
+        approval = next((response.get('approval') for _, response in records(root, value['task_id'])
+                         if response and response.get('artifact') == ref and response.get('review_submitted')), None)
+    value['review'] = ref
+    if approval and approval not in value['approvals']:
+        value['approvals'].append(approval)
 
 
 def apply_explicit(args, root, value):
@@ -291,24 +323,22 @@ def apply_explicit(args, root, value):
         refs = [artifact(root, local(root, v)) for v in raw] if key in ARRAY else artifact(root, local(root, raw))
         if key == 'runs':
             select_runs(value, refs)
+        elif key == 'review':
+            select_review(root, value, refs)
         else:
-            if key == 'review' and refs != value.get('review'):
-                value['review_markdown'] = None
-                value['review_source'] = None
             value[key] = refs
 
 
 def capture_report(root, value, report):
     from commands import local
-    for key, field in [('design', 'design'), ('brief', 'brief'), ('review', 'review'), ('acceptance', 'acceptance')]:
+    for key, field in [('design', 'design'), ('brief', 'brief'), ('acceptance', 'acceptance')]:
         if report.get(field):
             ref = artifact(root, local(root, report[field]))
-            if key == 'review' and ref != value.get('review'):
-                value['review_markdown'] = None
-                value['review_source'] = None
             value[key] = ref
     for key in ('approvals', 'design_history'):
         value[key] = [artifact(root, local(root, p)) for p in report.get(key, [])]
+    if report.get('review'):
+        select_review(root, value, artifact(root, local(root, report['review'])))
     select_runs(value, [artifact(root, local(root, p)) for p in report['runs']])
 
 
@@ -332,6 +362,7 @@ def record_status(args, root, result):
         return result
     from cleanup import guard
     from commands import local
+
     with guard(root):
         target = path(root, selection['task_id'])
         if sha(target) != selection['token']:
@@ -347,13 +378,24 @@ def record_status(args, root, result):
     return result
 
 
-def finish(args, root, task, result, request):
+def finish(args, root, task, result, request, *, workspace=None):
     """CAS for start, merge concurrent runs, and publish under the cleanup maintenance lock."""
     selection = getattr(args, 'material_selection', None)
     if not selection or not (result.get('ok') or args.command == 'run' and result.get('artifact')):
         return request.finish(result)
     from cleanup import guard
     from commands import local
+    def finish_start():
+        if args.command == 'start':
+            from commands import current_status
+            progress = current_status(root, task['id'], (read(request.directory / 'request.json'), result), workspace=workspace)
+            for key in ('steps', 'next_step', 'step_lines', 'pending_sections'):
+                if key in progress:
+                    result[key] = progress[key]
+            if result.get('ok') and not result.get('validation_active'):
+                result['next_action'] = progress['next_action']
+        return request.finish(result)
+
     with guard(root):
         target = path(root, task['id'])
         latest, token = load_snapshot(root, task['id'])
@@ -361,8 +403,8 @@ def finish(args, root, task, result, request):
             if token != selection['token']:
                 raise MaterialGap('current', '另一个 start 同时改变了材料组，本次未写入；换请求编号重试', task['id'])
             if result['continued'] and latest:
-                return request.finish(result)
-            updated = initial(root, task['id'], result['context'], args.start_selection['platform'])
+                return finish_start()
+            updated = initial(root, task['id'], result['context'], args.start_selection['platform'], previous=latest)
         elif latest:
             if latest['context'] != selection['value']['context']:
                 raise MaterialGap('context', '另一个 start 已取代本次上下文，请重新 start', task['id'])
@@ -375,12 +417,10 @@ def finish(args, root, task, result, request):
                     updated['runs'].append(result['artifact'])
                 updated['selected_runs'] = None
             elif args.command == 'review' and result.get('review_submitted'):
-                updated['review'] = result['artifact']
+                select_review(root, updated, result['artifact'], result.get('approval'))
                 updated['review_markdown'] = result['review_markdown']
                 updated['review_source'] = result['review_source']
                 if result.get('approval'):
-                    updated['approvals'] = [ref for ref in updated['approvals'] if ref['sha256'] != result['approval']['sha256']]
-                    updated['approvals'].append(result['approval'])
                     select_runs(updated, result['approval_runs'])
             elif args.command == 'accept':
                 accepted = read(root / result['artifact']['path'])
@@ -408,7 +448,7 @@ def finish(args, root, task, result, request):
                 editor_before = read(editor_path)
                 reviews.mark_submitted(root, task['id'], result)
             write(target, updated)
-            return request.finish(result)
+            return finish_start()
         except BaseException:
             if editor_before is not None:
                 write(editor_path, editor_before)

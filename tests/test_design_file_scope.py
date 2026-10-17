@@ -68,3 +68,38 @@ class DesignFileScope(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class ScenarioMaterialScope(unittest.TestCase):
+    base = DesignFileScope
+    setUp, git, check, configure, command, run_checks, submit = (
+        base.setUp, base.git, base.check, base.configure, base.command, base.run_checks, base.submit)
+    current_path, draft_path, current, field, completed, start_with_committed_design = (
+        base.current_path, base.draft_path, base.current, base.field, base.completed, base.start_with_committed_design)
+    def test_only_scenario_file_change_has_no_out_of_scope_files_in_acceptance(self):
+        self.start_with_committed_design()
+        from common import read
+        import json
+        path = self.root / 'tests/fixtures/scenarios.json'
+        scenarios = read(path)
+        scenarios['sops'][0]['scenarios'][0]['expected'] = ['已确认的新预期']
+        path.write_text(json.dumps(scenarios, ensure_ascii=False))
+        # 以当前场景内容重新批准，再从真实 accept 入口核对范围报告。
+        import design_files
+        self.design = design_files.read(self.root / 'docs/design.md')
+        write(self.root / '.tw/local/scenario-approval.json',
+              designs.approval_draft(self.design, 'carol', '已确认当前场景', mode='design'))
+        code, started = self.command('start', '--task', '.tw/local/task.json', '--design', 'docs/design.md',
+                                     '--approval', '.tw/local/scenario-approval.json')
+        self.assertEqual(code, 0, started)
+        self.run_checks()
+        self.assertEqual(self.submit()[0], 0)
+        code, result = self.command('accept', '--task', self.task['id'])
+        self.assertEqual(code, 0, result)
+        self.assertTrue(result['business_accepted'])
+        report = read(self.root / result['artifact']['path'])
+        self.assertTrue(report['business_accepted'])
+        self.assertNotIn('不在任务范围', str(report))
+        code, status = self.command('status', '--task', self.task['id'])
+        self.assertEqual(code, 0, status)
+        self.assertEqual(status['scope']['unmapped'], [])

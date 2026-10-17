@@ -2,9 +2,12 @@
 import copy
 
 from common import Invalid, obj, require, text
+from error_codes import Code
 
 
 class WrittenTaskError(Invalid):
+    error_code = Code.TASK_INPUT
+
     def __init__(self, identifier, fields, source=None):
         location = f'任务 {source} 的验收项' if source else '任务的验收项'
         names = '、'.join(fields)

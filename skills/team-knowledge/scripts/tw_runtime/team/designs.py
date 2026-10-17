@@ -1,8 +1,9 @@
-"""Pure versioned design contracts, section fingerprints and review accounting.
+"""方案结构、章节指纹与批准核对。
 
-Callers own history, artifact reads, code enumeration and platform publication.
-This module never reads a file, changes an input, or interprets prose as consent.
+本模块处理传入的数据。文件读取、平台访问和原文选择由调用方负责；
+Markdown 载入所需的场景数据通过必填的 scenario_reader 提供。
 """
+from error_codes import Code
 import hashlib
 import json
 import math
@@ -19,10 +20,10 @@ IDENTIFIER = re.compile(r'[A-Za-z0-9][A-Za-z0-9._-]{0,127}')
 SHA256 = re.compile(r'[0-9a-f]{64}')
 
 
-def load(text):
-    """Parse the human-authored Markdown source into the unchanged design value."""
+def load(text, *, scenario_reader):
+    """读取 Markdown 方案，核对场景引用并记录场景文件指纹。"""
     from design_markdown import load as parse
-    return parse(text)
+    return parse(text, scenario_reader=scenario_reader)
 
 
 def render(design):
@@ -59,7 +60,7 @@ def _hash(value):
 
 def _identifier(value):
     text(value)
-    require(IDENTIFIER.fullmatch(value) is not None, 'Invalid section identifier: ' + value)
+    require(IDENTIFIER.fullmatch(value) is not None, 'Invalid section identifier: ' + value, key=value)
 
 
 def _path(value):
@@ -90,12 +91,12 @@ def _ancestors(graph):
     result, visiting = {}, set()
 
     def visit(identifier):
-        require(identifier not in visiting, 'Dependency cycle at section: ' + identifier)
+        require(identifier not in visiting, 'Dependency cycle at section: ' + identifier, key=identifier)
         if identifier not in result:
             visiting.add(identifier)
             found = set(graph[identifier])
             for dependency in graph[identifier]:
-                require(dependency in graph, 'Missing section reference: ' + dependency)
+                require(dependency in graph, 'Missing section reference: ' + dependency, key=dependency)
                 found.update(visit(dependency))
             visiting.remove(identifier)
             result[identifier] = found
@@ -108,7 +109,7 @@ def _ancestors(graph):
 
 def validate_assessment(assessment):
     obj(assessment, {'complexity', 'risks', 'effort', 'drivers', 'uncertainties', 'required_skills'})
-    require(assessment['complexity'] in ('simple', 'medium', 'complex'), 'Invalid design complexity')
+    require(assessment['complexity'] in ('simple', 'medium', 'complex'), '复杂度 complexity 取 simple、medium、complex')
     text(assessment['effort'])
     for key in ('risks', 'drivers', 'uncertainties', 'required_skills'):
         strings(assessment[key])
@@ -134,7 +135,7 @@ def validate_design(design):
     validate_assessment(design['assessment'])
     roles = obj(design['roles'], {'design_owner', 'implementation_owner', 'acceptance_owner'})
     for value in roles.values():
-        require(isinstance(value, str), 'Role assignments must be text; use empty text for unassigned')
+        require(isinstance(value, str), 'Role assignments must be text; use empty text for unassigned', key='roles')
         if value:
             text(value)
     require(isinstance(design['sections'], list) and bool(design['sections']), 'Design needs sections')
@@ -142,7 +143,7 @@ def validate_design(design):
     for row in design['sections']:
         obj(row, {'id', 'type', 'title', 'body', 'data', 'depends_on'})
         _identifier(row['id'])
-        require(row['id'] not in identifiers, 'Duplicate section: ' + row['id'])
+        require(row['id'] not in identifiers, 'Duplicate section: ' + row['id'], key=row['id'])
         identifiers.add(row['id'])
         require(isinstance(row['type'], str) and row['type'] in SECTION_TYPES, 'Unknown section type: ' + str(row['type']))
         text(row['title'])
@@ -172,10 +173,10 @@ def validate_design(design):
             continue
         for identifier in row['data']['acceptance']:
             require(identifier in rows and rows[identifier]['type'] == 'acceptance',
-                    'Task acceptance must reference an acceptance section: ' + identifier)
+                    'Task acceptance must reference an acceptance section: ' + identifier, key=identifier)
         for identifier in row['data']['blocked_by']:
             require(identifier in rows and rows[identifier]['type'] == 'task',
-                    'Execution dependency must reference a task section: ' + identifier)
+                    'Execution dependency must reference a task section: ' + identifier, key=identifier)
     _ancestors(_dependencies(design))
     _ancestors({row['id']: set(row['data']['blocked_by']) for row in rows.values() if row['type'] == 'task'})
     from contracts import design as validate_business
@@ -337,14 +338,14 @@ def approval_draft(design, reviewer, confirmation='', decision='approved', secti
     validate_design(design)
     text(reviewer)
     require(isinstance(confirmation, str), 'Confirmation must be text; leave it empty when there is none')
-    require(isinstance(decision, str) and decision in DECISIONS, 'Invalid approval decision')
+    require(isinstance(decision, str) and decision in DECISIONS, 'Invalid approval decision', error_code=Code.APPROVAL_INCOMPLETE)
     mode = mode or ('combined' if code_digest is not None or run_refs is not None else 'design')
     require(isinstance(mode, str) and mode in {'design', 'combined'}, 'Review mode must be design or combined')
     hashes = fingerprints(design)['sections']
     identifiers = sorted(hashes) if section_ids is None else list(section_ids)
     strings(identifiers)
     unknown = [key for key in dict.fromkeys(identifiers) if key not in hashes]
-    require(not unknown, '批准范围包含不存在的章节：' + '、'.join(unknown))
+    require(not unknown, '批准范围包含不存在的章节：' + '、'.join(unknown), error_code=Code.APPROVAL_INCOMPLETE)
     _, transitions, _ = _history(design, previous, history)
     deletions = [row for change in transitions for row in change['deletions']]
     if deletion_ids is None:
@@ -376,38 +377,38 @@ def approval_draft(design, reviewer, confirmation='', decision='approved', secti
 
 def _approval_revision(value):
     require(isinstance(value, str) and re.fullmatch(r'[0-9a-fA-F]{40}|[0-9a-fA-F]{64}', value) is not None,
-            '批准 revision 必须是 40 或 64 位十六进制完整提交号')
+            '批准 revision 必须是 40 或 64 位十六进制完整提交号', error_code=Code.APPROVAL_INCOMPLETE)
 
 
 def _validate_approval(row):
     obj(row, {'data_version', 'kind', 'fingerprint_version', 'design_id', 'task_id', 'design_revision',
               'assessment_hash', 'reviewer', 'confirmation', 'decision', 'mode', 'sections', 'deletions'},
-        {'code_digest', 'run_refs', 'revision'})
+        {'code_digest', 'run_refs', 'revision'}, error_code=Code.APPROVAL_INCOMPLETE)
     if 'revision' in row:
         _approval_revision(row['revision'])
     require(type(row['data_version']) is int and row['data_version'] == SCHEMA_VERSION
-            and row['kind'] == 'approval', 'Expected a data_version 1 approval')
+            and row['kind'] == 'approval', 'Expected a data_version 1 approval', error_code=Code.APPROVAL_INCOMPLETE)
     require(type(row['fingerprint_version']) is int and row['fingerprint_version'] == FINGERPRINT_VERSION,
             'Unsupported fingerprint version; review again using the current format')
     for key in ('design_id', 'task_id', 'reviewer'):
         text(row[key])
-    require(isinstance(row['confirmation'], str), 'Approval confirmation must be text')
-    require(type(row['design_revision']) is int and row['design_revision'] > 0, 'Invalid approval design revision')
-    require(isinstance(row['decision'], str) and row['decision'] in DECISIONS, 'Invalid approval decision')
-    require(isinstance(row['mode'], str) and row['mode'] in {'design', 'combined'}, 'Invalid approval mode')
+    require(isinstance(row['confirmation'], str), 'Approval confirmation must be text', error_code=Code.APPROVAL_INCOMPLETE)
+    require(type(row['design_revision']) is int and row['design_revision'] > 0, 'Invalid approval design revision', error_code=Code.APPROVAL_INCOMPLETE)
+    require(isinstance(row['decision'], str) and row['decision'] in DECISIONS, 'Invalid approval decision', error_code=Code.APPROVAL_INCOMPLETE)
+    require(isinstance(row['mode'], str) and row['mode'] in {'design', 'combined'}, 'Invalid approval mode', error_code=Code.APPROVAL_INCOMPLETE)
     require(isinstance(row['sections'], dict) and isinstance(row['deletions'], list),
-            'Approval needs explicit section and deletion records')
-    require(bool(row['sections']) or bool(row['deletions']), 'Empty approval')
+            'Approval needs explicit section and deletion records', error_code=Code.APPROVAL_INCOMPLETE)
+    require(bool(row['sections']) or bool(row['deletions']), 'Empty approval', error_code=Code.APPROVAL_INCOMPLETE)
     require(isinstance(row['assessment_hash'], str) and SHA256.fullmatch(row['assessment_hash']) is not None,
             'Invalid assessment fingerprint')
     for key, value in row['sections'].items():
         _identifier(key)
-        obj(value, {'own', 'effective'})
+        obj(value, {'own', 'effective'}, error_code=Code.APPROVAL_INCOMPLETE)
         for digest in value.values():
             require(isinstance(digest, str) and SHA256.fullmatch(digest) is not None, 'Invalid section fingerprint')
     seen = set()
     for value in row['deletions']:
-        obj(value, {'id', 'own', 'effective', 'previous_revision', 'removed_in_revision'})
+        obj(value, {'id', 'own', 'effective', 'previous_revision', 'removed_in_revision'}, error_code=Code.APPROVAL_INCOMPLETE)
         _identifier(value['id'])
         for key in ('own', 'effective'):
             require(isinstance(value[key], str) and SHA256.fullmatch(value[key]) is not None, 'Invalid deletion fingerprint')
@@ -470,13 +471,13 @@ def pending_sections(design, status, history=()):
     return sorted(result, key=lambda row: order.index(row['id']))
 
 
-def approval_selection(design, approvals, task_sections, history, value, *, root=None, profile=None):
+def approval_selection(design, approvals, task_sections, history, value, *, root=None, profile=None, workspace=None):
     """Select defaults from current consent; explicit IDs retain explicit deletion semantics."""
     result = dict(value)
     mode = result.get('mode', 'combined' if result.get('code_digest') is not None else 'design')
     status = approval_status(design, approvals, history=history, section_ids=task_sections,
                              code_digest=result.get('code_digest'), run_refs=result.get('run_refs'),
-                             root=root, profile=profile)
+                             root=root, profile=profile, workspace=workspace)
     required = set(status['required_sections'])
     pending_deletions = {row['id'] for row in status['deletions'] if row['state'] != 'approved'}
     if 'section_ids' in result:
@@ -486,7 +487,7 @@ def approval_selection(design, approvals, task_sections, history, value, *, root
         strings(selected)
         current = set(status['sections'])
         unknown = [key for key in dict.fromkeys(selected) if key not in current | pending_deletions]
-        require(not unknown, '批准范围包含不存在的章节：' + '、'.join(unknown))
+        require(not unknown, '批准范围包含不存在的章节：' + '、'.join(unknown), error_code=Code.APPROVAL_INCOMPLETE)
         result['section_ids'] = [key for key in selected if key in current]
         result.setdefault('deletion_ids', [key for key in selected if key in pending_deletions])
     else:
@@ -505,10 +506,10 @@ def approval_selection(design, approvals, task_sections, history, value, *, root
 
 def approval_status(design, approvals, previous=None, changed_paths=None, code_digest=None,
                     run_refs=None, completed_tasks=(), *, history=None, section_ids=None, selected_run_refs=None,
-                    root=None, profile=None):
+                    root=None, profile=None, workspace=None):
     """Evaluate oldest-to-newest reviews; missing history or mapping never implies success."""
     validate_design(design)
-    require(isinstance(approvals, list), 'Approvals must be an oldest-to-newest list')
+    require(isinstance(approvals, list), 'Approvals must be an oldest-to-newest list', error_code=Code.APPROVAL_INCOMPLETE)
     chain, transitions, history_complete = _history(design, previous, history)
     snapshots = {value['revision']: value for value in chain}
     current = fingerprints(design)['sections']
@@ -528,7 +529,7 @@ def approval_status(design, approvals, previous=None, changed_paths=None, code_d
             deletion_impact[(row['id'], row['removed_in_revision'])] = _closure(
                 [_dependencies(before), _dependencies(after)], {row['id']})
     scope = scope_coverage(design, changed_paths)
-    valid, gaps = [], []
+    valid, gaps, diagnoses = [], [], []
     revisions = {}
     for index, row in enumerate(approvals):
         try:
@@ -538,21 +539,23 @@ def approval_status(design, approvals, previous=None, changed_paths=None, code_d
                 import validation
                 revision = row['revision']
                 if revision not in revisions:
-                    revisions[revision] = validation.source_digest(root, profile, revision=revision)
-                require(revisions[revision] == row['code_digest'], '批准的提交与绑定的源码不一致')
+                    revisions[revision] = validation.source_digest(root, profile, revision=revision, workspace=workspace)
+                require(revisions[revision] == row['code_digest'], '批准的提交与绑定的源码不一致', error_code=Code.APPROVAL_INCOMPLETE)
             require(row['design_id'] == design['id'] and row['task_id'] == design['task_id'],
-                    'Approval belongs to another design or task')
-            require(row['design_revision'] in snapshots, 'Missing design snapshot for approval revision')
+                    'Approval belongs to another design or task', error_code=Code.APPROVAL_INCOMPLETE)
+            require(row['design_revision'] in snapshots, 'Missing design snapshot for approval revision',
+                    error_code=Code.DESIGN_HISTORY if row['design_revision'] < design['revision'] else Code.APPROVAL_INCOMPLETE)
             source = snapshots[row['design_revision']]
             source_hashes = fingerprints(source)['sections']
-            require(row['assessment_hash'] == _hash(source['assessment']), 'Approval assessment differs from its revision')
+            require(row['assessment_hash'] == _hash(source['assessment']), 'Approval assessment differs from its revision', error_code=Code.APPROVAL_INCOMPLETE)
             require(all(key in source_hashes and value == source_hashes[key] for key, value in row['sections'].items()),
-                    'Approval fingerprints differ from their design revision')
+                    'Approval fingerprints differ from their design revision', error_code=Code.APPROVAL_INCOMPLETE)
             require(all(deletion_by_key.get((value['id'], value['removed_in_revision'])) == value
-                        for value in row['deletions']), 'Approval deletion differs from design history')
+                        for value in row['deletions']), 'Approval deletion differs from design history', error_code=Code.APPROVAL_INCOMPLETE)
             valid.append(row)
         except (Invalid, TypeError, KeyError) as exc:
             gaps.append(f'Approval {index + 1}: {exc}')
+            diagnoses.append({'error_code': getattr(exc, 'error_code', Code.INVALID), 'problem': gaps[-1]})
     sections = {}
     combined = []
     current_runs = _run_refs(run_refs) if run_refs is not None else None
@@ -654,7 +657,11 @@ def approval_status(design, approvals, previous=None, changed_paths=None, code_d
     acceptance_ready = (fully_approved and combined_complete and not required_pending and assigned
                         and scope['complete'] and all(not tasks[key]['waiting_for_tasks'] for key in required_tasks))
     affected = set(transitions[-1]['affected']) & required if transitions else set()
+    recovery = next((code for code in (Code.APPROVAL_COMMIT, Code.APPROVAL_SOURCE, Code.DESIGN_HISTORY)
+                     if any(row['error_code'] == code for row in diagnoses)), None)
     return {'data_version': SCHEMA_VERSION, 'kind': 'design-approval-status', 'ok': not gaps,
+            **({'gap_errors': diagnoses} if diagnoses else {}),
+            **({'error_code': recovery} if recovery else {}),
             'fingerprint_version': FINGERPRINT_VERSION, 'design_id': design['id'], 'revision': design['revision'],
             'history_complete': history_complete, 'review_mode': 'combined' if simple else 'mixed' if required_tasks & simple_tasks else 'design-first',
             'task_assessments': assessments,

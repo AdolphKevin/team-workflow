@@ -1,5 +1,5 @@
 # 批次 0：合并重构阶段 2（合并与团队衔接）的 SOP 场景
-# 格式见 docs/proposals/2026-10-14-sop-retest-trust.md 第 3.1 节。
+# 格式见 docs/proposals/2026-10-16-scenario-acceptance-and-positive-text.md 第 2.1 节。
 # 预期结果只依据已批准的重构方案，不依据当前实现的输出。
 # 版本 2（2026-10-14）：按批次 0 第一轮提出的场景问题修订 SOP-02-P01（Q1）、SOP-04-N02（Q2）；
 # 按方案 v4.1 修订的 T1 改写 SOP-05。
@@ -34,7 +34,6 @@ sops:
         priority: P0
         refs: ["M5", "C"]
         verify: cli
-        layer: local
         initial_state:
           - "在干净的 HOME 下按 docs/install.md 安装 team-workflow 和 team-knowledge"
         steps:
@@ -54,7 +53,6 @@ sops:
         priority: P1
         refs: ["M5"]
         verify: cli
-        layer: local
         initial_state:
           - "完成 SOP-01-P01 的安装"
           - "手工修改已安装 team-workflow 技能中的一个文件"
@@ -75,7 +73,6 @@ sops:
         priority: P1
         refs: ["T6"]
         verify: cli
-        layer: local
         initial_state:
           - "完成 SOP-01-P01 的安装"
           - "在同一 HOME 的技能目录中另装一份旧的 cs 技能"
@@ -104,7 +101,6 @@ sops:
         priority: P0
         refs: ["L1", "T2"]
         verify: cli
-        layer: local
         initial_state:
           - "一个设置了 git remote、没有任何 tw 文件的新仓库"
         steps:
@@ -132,7 +128,6 @@ sops:
         priority: P0
         refs: ["L2"]
         verify: cli
-        layer: local
         initial_state:
           - "完成 SOP-02-P01"
           - "用 git add -f 跟踪 .tw/local/ 下的一个文件"
@@ -154,7 +149,6 @@ sops:
         priority: P1
         refs: ["L2"]
         verify: cli
-        layer: local
         initial_state:
           - "完成 SOP-02-P01"
           - "在根 .gitignore 加入 .tw/"
@@ -174,7 +168,6 @@ sops:
         priority: P1
         refs: ["L2"]
         verify: cli
-        layer: local
         initial_state:
           - "完成 SOP-02-P01"
           - "删除 .tw/.gitignore 中的 local/ 一行"
@@ -196,7 +189,6 @@ sops:
         priority: P2
         refs: ["L1"]
         verify: cli
-        layer: local
         initial_state:
           - "仓库中已有 .tw/config.json，其 format 不是 channelwill/team-workflow"
         steps:
@@ -223,7 +215,6 @@ sops:
         priority: P0
         refs: ["T4", "T6"]
         verify: cli
-        layer: local
         initial_state:
           - "按 SOP-02-P01 初始化的项目，本机没有安装 cs 技能"
         steps:
@@ -243,7 +234,6 @@ sops:
         priority: P0
         refs: ["T6", "B"]
         verify: cli
-        layer: local
         initial_state:
           - "已初始化的项目中另外存在 .codestable/ 或 .team-workflow.json"
         steps:
@@ -262,7 +252,6 @@ sops:
         priority: P1
         refs: ["T6"]
         verify: cli
-        layer: local
         initial_state:
           - "按 SOP-02-P01 初始化的项目"
         steps:
@@ -289,7 +278,6 @@ sops:
         priority: P0
         refs: ["T3", "V1"]
         verify: cli
-        layer: local
         initial_state:
           - "项目配置了一个按内容绑定的检查，并已通过 tw team run 取得通过结果"
         steps:
@@ -307,7 +295,6 @@ sops:
         priority: P1
         refs: ["T3"]
         verify: cli
-        layer: local
         initial_state:
           - "同 SOP-04-P01"
         steps:
@@ -326,7 +313,6 @@ sops:
         priority: P0
         refs: ["T3"]
         verify: cli
-        layer: local
         initial_state:
           - "同 SOP-04-P01"
         steps:
@@ -345,7 +331,6 @@ sops:
         priority: P1
         refs: ["T3", "L1"]
         verify: cli
-        layer: local
         initial_state:
           - "项目配置的 inputs（项目级，见方案 L1）显式声明了一个知识文件；按内容绑定的检查已取得通过结果"
         steps:
@@ -367,7 +352,6 @@ sops:
         priority: P1
         refs: ["T3"]
         verify: cli
-        layer: local
         initial_state:
           - "项目配置了一个 revision_sensitive 检查，并已取得通过结果"
         steps:
@@ -386,7 +370,6 @@ sops:
         priority: P1
         refs: ["T3"]
         verify: cli
-        layer: local
         initial_state:
           - "项目配置了检查 A 和 B，两者都已取得通过结果"
         steps:
@@ -413,7 +396,6 @@ sops:
         priority: P0
         refs: ["T1"]
         verify: cli
-        layer: local
         initial_state:
           - "按 SOP-02-P01 初始化的项目，准备一份新任务，任务记录的 id 由创建者给定"
         steps:
@@ -433,7 +415,6 @@ sops:
         priority: P0
         refs: ["T1"]
         verify: cli
-        layer: local
         initial_state:
           - "完成 SOP-05-P01，任务进行到一半"
         steps:
@@ -452,7 +433,6 @@ sops:
         priority: P1
         refs: ["T1"]
         verify: cli
-        layer: local
         initial_state:
           - "两个任务由同一次实现完成，共用一份方案（可用两个本地任务代替两个 Issue）"
         steps:
@@ -473,7 +453,6 @@ sops:
         priority: P1
         refs: ["T1"]
         verify: cli
-        layer: local
         initial_state:
           - "完成 SOP-05-P01"
         steps:
@@ -492,7 +471,6 @@ sops:
         priority: P2
         refs: ["T1"]
         verify: cli
-        layer: local
         initial_state:
           - "一个任务的主仓为 A，参与仓为 B"
         steps:
@@ -519,7 +497,6 @@ sops:
         priority: P0
         refs: ["T4"]
         verify: cli
-        layer: local
         initial_state:
           - "本分支改动了一条 lesson，tw check 通过，其余交付材料齐全"
         steps:
@@ -536,7 +513,6 @@ sops:
         priority: P1
         refs: ["T4"]
         verify: cli
-        layer: local
         initial_state:
           - "本分支没有改动知识，交付报告中写明了不需要改知识的理由"
         steps:
@@ -554,7 +530,6 @@ sops:
         priority: P0
         refs: ["T4"]
         verify: cli
-        layer: local
         initial_state:
           - "本分支没有改动知识，交付报告中也没有写理由"
         steps:
@@ -572,7 +547,6 @@ sops:
         priority: P1
         refs: ["T4"]
         verify: cli
-        layer: local
         initial_state:
           - "本分支改动的 lesson 中残留占位符，tw check 失败"
         steps:
@@ -598,7 +572,6 @@ sops:
         priority: P0
         refs: ["I 阶段 2"]
         verify: cli
-        layer: local
         initial_state:
           - "本仓已按新布局初始化，选定一个真实的小任务"
         steps:
@@ -616,7 +589,6 @@ sops:
         priority: P0
         refs: ["I 阶段 2"]
         verify: cli
-        layer: local
         initial_state:
           - "live-chat 仓库已按新布局初始化，并有一个 worktree"
         steps:
@@ -635,7 +607,6 @@ sops:
         priority: P1
         refs: ["L2"]
         verify: cli
-        layer: local
         initial_state:
           - "同一仓库有两个 worktree A 和 B"
         steps:

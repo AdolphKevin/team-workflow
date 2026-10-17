@@ -29,6 +29,7 @@ def configuration(root, profile):
             'context': list(profile['context']), 'shared': {}, 'documents': [],
             **{key: profile[key] for key in ('checks', 'required_checks', 'risk_checks', 'inputs',
                                           'external_inputs', 'environment_versions', 'accounts')},
+            'acceptance_entries': profile.get('acceptance_entries', {'cli': {'surface': 'cli', 'operate': '运行命令', 'observe': ['输出'], 'evidence': ['输出'], 'isolation': '临时目录'}}),
             **({'platform': profile['platform']} if 'platform' in profile else {})}
 
 
@@ -51,6 +52,10 @@ class WorkflowCases(unittest.TestCase):
         (self.root / '.gitignore').write_text('__pycache__/\n')
         (self.root / 'AGENTS.md').write_text('Respect the public behavior.\n')
         (self.root / 'app.py').write_text('def add(a, b):\n    return a+b\n')
+        import shutil
+        scenario = self.root / 'tests/fixtures/scenarios.json'
+        scenario.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(Path(__file__).parent / 'fixtures/scenarios.json', scenario)
         self.git('add', '.')
         self.git('commit', '-qm', 'fixture')
         self.profile = {'data_version': 1, 'project': 'sample', 'context': ['AGENTS.md'],
@@ -64,7 +69,7 @@ class WorkflowCases(unittest.TestCase):
 
         from tw_runtime import init
         from tw_fixtures import entry
-        init.run(self.root, apply=True)
+        init.run(self.root, apply=True, sources=['self:AGENTS.md'])
         (self.root / '.tw/overview.md').write_text(entry('算术服务', '通过 app.add 计算加法。', source=['self:AGENTS.md']))
         write_config(self.root, self.profile)
         self.git('add', '.tw')
@@ -284,7 +289,7 @@ class WorkflowCases(unittest.TestCase):
         self.assertNotEqual(before, snapshot(self.root, self.profile))
 
     def test_edited_or_emptied_output_cannot_verify(self):
-        self.check("import app; assert app.add(1,2)==3")
+        self.check("import app; assert app.add(1,2)==3; print('sum=3')")
         path, record = self.run_check()
         run = str(path.relative_to(self.root))
         validation.verify_runs(self.root, self.profile, self.task, [run])

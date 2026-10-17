@@ -80,7 +80,7 @@ class TrialFeedback(unittest.TestCase):
         raw = designs.render(self.design)
         line = next(line for line in raw.splitlines() if line.startswith('- 验证：'))
         replacement = gap.split('改为：', 1)[1].split('（检查 ', 1)[0]
-        loaded = designs.load(raw.replace(line, replacement))
+        loaded = designs.load(raw.replace(line, replacement), scenario_reader=plans.scenario_reader)
         self.assertEqual(loaded['sections'][1]['data']['verification'],
                          {'method': 'automatic', 'cases': ['tests.x::test_a'], 'substitutes': ['邮件记录器', '固定时钟']})
 

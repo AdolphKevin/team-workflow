@@ -14,39 +14,65 @@ def _lines(items, empty):
     return [f'- {item}' for item in items] or [f'- {empty}']
 
 
+def delivery_status(result):
+    complete = bool(result.get('delivery_complete')) and not result.get('regression_pending', False)
+    headline = result.get('summary', '交付材料待齐全')
+    if result.get('delivery_complete'):
+        count = len(result.get('automation_status', {}).get('pending', []))
+        headline = '交付完成' if complete else f'交付材料齐全；整体交付未完成：{count} 条场景的回归待沉淀'
+    return {'overall_complete': complete, 'summary': headline}
+
+
+def regression_lines(result):
+    return [row['id'] + ('：' + row['reason'] if row.get('reason') else '')
+            for row in result.get('automation_status', {}).get('pending', [])]
+
+
 def render(result, task, profile=None):
     checks = (profile or {}).get('checks', {})
     accepted = result.get('business_accepted')
     delivered = result.get('delivery_complete')
     lines = [f'**任务**：{task.get("goal", task["id"])}（{task["id"]}）', '']
     lines.append('**验证了哪些业务场景**')
-    observations = result.get('observations', {})
     named_cases = result.get('named_cases', {})
-    lines += _lines([f'{row["id"]}：{row["expectation"]}'
-                     + (f'（{len(observations.get(row["id"], []))} 条实际观察）' if observations.get(row['id']) else '')
+    lines += _lines([f'{row["id"]}：' + row['expectation'].rstrip('。；; ')
                      + ('；用例 ' + '、'.join(named_cases[row['id']]) if named_cases.get(row['id']) else
                         '；未指明用例，证据为整项检查通过' if row['id'] in result.get('unspecified_cases', []) else '')
                      for row in task.get('acceptance', [])], '没有登记验收场景')
+    if 'summary_counts' in result:
+        lines += ['', '场景汇总：' + '，'.join(key + ' ' + str(value) for key, value in result['summary_counts'].items())]
+        stats = result['statistics']
+        for key, label in (('first_pass', '一次通过率'), ('agreement', '多人一致')):
+            ratio = stats[key]
+            lines.append(label + '：' + str(ratio['numerator']) + '/' + str(ratio['denominator']))
     lines += ['', '**哪些检查实际运行并通过**']
     lines += _lines([f'{key}：{checks.get(key, {}).get("purpose", "项目检查")}' for key in result.get('checks', [])],
                     '没有必需检查')
     for row in result.get('re_evaluated', []):
         lines.append(f'- {row["check"]}：按当前用例登记，用原始运行报告重新判定为通过（运行时判定为 {row["original_status"]}，未重跑）')
+    for key, excerpt in result.get('output_excerpts', {}).items():
+        lines += ['- ' + key + ' 原始输出摘录：'] + ['    ' + line for line in excerpt]
     environment = result.get('environment_checked')
     if environment:
         lines.append(f'- 运行环境：{"本次实际核对" if environment == "now" else "沿用业务验收当时记录的环境"}')
-    open_items = []
+    ci_checks = result.get('ci_verified_checks', [])
+    open_items = ['导入的 CI 检查：' + '、'.join(ci_checks)] if ci_checks else ['检查只在本机运行，CI 未验证']
     if result.get('regression_pending'):
-        open_items.append('有应沉淀的自动回归尚未完成（见 automation_status）')
+        open_items += regression_lines(result)
     if result.get('superseded_execution'):
         open_items.append(f'{len(result["superseded_execution"])} 份较早或已过期的运行记录未被采用，仅作历史保留')
     if result.get('tool', {}).get('override'):
         open_items.append('本次使用了被修改过的工具安装（已显式允许并记录）')
     lines += ['', '**还没做或需要注意的**'] + _lines(open_items, '没有')
+    if result.get('unverified_scope'):
+        lines += ['', '**未验证范围**'] + [
+            '- ' + row['scenario'] + '：' + row['status'] + '；问题 ' + row['finding'] + '：' + row['finding_state']
+            for row in result['unverified_scope']]
     knowledge = result.get('knowledge_disposition')
     if knowledge:
         lines += ['', f'**知识处置**：{knowledge}']
     lines += ['', '**状态**']
+    lines.append('- ' + delivery_status(result)['summary'])
     lines.append(f'- 业务验收：{"已通过" if accepted else "未通过"}')
     lines.append(f'- 交付材料（验收、知识处置、交接）：{"齐全" if delivered else "未齐全"}')
     if result.get('closable'):

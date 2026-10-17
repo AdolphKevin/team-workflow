@@ -53,6 +53,7 @@ EXPECTED = {
     'approval-draft': TASK | INPUT | REQUEST | {'--record', '--design', '--design-history', '--approval', '--run', '--reviewer', '--confirmation', '--mode', '--revision', '--reconcile', '--sections'},
     'design-diff': TASK | INPUT | REQUEST | {'--design', '--design-history'},
     'schema': set(),
+    'scenarios': set(),
     'cleanup': {'--apply', '--dry-run', '--plan', '--cleanup-scope', '--older-than'},
     'guidance': {'--scope', '--apply', '--home', '--file'},
     'issue-draft': {'--task', '--design', '--with-task', '--reviewer'},
@@ -94,6 +95,8 @@ class TeamParser(unittest.TestCase):
                 (['--root', '/before', '--repository', 'a=/a', command, '--root', '/project',
                   '--repository', 'b=/b', '--repository', 'c=/c'], ['a=/a', 'b=/b', 'c=/c']),
             ]:
+                if command == 'scenarios':
+                    arguments += ['check', 'scenarios.yaml']
                 with self.subTest(command=command, arguments=arguments):
                     args = workflow.parser().parse_args(arguments)
                     self.assertEqual(args.root, Path('/project'))
@@ -166,6 +169,8 @@ class TeamOptionBehavior(unittest.TestCase):
     def test_undeclared_optional_attributes_do_not_become_tool_defects(self):
         for name in EXPECTED:
             extra = ['--home', str(self.root / '.tw/local/test-home'), '--scope', 'project'] if name == 'guidance' else []
+            if name == 'scenarios':
+                extra = ['check', 'missing.yaml']
             with self.subTest(command=name):
                 code, result = self.command(name, *extra)
                 self.assertIn(code, (0, 1))

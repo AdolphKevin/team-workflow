@@ -1,16 +1,14 @@
 # 工具约定
 
-项目配置是 `.tw/config.json`，本地证据放在被 Git 忽略的 `.tw/local/`。配置、任务、方案、平台记录和本地证据统一使用
-`data_version: 1`；迁移前旧目录中的证据不用于新的验收。
-运行环境为 Python 3.10+、Git 和项目自身的测试依赖，通用工具只使用标准库。
+## 工具做什么
 
-下文 `tw` 指 `python3 <team-knowledge 技能目录>/scripts/tw.py`，团队命令写作 `tw team <命令>`；`$PROJECT`
-是项目目录，`$TASK_ID` 是任务 `id`（本地编号或完整 Issue 地址），`$TASK` 是首次开工的任务文件。输入路径相对项目，输出使用命令返回的 `artifact.path`，不要假设公共固定文件名。默认返回 JSON，
-`--format text` 用于阅读。
+工具读取配置、任务、方案、场景文件和平台记录，核对材料与绑定，运行登记的检查，登记场景轮次，生成草稿和报告，报告 `closable` 等结论。发布评论、提交、推送、合并、关闭任务、修改安装文件，由成员按自己的授权执行；平台只读。
 
-全局参数只有 `--root` 和可重复的 `--repository`，可写在团队子命令前后，也可由外层 `tw` 转发。
-其余参数写在对应命令之后：`tw team --help` 列出命令，`tw team <命令> --help` 列出该命令可用的参数。
-例如 `tw team --root "$PROJECT" run --task "$TASK_ID" --check unit`；业务验收用 `accept`，最终交付用 `verify`。
+项目配置是 `.tw/config.json`，本地证据放在被 Git 忽略的 `.tw/local/`。配置、任务、方案、平台记录和本地证据统一使用 `data_version: 1`。运行环境为 Python 3.10+、Git 和项目自身的测试依赖，通用工具使用标准库。
+
+下文 `tw` 指 `python3 <team-knowledge 技能目录>/scripts/tw.py`，团队命令写作 `tw team <命令>`；`$PROJECT` 是项目目录，`$TASK_ID` 是任务 `id`（本地编号或完整 Issue 地址），`$TASK` 是首次开工的任务文件。输入路径相对项目，输出路径以返回的 `artifact.path` 为准。默认返回 JSON，`--format text` 用于阅读；下一步由 `error_code` 决定。
+
+全局参数 `--root` 和可重复的 `--repository` 可写在团队子命令前后，也可由外层 `tw` 转发。其余参数写在对应命令之后：`tw team --help` 列出命令，`tw team <命令> --help` 列出可用参数。例如 `tw team --root "$PROJECT" run --task "$TASK_ID" --check unit`；业务验收用 `accept`，最终交付用 `verify`。
 
 ## 配置与任务
 
@@ -21,63 +19,36 @@ tw init --root "$PROJECT" --guidance [--apply]
 tw team guidance --root "$PROJECT" [--scope project|global|all] [--file AGENTS.md] [--apply]
 ```
 
-`project` 同时核对安装完整性：`installation.integrity.status` 为 `intact`、`modified`（列出 `changed`、`missing`、
-`unexpected`）或 `unknown`（缺少 `MANIFEST.json`）。正在运行的两个技能不是 `intact` 或不属于同一发行时返回
-`error_code: tool-modified`，`accept` 和 `verify` 拒绝执行；客户端目录中其他副本被改动、版本不同或残留旧技能 cs，只列在 `warnings`。发现工具缺陷时报告缺陷并重装，不修改已安装的技能。确需带改动运行时加
-`--allow-modified-tool`，结果中的 `tool.override` 为真并随记录保留。`project` 同时报告配置校验结果、
-`tw check` 的错误数，以及两个技能是否来自同一发行（`tw version --check-install`）。
-工具自身缺陷返回 `error_code: tool-defect`，保留请求目录作为证据。
+`project` 核对安装完整性：`installation.integrity.status` 为 `intact`、`modified`（列出 `changed`、`missing`、`unexpected`）或 `unknown`（缺少 `MANIFEST.json`）。正在运行的两个技能完整且属于同一发行时，`accept` 和 `verify` 可执行；其余情况返回 `error_code: tool-modified`。客户端目录中其他副本的修改、版本差异及残留技能 cs 列在 `warnings`。发现工具缺陷时报告并重装；确需带改动运行时加 `--allow-modified-tool`，结果中的 `tool.override` 为真并随记录保留。`project` 同时报告配置校验、`tw check` 错误数和发行核对结果（`tw version --check-install`）。工具自身缺陷返回 `error_code: tool-defect`，保留请求目录。
 
-项目配置的 `data_version` 高于已安装工具支持的版本时，工具拒绝读取并提示更新技能；
-规则见[接入指南](onboarding.md#更新与回退)。
+项目配置的 `data_version` 高于工具支持的版本时，按[接入指南](onboarding.md#更新与回退)更新技能。
 
-`tw init --guidance` 维护 AGENTS.md 中的知识指引块；`tw team guidance` 默认预览，`--apply` 只写入标记块：项目指令文件得到[项目指引](../templates/guidance-project.md)，
-本机 Claude Code 与 Codex 的用户级文件得到[全局指引](../templates/guidance-global.md)。项目规则只写
-`AGENTS.md`（没有则新建）；`CLAUDE.md` 没有则新建并只放 `@AGENTS.md` 引用（[引用模板](../templates/guidance-claude.md)），
-已含 `@AGENTS.md` 或 `@./AGENTS.md` 的保持不动；`--file` 只接受仓内相对路径，引用随之指向该文件。每个目标的
-`action` 为 `create`、`append`、`update`、`unchanged`、`skipped`（该客户端目录不存在）或 `blocked`（标记损坏，
-整次拒绝写入）。写入保留原文件的换行风格、权限和符号链接。`--home` 只用于试验，指向替代的用户目录。`schema` 返回随技能安装的[团队配置模板](../templates/config.json)、[任务模板](../templates/task.json)
-和[方案模板](../templates/design.md)。模板需要按实际项目填写；团队字段写入 `.tw/config.json`，
-手工任务输入及运行材料放在被 Git 忽略的 `.tw/local/`。
+`tw init --guidance` 维护 AGENTS.md 中的知识指引块；`tw team guidance` 默认预览，`--apply` 写入标记块：项目指令文件使用[项目指引](../templates/guidance-project.md)，本机 Claude Code 与 Codex 用户级文件使用[全局指引](../templates/guidance-global.md)。项目规则写入 `AGENTS.md`，缺文件时新建；缺少 `CLAUDE.md` 时新建并放入 `@AGENTS.md` 引用（[引用模板](../templates/guidance-claude.md)），已有 `@AGENTS.md` 或 `@./AGENTS.md` 时保留。`--file` 接受仓内相对路径，引用随之指向该文件。每个目标的 `action` 为 `create`、`append`、`update`、`unchanged`、`skipped`（客户端目录缺失）或 `blocked`（标记损坏，整次拒绝写入）。写入保留换行风格、权限和符号链接。试验时用 `--home` 指向替代用户目录。`schema` 返回[团队配置模板](../templates/config.json)、[任务模板](../templates/task.json)和[方案模板](../templates/design.md)。按项目填写模板，将团队字段写入 `.tw/config.json`，手工任务输入和运行材料放在 `.tw/local/`。
 
 | 配置字段 | 含义 |
 | --- | --- |
-| `format`、`data_version`、`project` | 由 `tw init` 生成：工具标识、数据版本 1、`{id, name}` 项目身份 |
+| `format`、`data_version`、`project` | `tw init` 生成的工具标识、数据版本 1、`{id, name}` 项目身份 |
 | `context` | 必须读取的现有仓内文件 |
-| `shared`、`documents` | 共享知识仓与原文登记，见 team-knowledge 写作规范 |
-| `checks` | 检查编号到具体命令、报告格式、用例及环境要求的映射 |
-| `required_checks` | 分别为 `code`、`docs` 指定默认检查 |
-| `risk_checks` | 风险到非空检查集合；缺少风险映射会报错 |
+| `shared`、`documents` | 共享知识仓与原文登记，见[知识写作规范](../../team-knowledge/references/writing.md) |
+| `checks` | 检查编号到命令、报告格式、用例及环境要求的映射 |
+| `required_checks` | 为 `code`、`docs` 指定默认检查 |
+| `risk_checks` | 风险到非空检查集合；缺少风险映射时报错 |
 | `inputs` | 参与结果但被 Git 忽略的文件或目录 |
 | `external_inputs` | 逻辑依赖及用途，本机位置另行提供 |
 | `environment_versions` | 名称到只读版本查询命令数组 |
+| `acceptance_entries` | 验收入口，见[场景与证据](#场景与证据) |
 
-检查包含 `argv` 参数数组、`purpose`、仓内 `cwd`、秒数 `timeout`、`format`、
-`required_cases`、`required_env` 和 `environment`。命令不经 shell，凭证通过环境传递，
-只记录必要变量名；日志仍遵循项目脱敏规则。
+检查包含 `argv` 参数数组、`purpose`、仓内 `cwd`、秒数 `timeout`、`format`、`required_cases`、`required_env` 和 `environment`。命令直接启动进程，凭证通过环境传递，记录必要变量名；日志遵循项目脱敏规则。本地与可携带记录的 `argv` 保存含 `{output}` 的配置模板，启动进程时展开为绝对路径；输出目录由 `stdout.txt` 等产物的相对路径确定。
 
-本地与可携带执行记录的 `argv` 均保存配置模板，保留 `{output}`；核查与当前模板比较，改动仍使该检查过期。启动进程时才将 `{output}` 展开为绝对路径。输出目录由 `stdout.txt` 等产物的相对路径确定，项目整体移动或复制不要求重跑。
+`stdout.txt`、`stderr.txt` 按脱敏后的原始字节保存，空输出保存为空文件。评审稿、交接和收尾说明分别标明两路输出的末尾 12 行，两者皆空时显示“（无输出）”；历史文件按原内容读取。
 
-`format` 可为 `command`、`go-json` 或 `junit`。普通命令只能证明退出结果，不能声明
-用例。Go 解析 `go test -json`；JUnit 需要 `report: "{output}/results.xml"`，命令必须
-生成这次运行的新报告。必要用例使用准确的 `包::测试名` 或 `classname::name`。未指定
-必要子集时全部发现的用例均须通过；指定后仍拒绝任何失败、必要跳过、缺失和零用例。
-额外产物放在 `{output}/` 内；已有业务场景审查要求继续保留，不能用工具摘要替代。
+`format` 为 `command`、`go-json` 或 `junit`。`command` 记录命令退出结果；Go 解析 `go test -json`；JUnit 使用 `report: "{output}/results.xml"`，命令生成本次运行的新报告。逐项报告的通过条件：用例数大于零，全部发现的用例为通过或跳过，必要用例齐全并通过。`required_cases` 指定必要用例，名称为准确的 `包::测试名` 或 `classname::name`；空数组表示全部发现的用例均为必要用例。Go 的必要父用例另要求其子用例全部通过。额外产物放在 `{output}/` 内；证据含义见[业务验收术语](business-acceptance.md#1-术语)。
 
-`environment` 必须明确为 `{"kind":"stateless"}`，或
-`{"kind":"fixture","identity":["业务仓的只读命令","参数"]}`。前者只用于不依赖
-可变外部数据的检查；后者必须真实表达服务、数据库或夹具的有关状态。身份无法核实时
-不复用结果。`revision_sensitive: true` 仅用于实际依赖 Git 提交编号的检查。
+`environment` 写 `{"kind":"stateless"}`（检查独立于可变外部数据），或 `{"kind":"fixture","identity":["业务仓的只读命令","参数"]}`（表达服务、数据库或夹具状态）。身份核对成功后复用结果。`revision_sensitive: true` 用于依赖 Git 提交编号的检查。
 
-任务使用 `data_version: 1`，包含 `id`、真实存在的完整基准提交 `base`、`goal`、
-`non_goals`、`kind`（`code` 或 `docs`）、`risks`、`acceptance`，以及关联的 `design_id`
-和非空任务节数组 `section_ids`，以及 `acceptance_scope`（主需求 `requirement`，子任务 `task`）。子任务的 `parent` 指向方案所属主需求。本地文件和平台任务块的验收均为 `[{"id":"A1"}]`；带正文或检查清单时拒绝：“验收项只写编号，内容以方案为准”。读取后统一按所选方案展开 `expectation` 和 `checks`，子任务用父方案。完整副本留在上下文；需求摘要与 `requirements_signature` 只按编号。改为编号后旧批准失效。`paths`、
-`symbols` 和跨仓 `scopes` 提供知识读取范围；实际子任务可保留 `parent`。
+任务包含 `data_version: 1`、`id`、真实存在的完整基准提交 `base`、`goal`、`non_goals`、`kind`（`code` 或 `docs`）、`risks`、`acceptance`、`design_id`、非空任务节数组 `section_ids` 和 `acceptance_scope`（主需求 `requirement`，子任务 `task`）。子任务的 `parent` 指向方案所属主需求。本地文件和平台任务块的验收均写 `[{"id":"A1"}]`；带正文或检查清单时返回“验收项只写编号，内容以方案为准”。读取后按所选方案展开 `expectation` 和 `checks`，子任务使用父方案；完整副本留在上下文，需求摘要与 `requirements_signature` 按编号计算。`paths`、`symbols`、跨仓 `scopes` 提供知识读取范围。
 
-支持的风险为 `authorization`、`persistence`、`concurrency`、`messaging`、
-`public-contract`、`cross-service`。它们决定检查，不决定是否必须事前评审。父方案和
-拆分任务分别评估；任务节的 `data.assessment` 可覆盖方案评估。方案只接受 Markdown 原文；具体格式、字段对照和逐节批准
-见[分节方案约定](designs.md)，不要根据父方案复杂度替代子任务判断。
+风险支持 `authorization`、`persistence`、`concurrency`、`messaging`、`public-contract`、`cross-service`。任务评估、批准路径和方案格式见[分节方案](designs.md#内容与依赖)。
 
 ## 开工材料、状态与方案
 
@@ -87,16 +58,11 @@ tw team start --root "$PROJECT" --task "$TASK_ID"
 tw team status --root "$PROJECT" --task "$TASK_ID" --format text
 ```
 
-平台任务也可用 `start --issue <完整Issue链接>` 读取共享任务和方案。已有批准使用
-可重复的 `--approval`，历史方案用可重复的 `--design-history`，从第 1 版保留完整快照。
-读取平台失败时报告缺口，不退回本地材料后声称平台交付完成。
-所请求的 Issue 缺少任务块时返回 `issue-not-adopted`；已接入的子 Issue 所引用的父 Issue 缺块时，
-返回 `parent-issue-not-adopted`，并指向父 Issue 的地址及 `issue-draft --task <parent-task.json>` 补齐命令。
+平台任务也可用 `start --issue <完整Issue链接>` 读取任务和方案。已有批准用可重复的 `--approval`，历史方案用可重复的 `--design-history`，从修订 1 保留完整快照。平台读取失败时报告缺口。请求的 Issue 缺少任务块时返回 `issue-not-adopted`；子 Issue 引用的父 Issue 缺块时返回 `parent-issue-not-adopted`，并给出父地址及 `issue-draft --task <parent-task.json>` 补齐命令。
 
-`start` 首次建立准备上下文，返回 `continued: false`；任务内容、方案、批准、历史、前序依赖或授权变化时建立新上下文，`superseded_context` 指向被取代的记录。输入相同返回 `continued: true`，核对接续条件，只在自己的请求目录保存本次简报和 `start.json`。省略方案或批准时沿用原准备材料；同一任务的本机授权继续有效。平台任务首次可用 `--issue`，之后也可用 `--task <完整 Issue 地址>`。
+`start` 首次建立上下文，返回 `continued: false`；任务、方案、批准、历史、前序依赖或授权变化时建立新上下文，`superseded_context` 指向原记录。输入相同返回 `continued: true`，核对接续条件，在自己的请求目录保存本次简报和 `start.json`。省略方案或批准时沿用原准备材料；同一任务的本机授权继续有效。平台任务首次可用 `--issue`，之后可用 `--task <完整 Issue 地址>`。
 
-两种结果均含身份、任务目录、`context.path`、实施条件、缺口和 `next_step`；`pending_sections` 按文档顺序列编号、标题和原因，含所需章节、依赖与待确认删除。`next_action` 给批准命令；子任务指向持有方案和批准的父任务。后续用身份或 `--context` 补齐材料。实际阅读简报；保存不证明已使用。新批准用 `start --approval` 建新上下文；实施后也可传给 `review`、`accept`、`delivery-template`，保留开工简报。历史用 `--design-history`。
-`status` 从当前材料组或显式 `--context`、`--report` 读取已有批准，不接受 `--approval`。
+两种结果均含身份、任务目录、`context.path`、实施条件、缺口和 `next_step`。`pending_sections` 按文档顺序列编号、标题和原因，含所需章节、依赖与待确认删除；`next_action` 给批准命令，子任务指向持有方案和批准的父任务。阅读返回的简报；后续用身份或 `--context` 补材料。新批准用 `start --approval` 建新上下文；实施后也可传给 `review`、`accept`、`delivery-template`，保留开工简报。历史用 `--design-history`。`status` 从当前材料组或显式 `--context`、`--report` 读取批准。
 
 ### 当前材料组
 
@@ -106,92 +72,82 @@ tw team status --root "$PROJECT" --task "$TASK_ID" --format text
 | --- | --- |
 | `context`、`task`、`design`、`brief` | 准备上下文、补全的任务、方案、开工简报 |
 | `design_history`、`approvals` | 方案历史和批准列表 |
-| `runs` | 本上下文的全部运行列表，包含失败运行 |
+| `runs` | 本上下文的全部运行，含失败运行 |
 | `review`、`acceptance` | 验收所用评审、通过的业务验收记录 |
-| `review_markdown` | 提交成功的评审 Markdown 原文；兼容旧组中缺少此项 |
-| `review_source` | 提交时的源码逐文件指纹；兼容旧组中缺少此项 |
+| `review_markdown`、`review_source` | 可选：提交成功的评审原文、提交时的源码逐文件指纹 |
+| `case_imports`、`case_coverage`、`scenario_rounds` | 可选：用例导入列表、覆盖配对文件、场景轮次列表 |
 | `delivery_report`、`delivery` | 交付报告、通过的最终交付记录 |
 
-`start` 新上下文整组重置，接续不重置。`run` 追加实际运行，即使检查失败；其余命令成功后才更新。评审表和批准草稿的输出不登记；实际批准首次显式指定，评审由 `review --submit` 成功后登记。`selected_runs` 记录显式选用的运行，保留 `runs` 中的全部历史；新运行追加后恢复从全部记录选取。写入用临时文件加改名，并与清理共用锁；并发开工发生冲突时明确拒绝，换请求编号重试。
+`start` 新上下文重建准备与交付材料，保留用例导入、覆盖配对和场景轮次；接续保留当前组。`run` 追加实际运行，含失败结果；其他材料在相应命令成功后更新。批准首次显式指定；评审成功提交后登记。`selected_runs` 记录显式选用的运行，`runs` 保存全部历史；新运行追加后从全部记录选取。写入使用临时文件加改名，与清理共用锁；并发开工冲突时换请求编号重试。
 
-`run`、`status`、`review`、`approval-draft`、`accept`、`delivery-template`、`verify`、`handoff`、`progress`、`task-export` 均支持任务身份，也保留任务文件和显式路径。命令只补齐自身使用的材料；`verify` 自动读取交付报告，`delivery-template` 自动带上验收记录。显式材料优先，成功使用后登记；同身份显式切换上下文会完整换组，清除原组的运行与下游材料。跨身份上下文拒绝。
+`run`、`status`、`review`、`approval-draft`、`accept`、`delivery-template`、`verify`、`handoff`、`progress`、`task-export` 支持任务身份、任务文件和显式路径。命令补齐自身使用的材料；`verify` 读取交付报告，`delivery-template` 带上验收记录。显式材料优先，成功使用后登记；同身份显式切换上下文会换组并清除下游材料，跨身份上下文拒绝。
 
-记录缺失、指纹变化时拒绝，结果点名材料并给出修正命令。平台方案/批准更新时执行命令拒绝，status 列出受影响的过期步骤并提示重新 `start`；不按文件时间猜材料。自动材料与显式材料一起参与请求指纹。同一请求编号换组仍拒绝，重复成功请求不重复追加材料。只有身份的 `status` 不写入；显式替换经成功核对后更新记录。
+记录缺失或指纹变化时，结果点名材料并给出修正命令。平台方案或批准更新时重新 `start`；`status` 列出受影响的过期步骤。自动和显式材料一起参与请求指纹，同一请求编号对应固定输入，重复成功请求复用原结果。仅用身份查看 `status` 时只读；显式替换经核对成功后更新记录。
 
 ```bash
 tw team design-diff --root "$PROJECT" --task "$TASK" --design "$NEW_DESIGN" \
   --design-history "$V1" --design-history "$V2"
 ```
 
-`design-diff` 比较最后一份旧版和当前版，保留完整历史删除。`status` 和接续时的 `start` 汇总材料及缺口；业务验收由 `accept` 核对，最终交付和关闭条件由 `verify` 核对。
+`design-diff` 比较历史末版和当前版，保留完整删除历史。`status` 和接续的 `start` 汇总材料与缺口；`accept` 核对业务验收，`verify` 核对最终交付和关闭条件。
 
 ## 实施、批准与代码评审
+
+### 记录绑定
+
+绑定用内容指纹标识记录适用的输入：
+
+| 记录 | 绑定内容 |
+| --- | --- |
+| 运行结果 | 源码内容及逻辑依赖、执行定义、记录格式与解码器版本、环境；声明 `revision_sensitive` 时另含提交号 |
+| 场景轮次 | 每条结果的场景内容指纹、产品指纹；保存提交时的源码指纹、轮次编号和执行时间 |
+| 评审 | 任务、源码总指纹与逐文件指纹、校验策略、章节、风险、选中运行、场景文件与轮次；含合并批准字段的草稿另绑定完整方案与历史 |
+| 方案批准 | 方案身份、评估、所选章节指纹及确认的删除 |
+| 合并批准 | 方案批准的内容，加源码摘要与运行引用；提供 `revision` 时另核对该提交的源码摘要 |
+| 章节指纹 | `own` 覆盖本节正文、标签、场景文件摘要和排序后的逻辑依赖；`effective` 另覆盖上游依据及影响本节的实施决定 |
+
+表中内容变化时记录过期；其他变化下记录继续有效。场景文件按每条场景的内容指纹重新判定结果，产品变化后的复用见[场景与证据](#场景与证据)。
+
+**验收材料**是本任务的方案原文（文件头 `design`、`task` 与本任务相同的 Markdown）及其验收节引用的场景文件。改动范围排除验收材料。**产品指纹**是排除验收材料后的源码指纹，供场景轮次判定使用；检查运行绑定完整源码指纹，含场景文件。
 
 ```bash
 tw team run --root "$PROJECT" --task "$TASK_ID"
 tw team run --root "$PROJECT" --task "$TASK_ID" --with-task "$OTHER_TASK"
 ```
 
-任务、项目默认及风险检查取并集；`--with-task` 可重复。同一批次每项检查执行一次，
-各任务仍单独验收。可重复 `--check` 做聚焦运行，最终核查仍要求全部必要检查。
-结果绑定源码内容、逻辑依赖、执行定义及环境；源码或环境在运行期间变化不能通过。
+任务、项目默认及风险检查取并集；`--with-task` 可重复，同一批次每项检查执行一次，各任务单独验收。可重复 `--check` 聚焦运行，最终核查要求全部必要检查。运行期间源码和环境须保持稳定。
 
-任务方案的范围（`scope`）要包含实际改动的全部文件，测试文件也算在内；否则验收报告未映射的文件。文件头 `design`、`task` 与本方案相同的 Markdown 是方案原文本身，不计入。方案变化后的 `start` 建立新上下文，需要重新运行检查和评审；输入相同的接续保留原开工材料。因此修正方案范围最好在运行检查前完成。
+任务 `scope` 覆盖实际改动的全部文件，含测试；验收列出未映射文件。方案范围需调整时，先修订方案并 `start` 新上下文，再运行检查与评审。
 
-执行定义是实际执行的内容（命令、目录、报告格式、环境声明、覆盖范围等）。`required_cases`、
-`purpose` 和 `timeout` 只影响结果判定，不属于执行定义：修改它们后，核查用保存的原始报告按当前登记
-重新判定，不需要重跑；验收结果的 `re_evaluated` 列出这些检查及原判定，`summary_markdown` 用平实语言说明。
-第六版记录在交接和收尾说明中也采用相同的重新判定，保留原记录的状态与原始报告。
-`run` 报告缺少登记用例时会列出报告中实际的用例名，便于发现前缀写错。`accept` 和 `verify` 的输出直接包含 `summary_markdown`，
-`--format text` 时打印出来。登记变化仍会改变评审策略，需要重新生成评审。
+执行定义含命令、目录、报告格式、环境声明和覆盖范围等。`required_cases`、`purpose`、`timeout` 属于结果判定字段；修改后用原始报告按当前登记重新判定；重新判为通过的记录在 `re_evaluated` 列出检查和原判定。交接和收尾说明中的检查记录采用相同判定，保留原状态与原始报告。`run` 缺少登记用例时列出实际用例名；`accept`、`verify` 返回 `summary_markdown`，文本模式打印该摘要。登记变化后重新生成评审。
 
-每项检查独立选取结果。一份批次中某项检查过期，只影响这一项：用 `run --check <该项>` 聚焦重跑，
-运行自动追加到当前组，必要时也可显式用 `--run` 选取。核查为每项检查选用当前有效的最新通过结果，失败、过期或被替代的记录列在
-`superseded_execution` 中。环境只在业务验收（`accept`）时实际核对；之后的
-最终 `verify` 使用验收时记录的环境（`environment_checked: recorded at acceptance`），
-隔离数据库等夹具清理后已完成的验收仍然有效。源码、定义、评审和平台在每一步都重新核对。
-旧候选的原始报告不符合当前用例要求时，只记录该候选的问题，继续选择其它候选；导入记录也遵守离线环境核查规则。
-知识正文（`.tw/` 下的条目）、暂存布局和无关流程配置变化不会使按内容绑定的检查过期。运行期间的协作标记位于 `.tw/local/validation-active/`；共享目录保持稳定。标记不拦截编辑器写入，起止指纹也不证明期间绝无改动。
-
-方案批准通常直接用具名参数生成，无需手写输入 JSON：
+每项检查选用当前有效的最新通过结果；失败、过期、被取代的记录列入 `superseded_execution`。某项过期时用 `run --check <该项>` 重跑并追加材料，必要时用 `--run` 显式选取。候选原始报告未满足当前用例要求时，记录问题并继续选择其他候选。`accept` 实际核对环境；之后 `verify` 使用验收记录的环境，返回 `environment_checked: recorded at acceptance`，并重新核对源码、定义、评审和平台。导入记录遵循相同的离线环境核查规则。运行期间的协作标记位于 `.tw/local/validation-active/`。
 
 ```bash
 tw team approval-draft --root "$PROJECT" --task "$TASK_ID" --reviewer <姓名> --confirmation <说明> --mode plan
 ```
 
-`confirmation` 可省略；简单任务在评审 Markdown 中选择合并批准。已有输入仍可用 `--record <输入文件>`，其 `reviewer` 必填，`confirmation` 可选；批准可以由他人代为记录。
+`confirmation` 可省略；也可用 `--record <输入文件>` 提供必填 `reviewer` 和可选说明，由他人代为记录批准。任务文件可显式传 `--design`、`--run`；记录可指定 `decision`、`section_ids`、`deletion_ids`、`mode`、`revision`。默认模式、批准范围及 `--sections` 见[批准与变化](designs.md#批准与变化)。无必要检查的文档任务可用空运行列表，并通过场景验收。
 
-任务文件可显式传 `--design`、`--run`；记录可指定 `decision`、`section_ids`、`deletion_ids`、`mode`、`revision`。
-简单任务默认合并评审，中等以上默认方案评审。默认范围、`--sections` 和空结果见[分节约定](designs.md)。
-合并评审绑定当前代码与运行；无必要检查的文档任务可无运行，验收仍须真实证据。草稿不产生批准事实。
-
-`approval-draft --revision <提交号>` 记录批准时变更请求的完整提交号（40 或 64 位十六进制），
-也可在 `--record` 输入中提供 `revision`。合并批准读取本地该提交的源码，计算与
-`code_digest` 相同口径的摘要；不等时拒绝并说明“批准的提交与绑定的源码不一致”。本地
-缺提交时明确报告缺口，不访问平台。方案批准只校验格式、记录在案；未带字段的记录行为不变。
+`revision` 可选，使用 `approval-draft --revision <提交号>` 或写入 `--record` 输入，值为 40 或 64 位十六进制完整提交号。方案批准记录它；合并批准读取本地该提交，按 `code_digest` 核对源码摘要，不符时报“批准的提交与绑定的源码不一致”，缺提交时报告缺口。
 
 ```bash
 tw team review --root "$PROJECT" --task "$TASK_ID"
 # 编辑返回的 review.md，再提交
 tw team review --root "$PROJECT" --task "$TASK_ID" --submit
-# 也可提交另一处的 Markdown
+# 提交另一处的 Markdown
 tw team review --root "$PROJECT" --task "$TASK_ID" --submit --file <评审.md>
-# 评审人已把填写后的完整 Markdown 作为变更请求评审提交时
+# 导入变更请求上的完整评审
 tw team review --root "$PROJECT" --task "$TASK_ID" --from-platform
 ```
 
-`--from-platform` 经项目平台脚本的 `task` 操作，选出含绑定区的最新 `kind: review` 条目，
-将其原文走与 `--submit` 相同的绑定比对、逐项复核、问题历史和转换流程。与 `--file`、
-`--submit` 二选一，不能混用来源。绑定或来源已变时拒绝，需重新生成复核稿。
-评审 JSON 增加 `platform_author`、`platform_url`，只作记录与后续原文核对，不限制平台账号；验收仍核对
-Markdown 姓名不能是实施负责人；以后复用也核对平台作者和已存原文。正文与评论中的讨论
-不能替代 `review` 条目。平台上的合并批准选择经原文核对后可作为已共享批准。
+`--from-platform` 经项目平台脚本的 `task` 操作，按 `updated_at` 选含绑定区的最新 `kind: review` 条目，按本地提交规则核对绑定、逐项复核、问题历史并转换。平台来源单独使用，本地来源用 `--submit [--file <路径>]`；绑定或来源变化时重新生成复核稿。评审 JSON 的 `platform_author`、`platform_url` 用于后续核对作者和原文；姓名独立性见[场景与证据](#场景与证据)。平台合并批准经原文核对后作为已共享批准。
 
-`review.md` 是可编辑表；绑定未变的工作稿保留并报告填写进度。评审人核对代码、需求和原始结果，填写姓名、知识冲突处置（是/否）、各轴及验收的结论（通过/不通过）和理由。可补证据，每行一个仓内路径，工具计算指纹及运行引用。自动验收的“用例”可选，每行一个或用 `、` 分隔；方案与评审均未写时，评审稿及收尾注明“未指明用例，证据为整项检查通过”。人工观察各字段由人填写，源码引用不能证明执行。
+`review.md` 是可编辑表；绑定有效的工作稿保留并报告填写进度。评审人核对代码、需求、原始结果和预填的场景执行，填写姓名、知识冲突处置（“知识冲突已处理”在没有冲突时填“是”）、规范与需求及逐项验收的结论（通过/不通过）和理由。补充证据每行一个仓内路径，工具计算指纹和运行引用。自动验收的“用例”可选，每行一个或用 `、` 分隔；方案与评审均省略时，评审稿及收尾注明“未指明用例，证据为整项检查通过”。
 
-绑定区使用隐藏的 `tw-record` HTML 注释，包含任务、任务与源码指纹、校验策略、章节和运行；它与工具填写的结果、风险列表及变化说明均不可改动。提交只检查格式完整和绑定有效，拒绝时指出行号或小节；“不通过”、知识冲突未处理或含 open 阻塞问题的完整评审仍保存。独立性、实际检查与通过条件由 accept/deliver 核查，不因此放宽。成功后原文 `review.md`、现有格式的 `review.json` 与 `review-source.json` 保存到本次请求目录，登记为当前评审。下一条命令为 `deliver --task <身份> --reason <理由>`；需要更新知识则先 `accept --task <身份>`，写知识后再交付。清理保留引用的原文、JSON、源码指纹、运行和任务目录的未提交表。
+隐藏的 `tw-record` HTML 注释是绑定区；它和工具填写的结果、风险列表、变化说明保持原样。格式完整、绑定有效的评审可提交，含“不通过”、知识冲突待处理或 `open` 阻塞问题的意见；拒绝时指出行号或小节。`accept`、`deliver` 核对独立性、实际检查与通过条件。提交成功后在请求目录保存 `review.md`、`review.json`、`review-source.json`，登记当前评审，下一步为 `deliver --task <身份> --reason <理由>`。清理保留引用材料和任务目录的未提交表。
 
-问题按 `### 问题 Q1` 分节，以 `- 字段：值` 填写编号、负责人、影响范围、阻塞阶段、状态及摘要。已知问题身份不得改动或删除；新问题可新增同格式小节。状态为 open、resolved、accepted、deferred；非 open 要填写处置理由与处置证据，接受或延期还需确认人，延期须含跟进任务与范围调整，可附确认依据。完整字段由已知问题自动展开；没有已知问题时可按下表添加。
+问题字段与处置见[问题处置与交接](#问题处置与交接)。按 `### 问题 Q1` 分节填写，已有问题保持身份；新问题可增加同格式小节：
 
 ```markdown
 ### 问题 Q1
@@ -201,63 +157,65 @@ Markdown 姓名不能是实施负责人；以后复用也核对平台作者和�
 - 阻塞阶段：acceptance
 - 状态：open
 - 摘要：实际问题
+- 处置理由：
+- 处置证据：SOP#Q1
+  https://example.invalid/confirmation
+- 确认人：
+- 确认依据：
+- 跟进任务：
+- 范围调整：
 ```
+
+`open` 的六个处置字段留空；其他状态填写处置理由（单值文字）和处置证据（每行一项来源引用，首项写在字段后，其余项各缩进两个空格续行）。`accepted`、`deferred` 另填确认人（单值姓名）；确认依据可选，为单值文字；`deferred` 另填跟进任务与范围调整（各为单值文字）。
 
 ### 变化后逐项复核
 
-Markdown 评审格式为第 2 版，草稿绑定保存在任务目录的 `reviews/<草稿编号>/binding.json`，编辑与明确的上一轮提交记录保存在 `reviews/editor.json`。业务评审 JSON 仍用原格式。每次提交保存 `review-source.json`（`data_version: 1`、`kind: review-source`），包含被评审源码的逐文件指纹；变化比较使用保存的文件内容与属性，不使用时间。外部输入按 `[名称]/路径` 区分。新增、删除和修改文件均列在“变化”中；只改文件时间不会使评审过期。旧记录没有逐文件指纹且源码总指纹已变化时，明确说明无法还原精确差异，要求全部预填项重新核对；总指纹相同则可证明没有源码变化，不猜测历史。
+绑定区 `format_version` 为 2。草稿绑定保存在 `reviews/<草稿编号>/binding.json`，编辑与上一轮提交记录保存在 `reviews/editor.json`。每次提交保存 `review-source.json`（`data_version: 1`、`kind: review-source`），按文件内容和属性比较差异；外部输入用 `[名称]/路径` 区分，新增、删除、修改列入“变化”。评审记录缺少逐文件指纹时：源码总指纹相同，证明源码未变；总指纹变化，要求全部预填项重新核对。
 
-已有提交的评审与当前任务、源码、校验策略、章节、风险或选中运行不同，再运行 `review --task <身份>` 会预填上一轮的评审人、知识冲突处理、规范与需求结论、各验收结论和证据、人工观察及问题清单。实际运行区换成当前结果，“变化”还列出运行结果改变的验收项。新增失败候选仍按既有规则选择通过的运行；选中运行不变时不会仅因多了失败候选而重开评审。绑定不变时只报告当前已提交评审仍然有效。
+已提交评审的绑定变化时，`review --task <身份>` 预填上一轮姓名、知识冲突处置、规范与需求结论、验收结论和证据、问题清单。运行与场景执行区采用当前结果，“变化”列出受影响验收项与场景。绑定有效时返回当前评审仍有效。
 
-过期的未提交 `review.md` 会改名保存到 `reviews/archived-<唯一编号>.md`，结果的 `archived_draft` 给出原文路径与指纹；新稿优先预填该工作稿已填写的内容。绑定未变的工作稿仍保持原样。
+过期工作稿改名保存为 `reviews/archived-<唯一编号>.md`，`archived_draft` 给出路径与指纹；新稿优先预填工作稿已填写内容。预填结论带 `复核：待复核`，逐项核对后改为 `复核：已复核`；即使重写结论或理由，也填写确认。提交一次列全待确认小节及行号，补充证据重新核对指纹，问题处置可更新。
 
-所有预填的规范、需求、验收结论与人工观察分别带 `复核：待复核`。评审人核对后必须逐项改为 `复核：已复核`；即使改写结论或理由，也必须明确确认。删掉字段、只确认部分或使用其他值均不能提交；一次错误列出全部未确认小节和行号。自动证据取当前运行，补充证据路径重新核对指纹；人工观察内容不由工具改写，由人确认仍适用或填入新观察。问题身份沿用原有一致性核查，处置可以更新。
-
-`status` 将绑定变化的已提交评审标为过期。没有当前复核稿时下一条命令是 `review`；新稿已生成后指向 `review --submit`，完成逐项确认后才能形成新的有效评审。
-
-生成复核稿所用的上一轮评审、Markdown、源码快照和绑定引用也进入请求指纹。同一请求编号不能换一份前序评审；提交本身的同组幂等重试仍按原规则处理。
+`status` 将绑定变化的已提交评审标为过期；缺少当前复核稿时指向 `review`，生成后指向 `review --submit`。上一轮评审、原文、源码快照和绑定引用参与请求指纹；重试规则见[重试与清理](#重试与清理)。
 
 ## 先验收，再更新知识
 
-### 四命令交付入口
+### 五步交付入口
 
 ```bash
 tw team start --root "$PROJECT" --task <任务文件> --design <方案>
 tw team run --root "$PROJECT" --task "$TASK_ID"
-# 编辑 run 返回的 review.md，填写评审及“批准方案与代码：是”
+tw team scenarios pending --root "$PROJECT" --task "$TASK_ID"
+# 独立执行者按清单执行后登记结果
+tw team scenarios submit --root "$PROJECT" --task "$TASK_ID" --results <结果文件>
+tw team review --root "$PROJECT" --task "$TASK_ID"
+# 评审人填写返回的 review.md，再提交
 tw team review --root "$PROJECT" --task "$TASK_ID" --submit
 tw team deliver --root "$PROJECT" --task "$TASK_ID" --reason <不需要更新知识的理由>
 ```
 
-`run` 成功且本任务必需检查全部有可用的通过结果后，自动按现有评审/复核规则准备草稿，输出 `review_file` 和提交命令；失败或尚缺必需检查时不生成。任务需已有 `start` 上下文。绑定未变的未提交稿保持原样；绑定变化时按复核规则留存旧稿。手动 `review` 保留。
+`run` 在必需检查有有效通过结果、场景状态均为 `passed` 或 `blocked` 时准备评审稿，返回 `review_file` 和提交命令；存在待执行或失败场景时指向 `scenarios pending`。登记场景结果后运行 `review` 获取评审稿。任务需已有 `start` 上下文。
 
-方案中当前任务评估为 simple 且尚缺有效合并批准时，评审信息增加“批准方案与代码”和可选“批准说明”。填“是”后，工具以评审人为批准人，按原合并批准规则绑定当前源码与选中运行、只覆盖本任务必需章节；批准与评审同为请求材料，成功后登记当前批准。填“否”或留空不产生批准，验收仍检查批准是否齐全；实施者的意见可以保存，但不会生成独立合并批准，业务验收仍拒绝自审。已具备事前方案批准的中等、复杂任务不显示这两个字段。源码或选中运行改变后，合并批准失效，预填的批准字段也须明确复核。带批准字段的草稿另绑定完整方案与历史内容，不能用旧稿批准新材料组中的方案评估。
+当前任务需合并批准且缺少有效批准时，评审信息显示“批准方案与代码”和可选“批准说明”。独立评审人填“是”后，以其为批准人生成批准并登记；填“否”、留空或评审人为实施负责人时保存意见，验收继续核对批准和独立性。批准范围及绑定见[批准与变化](designs.md#批准与变化)和[记录绑定](#记录绑定)。预填批准字段也逐项复核。
 
-`approval-draft` 的姓名、说明、模式和提交号参数替代 `--record`，两种输入二选一；`--sections` 可覆盖记录的 `section_ids`。CLI 的 plan 对应记录的 design 模式。批准输入仍为 JSON；方案只读 Markdown。
+`approval-draft` 的姓名、说明、模式和提交号参数与 `--record` 二选一；`--sections` 可覆盖输入的 `section_ids`。命令行 `plan` 对应记录的 `design` 模式，批准输入为 JSON。
 
-`deliver` 顺序调用原来的 `accept`、`delivery-template`、`verify`，各步保留请求和材料并更新 `current.json`。先核对已有验收是否仍绑定当前任务、章节、源码和材料；可用则复用，否则实际重新验收。报告列出相对任务 base 的全部知识变化；没有变化必须提供 `--reason`。要改知识时仍先独立 `accept`，写完知识后 `deliver` 复用该验收。绑定和知识处置均有效的报告也可复用；已有理由不必再输入。
-
-没有已提交评审且项目配置了平台时，`deliver` 先执行 `review --from-platform`；导入失败停在 `review` 步骤，已有提交不自动替换。本地项目仍给出 review.md 路径和提交命令。评审不通过时，accept/deliver 汇总规范、需求、验收项及相关阻塞问题和理由，并给出修复后重跑、复核命令。任何一步失败即停止，结果的 `steps`、`stopped_at` 和 `next_action` 给出已完成步骤、原因及下一条命令；最终输出保留 `delivery_complete`、`closable`、`summary_markdown` 及平台任务的 `close_note`。中断后用默认新请求编号或显式新编号继续，已登记且仍有效的验收和报告不重复生成；同一成功请求的同组重试仍幂等。平台核查、独立性、知识完整性及关闭授权不变，不执行发布或关闭。
+`deliver` 依次调用 `accept`、`delivery-template`、`verify`，保留各步材料并更新 `current.json`。有效验收和知识处置报告直接复用；无知识变化时给 `--reason`。平台任务每次比较最新含绑定区评审的 `updated_at` 与本地登记时间，采用较新者；平台较新时先导入，失败停在 `review`。本地文件记登记时间，平台导入记地址及 `updated_at`；本地任务采用最后提交。评审未通过时列各结论、阻塞问题、理由及重跑复核命令。失败即停止，`steps`、`stopped_at`、`next_action` 给步骤和下一步；结果含 `delivery_complete`、`closable`、`summary_markdown` 和平台 `close_note`。中断后用新请求编号继续。
 
 ```bash
 tw team accept --root "$PROJECT" --task "$TASK_ID" \
   --out .tw/local/acceptance-<本次唯一编号>.json
 ```
 
-成功结果中的 `business_accepted` 为真，但 `delivery_complete`、`closable` 仍为假。
-`accept` 按身份取准备材料和运行，结合实际填写的评审生成验收报告，保存在自己的请求目录；已有报告仍可用 `--report`。批准可选，省略时使用当前组的批准；简单任务的代码批准须绑定本次运行。记录已有所需评审与批准时，后续 `accept --task "$TASK_ID"` 可以省略其路径。报告生成后仍完整核对实际运行、独立评审、观察与问题记录。
+`accept` 按任务身份取准备材料、运行和已填写评审，核对运行、独立性、场景与问题处置，保存验收报告；已有报告可用 `--report`。批准省略时取当前材料组，也可显式补充。成功返回 `business_accepted: true`、`delivery_complete: false`、`closable: false`。
 
-验收通过后，按 team-knowledge 的写作规范在同一分支直接修改 `.tw/` 条目：根因不明显的缺陷写 lesson，
-难以逆转的选择写 decision，改变了必须保持的行为写 rule；没有可复用结论时不写。运行 `tw check`，修复全部错误。
-
-交付报告的 `knowledge` 字段写知识处置：
+通过后按 [team-knowledge 的完成步骤](../../team-knowledge/SKILL.md#完成后)在同一分支更新知识并运行 `tw check`，再交付。报告的 `knowledge` 写知识处置：
 
 ```json
 "knowledge": {"files": [".tw/lessons/2026-10-14-retry-storm.md"], "reason": ""}
 ```
 
-`delivery-template` 根据任务 `base` 到工作区的 Git 差异预填 `files`；没有知识改动时 `files` 为空，
-必须在 `reason` 写明不需要更新的理由。`.tw/.gitignore` 和 `config.json` 不算知识。多个 Issue 共用一次实现时，知识改动只写一次，各任务的报告分别列出。
+`delivery-template` 按任务 `base` 到工作区的 Git 差异预填全部知识正文，含删除和未跟踪新文件；`.tw/.gitignore`、`config.json` 归配置。`files` 为空时填写 `reason`。多个任务共用知识时写一次，各报告分别列出。
 
 ```bash
 tw check --root "$PROJECT"
@@ -265,93 +223,32 @@ tw team delivery-template --root "$PROJECT" --task "$TASK_ID"
 tw team verify --root "$PROJECT" --task "$TASK_ID"
 ```
 
-交付模板自动登记。需要填写理由、自动化声明或其他报告字段时，将模板复制为新文件填写，再用 `verify --task "$TASK_ID" --report <填写后的报告>` 显式指定；不要改动已经登记的文件后直接按身份核查。成功后记录该报告，之后可省略路径。
+交付模板自动登记；补充理由或其他字段时，复制为新文件填写，用 `verify --task "$TASK_ID" --report <新报告>` 指定，成功后可省略路径。
 
-`verify` 只核查最终交付：报告的 `acceptance` 必须指向本任务通过的业务验收记录（上面
-`accept --out` 的产物）。验收之后任务、方案章节、源码，以及交付报告引用的执行、评审、
-批准材料都不能变化，否则用当前材料重新验收。`files` 必须正好列出本任务相对 `base` 改动的知识正文
-（含删除、未跟踪的新文件），`delivery-template` 已按此预填；`tw check` 必须没有错误；`files` 为空时
-`reason` 必填。工具不判断知识是否充分，这由评审人确认。知识正文不参与执行绑定，
-提交知识不会使按内容绑定的检查过期。
+`verify` 要求报告的 `acceptance` 指向本任务通过的业务验收记录，并按[记录绑定](#记录绑定)核对当前材料；变化时重新验收。`knowledge.files` 与实际知识差异一致，`tw check` 错误数为零。平台收尾按[单人任务的收尾说明](coordination.md#单人任务的收尾说明)准备，关闭授权及发布核对见[关闭步骤](team-delivery.md#状态与关闭-issue)。
 
-Issue 自动核查平台，漏传 `--issue` 不能绕过。仅一位平台负责人、无须另行负责的共享仓库且无跨服务风险时，可用收尾说明代替实施交接；实施可由本人或其指挥的代理完成。`creator` 是实施负责人，`owner` 是平台负责人，无须担任方案角色。交付还需无剩余事项、未决问题及未确认进度。关闭另需明确授权，工具不执行关闭。
-
-### 回归自动化状态
-
-`delivery_complete` 只表示验收、知识处置和交接记录齐全，不表示应沉淀的回归已经自动化。
-报告可在 `delivery-template` 生成后手工加入可选的 `automation`，按场景声明回归状态；
-每次重新生成模板后需再次加入。未声明时结果为 `automation_status: "not-declared"`。
-
-```json
-"automation": {"scenarios": [
-  {"id": "S1", "acceptance": ["A1"], "guarantee": "<要保护的业务结果>", "status": "automated",
-   "level": "interface", "check": "<已执行的检查>", "cases": ["<用例>"]},
-  {"id": "S2", "acceptance": ["A2"], "guarantee": "<要保护的业务结果>", "status": "pending-automation",
-   "level": "journey", "reason": "<尚无相应入口>", "finding": "<延期问题编号>", "due": "2026-11-15"},
-  {"id": "S3", "acceptance": ["A3"], "guarantee": "<要保护的业务结果>", "status": "manual-only",
-   "level": "manual", "reason": "<无法自动化的原因>", "owner": "<执行人>", "trigger": "<执行时机>"}
-]}
-```
-
-每个条目只允许示例中对应状态列出的字段，缺项或多余字段都会被拒绝：
-
-- `automated`：必填 `check`、`cases`。检查已在本次运行中执行，用例全部通过；检查的覆盖
-  层次不低于声明的 `level`，`journey` 检查可覆盖 `interface` 或 `unit` 声明。
-- `pending-automation`：必填 `reason`、`finding`、`due`。`finding` 必须是评审中 `deferred`
-  的问题，由它携带确认人、跟进任务和范围调整（确认依据可选）；`blocks` 写 `acceptance`，记录
-  它若重新打开时阻塞的阶段。多个场景可引用同一问题；同一需求缺多类入口时，可合并为
-  一个建设任务，也可分开登记。`due` 为 ISO 日期，过期仍可记录。
-- `manual-only`：必填 `reason`、`owner`、`trigger`，`level` 为 `manual`。它声明后续人工执行
-  责任，不证明已经观察过；本次人工观察的证据写在交付验收记录，尚未观察的列为未验证。
-
-结果中的 `regression_pending` 在存在待建设条目时为真，文本输出逐条列出。工具只核对结构与
-引用，不证明业务保证已被自动回归保护；状态的业务含义见
-[项目验收方式与测试能力建设](test-capability.md)第 4 节。
+回归状态由场景的 `regression` 生成，见[场景与证据](#场景与证据)。`delivery_complete` 表示验收、知识处置和交接记录齐全；整体交付条件见[业务验收标准](business-acceptance.md#5-交付报告)。
 
 ## 平台草稿、跨仓和外部结果
 
-`design-draft --issue ... --record ...`、`approval-draft --issue ... --record ...`、
-`progress --issue ... --progress ...` 和 `handoff --issue ... --progress ...` 只生成共享
-记录草稿。`handoff --kind design` 交接方案，默认 `--kind implementation` 交接实施。
-平台输入和冲突规则见[任务协作与交接](coordination.md)。沿用已有授权发布，之后重新读取
-平台状态；批准记录或携带合并批准选择的绑定评审必须实际出现在对应任务上，单独本地文件不能冒充共享批准。
+`design-draft --issue ... --record ...`、`approval-draft --issue ... --record ...`、`progress --issue ... --progress ...`、`handoff --issue ... --progress ...` 生成共享记录草稿。`handoff --kind design` 交接方案，默认 `--kind implementation` 交接实施。平台输入与冲突见[任务协作](coordination.md)。平台批准记录或含合并批准的绑定评审须在对应任务上共享。
 
-外部仓库输入为 `{"kind":"repository","repository":"host/group/repo","role":"build"}`，
-`role` 还可为 `modified` 或 `joint`；本机目录通过 `--repository host/group/repo=/path` 或
-本地映射提供。检查的 `repository` 决定实际运行目录，前端检查需在前端仓库执行。
-`evidence --evidence-repository host/group/repo --path <仓内路径>` 保留原仓身份和内容指纹。
+外部仓库输入为 `{"kind":"repository","repository":"host/group/repo","role":"build"}`，`role` 还可为 `modified`、`joint`；本机目录通过 `--repository host/group/repo=/path` 或本地映射提供。检查的 `repository` 决定执行目录；`evidence --evidence-repository host/group/repo --path <仓内路径>` 保留原仓身份和内容指纹。
 
-平台读取遵守[平台脚本契约](platform.md)；导入实际结果或做多仓联合验收时，读取[跨机器结果](portable.md)。
-入口分别为 `run --portable`、`import-result --result <定位文件>` 和
-`aggregate --joint <联合清单> --repository host/group/repo=/path`。原始报告和平台运行来源始终
-需要核对。
+平台读取遵守[平台契约](platform.md)；外部运行和联合验收见[跨机器结果](portable.md)，入口为 `run --portable`、`import-result --result <定位文件>`、`aggregate --joint <联合清单> --repository host/group/repo=/path`。核对原始报告与平台运行来源。
 
 ## 重试与清理
 
-材料按任务和请求分目录保存。`--request-id` 用于同一完成请求的重试：同编号且输入相同
-返回原结果；`--allow-modified-tool`、`start --grant` 和 `--confirmed-by` 也属于请求输入。
-变更这些选项、其它输入或需要重跑时使用新编号，保留失败及中断材料。`--out` 只接受运行
-目录下的新文件，已有路径拒绝覆盖。失败输出给出原因及下一步；不要改指纹消除错误。
+材料按任务和请求分目录保存。`--request-id` 用于重试：同编号且输入相同返回原结果；输入包括 `--allow-modified-tool`、`start --grant`、`--confirmed-by`。输入变化或重跑使用新编号，保留失败和中断材料。`--out` 接受运行目录下的新文件；已有路径报错，按返回的原因和下一步修正输入。
 
 ```bash
 tw team cleanup --root "$PROJECT" [--cleanup-scope all --older-than 14] > "$CLEANUP_PLAN"
 tw team cleanup --root "$PROJECT" --apply --plan "$CLEANUP_PLAN"
 ```
 
-`--cleanup-scope all` 另外清理超过指定天数且未被任何记录引用的 `batches/`、`imports/` 目录和已结束进程留下的
-验证标记。手工 `--out` 输出及其他目录不归工具管理，只在 `unmanaged` 中列出大小，从不删除。`totals` 给出
-总体积、可回收体积和最大的 20 个文件。
+计划放在项目外，核对预览后应用；材料变化时重新预览。清理对象是已结束任务中未被引用的请求目录，完成证明须覆盖当时的请求清单；任务新增请求或请求被改写时整项重新受保护。`--cleanup-scope all` 另含超过指定天数且未被引用的 `batches/`、`imports/` 目录和已结束进程的验证标记。`current.json` 引用材料、在途任务、共享批准历史与被引用证据保留。手工 `--out` 和其他目录由成员管理，列入 `unmanaged`；`totals` 给总体积、可回收体积和最大 20 个文件。
 
-`current.json` 引用的材料仍在使用，不会被清理。
-
-证据只保存评审者能阅读的内容。`evidence` 与评审证据拒绝编译后的可执行文件（ELF、Mach-O、PE）；
-构建产物用构建提交和命令说明，不复制进运行目录。超过 64 MiB 的文件需显式 `--allow-large-evidence`。
-使用该选项时，引用中保存 `allow_large_evidence: true`；最终核查按引用中的布尔标记重新检查大小。
-未带标记的引用仍受 64 MiB 限制，本地与外部仓库相同；标记不能覆盖编译产物限制。
-
-计划放在项目外，先核对预览再显式应用。期间材料变化会要求重新预览；只清理已结束
-任务中未被引用的请求目录。完成证明必须覆盖当时的请求清单；同一任务后来出现新请求或旧请求被改写时，整个任务重新受保护。在途任务、共享批准历史和全部被引用证据保留，不用清理
-代替修复缺口。发布、提交、合并、关闭任务和技能安装仍沿用已有授权。
+`evidence` 与评审证据使用可阅读内容，拒绝 ELF、Mach-O、PE 编译产物；构建产物记录构建提交和命令。文件上限 64 MiB，显式 `--allow-large-evidence` 后引用保存 `allow_large_evidence: true`；最终核查据此放宽大小限制，本地与外部仓库相同。编译产物仍按类型拒绝。
 
 ## 进度、恢复与统计
 
@@ -360,62 +257,76 @@ tw team status --root "$PROJECT" --task "$TASK_ID" --format text
 tw team metrics --root "$PROJECT" [--task "$TASK"] [--since 2026-10-01] [--format text]
 ```
 
-`status` 读取当前组和请求记录，列出六步状态及 `next_step`。只把核实有效的验收、交付记录放入 `verified_records`（键为 `acceptance`、`delivery`，值含 path/sha256），不返回恒为 false 的 business_accepted、delivery_complete、closable 等判断。它不执行检查或环境命令，不能代替新的业务验收。
+`task_phase` 由同一入口判定，分为三个阶段：
 
-步骤为 `done`、`pending`、`stale`、`failed`、`running-or-interrupted` 或 `not-recorded`；只有成功提交的评审算完成。已提交且绑定有效的评审后，验收、报告、最终核查均指向 `deliver`。平台方案/批准更新、显式传入不同内容的方案、源码或配置绑定变化时，受影响步骤过期；过期记录不列为有效。不同内容的显式方案不会被 status 悄然登记，须重新 start。相同内容换路径仍可经核对登记。
+- `closed`：平台任务已关闭，优先于其他阶段；`status` 按各步骤最后记录报告，概要及 `next_action` 为“任务已关闭”，`next_step` 为 null。
+- `delivered`：当前材料组含通过的最终交付记录，且交付后本任务尚无新的开工、运行、评审或场景轮次；`status` 概要为“任务已交付”，按最后记录展示步骤，`verified_records` 列出验收和交付记录（`path`、`sha256`）。`next_step` 为 null，表示流程核查步骤已走完；`next_action` 给出发布收尾说明或交接、记录关闭授权与关闭任务的操作。`deliver` 返回已有交付记录及摘要，标明 `reused: true`。
+- `in-progress`：其余情况；为本任务重新 `start`、`run`、`review`（生成或提交）或 `scenarios submit` 后按当前材料核对。进行中读取旧格式内部快照时，用当前格式方案重新 `start`。
 
-全部完成显示“已交付；关闭需要授权，工具不执行关闭”。`publication` 列出平台收尾或交接的发布状态、类型及评论地址，本地草稿不能证明发布。关闭条件及报告中的 `close_authorization: {confirmed_by, reference}` 见[关闭步骤](team-delivery.md#状态与关闭-issue)，工具只报告 closable。
+`verify --report <报告>` 继续按当前材料显式复核；业务结论以该次核对为准。
 
-会话中断后先查看 status；`rules_changed` 表示开工后团队规则文本有变化。运行记录仍按内容、配置及声明的提交敏感性核对；使用修改版工具的证据有明确标记。
+`delivered`、`closed` 阶段的读取命令直接读取记录，方案快照保留为历史材料；`scenarios pending` 返回空清单，概要与 `status` 一致，场景统计取交付时记录。交付步骤的整体状态见[回归约定](#轮次验收与回归)。
 
-`metrics` 只读本机运行目录，按任务统计各命令的请求次数、失败与未完成次数、耗时，以及每项检查的运行和重跑次数，
-供每周复盘参考；它不联网，也不是质量结论。
+评审在成功提交后计为完成。步骤状态为 `done`、`pending`、`stale`、`failed`、`running-or-interrupted`、`not-recorded`。场景验收步骤列通过、失败、受阻、待执行数量；待执行或失败时指向 `scenarios pending`。采用有效评审后指向 `deliver`；绑定变化时受影响步骤过期。显式方案内容变化时重新 `start`，相同内容换路径可经核对登记。
+
+`publication` 按平台记录列收尾或交接的发布状态、类型、评论地址。关闭条件和 `close_authorization` 见[关闭步骤](team-delivery.md#状态与关闭-issue)。会话中断后先查 `status`；`rules_changed` 表示开工后团队规则文本变化，运行记录按其绑定核对，修改版工具证据带标记。
+
+`metrics` 读取本机运行目录，按任务列请求、失败、未完成、耗时、检查运行与重跑次数，以及各场景轮次和一次通过率，供每周复盘；场景统计口径见[场景与证据](#场景与证据)。
 
 ## 前置任务与只读状态
 
-任务节的 `blocked_by` 需要实际业务验收证明。为每个前置项保存
-`{"section":"T1","task":".tw/local/.../task.json","report":".tw/local/.../delivery.json"}`，
-在 `start` 或 `handoff` 时传 `--dependency <输入文件>`；准备上下文保留这些输入，`accept` 和交付模板沿用，变化时重新 `start`。
-工具重新核对前置项的原始报告与批准，不能用 Issue 已关闭代替验收。准备结果把本次
-核对的材料保存在 context 中，后续最终交付仍重新核对。
+任务节 `blocked_by` 使用实际业务验收证明。每个前置项写 `{"section":"T1","task":".tw/local/.../task.json","report":".tw/local/.../delivery.json"}`，在 `start` 或 `handoff` 传 `--dependency <输入文件>`；上下文保存输入，`accept` 和交付模板沿用，变化时重新 `start`。工具核对前置项原始报告和批准，将材料保存在上下文，最终交付重新核对。
 
-`status` 不执行项目命令；仅用身份查看不写材料，显式替换成功核对后更新当前组。`status --report` 也不重新运行环境身份命令，
-因此不宣称本轮业务验收完成。需要核对原始报告及当前环境时明确运行 `accept`。
+`status` 读取记录和声明；显式替换成功核对后更新当前组。需要核对原始报告和当前环境时运行 `accept`。
 
+## 场景与证据
 
-## 业务场景与证据
+`scope-global.data.requirement_acceptance` 列非空主需求验收编号；`impact` 每项含 `repository`、`entrypoint`、`operations`、`producer`、`consumer`、`commit_owner`、`acceptance`。主需求覆盖所列验收，子任务结果的 `acceptance_scope` 为 `task`。
 
-`scope-global.data.requirement_acceptance` 列非空的主需求验收编号，验证完整业务路径或人工观察。
-`scope-global.data.impact` 每项含 `repository`、
-`entrypoint`、`operations`、`producer`、`consumer`、`commit_owner` 和 `acceptance` 编号列表。
-主需求任务必须覆盖所列验收；子任务通过只返回 `acceptance_scope: task`。
+每个任务的验收节用 `- 场景：docs/sop/<批次>.yaml#SOP-02、SOP-03` 引用场景文件和节点，解析为 `data.scenarios` 的 `{path, sha256, nodes}` 列表；文件用 YAML 子集或 JSON。场景格式、配对示例、结果文件及网页、命令行、智能体三种交付形态的执行方法见[场景指南](scenarios.md)。
 
-每个验收节的 `data` 除 `checks` 外必须包含：
+### 场景与入口
 
-- `scenario`：`actor`、`initial_state`、非空 `steps`、`expected`、非空 `negative_cases`，以及
-  `sources`：预期所依据的业务原文，每项 `{ref, version, confirmed_by}`，分别为 SOP 或需求原文
-  的位置、版本和确认人。方案历史中的早期修订可以没有该字段；`start` 在 `verification_gaps`
-  中列出缺少来源的验收项，`accept` 和 `verify` 拒绝本任务任一验收项缺少来源。工具只核对字段齐全，不判断来源是否
-  真实、是否独立于实现；补充来源会改变方案指纹，需要重新批准。
-- `verification`：`{method,cases,substitutes}`，方式为 `automatic` 或 `manual`；后两项默认
-  空数组。人工验证均留空。自动验证的 `cases` 是原始报告中的准确编号，`substitutes` 是允许的替代依赖。
+`scenarios check <文件>` 核对 `metadata.sources`、编号唯一、每节点正向场景及反向场景或 `negative_exempt` 理由、反向 `negative_type`、场景的 `verify` 入口。场景内容指纹覆盖 `initial_state`、`steps`、`expected`、`forbidden_effects`，错误给原文行号。
 
-覆盖只写在 `.tw/config.json` 的 `checks.<编号>.coverage`：`level` 为 `unit/interface/journey/manual`；
-`entrypoints` 非空，`environment` 是环境名，`substitutes` 列替代依赖；`isolation` 为
-`isolated/shared-reviewed/unresolved`。共享须有 `isolation_evidence`；未解决时禁止执行对应检查，环境身份仍单独核对。
-业务验收核对检查全通过、隔离已解决、替身获准、方案及评审的用例均通过；需求级自动验收至少一项
-journey 检查。入口、环境及验收层级不作逐字比对，声明仍需独立评审。
-`design-draft/approval-draft/start` 在 `verification_gaps` 给改法，文字标题“验收无法满足”；
-只提示，不改 `ok`、`implementation_ready` 或 `gaps`。
+`.tw/config.json` 的 `acceptance_entries` 以入口名映射 `surface`、`operate`、非空 `observe`、非空 `evidence`、`isolation`；可选 `address_env` 为环境变量名，`accounts` 引用已声明账号编号。每条场景用 `verify` 选择入口；纯文档也声明自己的入口。
 
-评审 JSON 由工具生成，每项须有非空 `observations`。自动观察为
-`{kind:"execution",run:{path,sha256},check:"检查编号",cases:["实际用例编号"]}`；运行须在本任务
-`runs` 中，且为该检查选中的有效记录，经原始报告核对，不能借用其他运行的结果。人工观察为
-`{kind:"manual",observer,at,steps,result,evidence:[{path,sha256}]}`，时间含时区，
-步骤和证据非空；Markdown 的“结果”和“数据”合存到 `result`。纯文档可人工观察，源码链接不算运行证据。
+场景的 `metadata.sources` 与验收节的 `依据`（`data.sources`）均使用 `{ref, version, confirmed_by}`，登记已确认业务原文的位置、版本和确认人。验收节缺少来源时 `verification_gaps` 列出验收项，`accept` 拒绝。`检查` 为登记检查编号；非空时填写 `验证：自动`，内部为 `{method:"automatic", cases, substitutes}`，后两项默认空数组；检查为 `无` 时省略验证标签。
 
-业务验收时，`reviewer` 与人工 `observer` 均须独立于 `roles.implementation_owner`，比较忽略
-大小写及多余空格；实施者为空则拒绝。工具只核对姓名，成员和代理应使用稳定、可区分的身份。
+检查覆盖声明位于 `checks.<编号>.coverage`：`level` 为 `unit/interface/journey/manual`，`entrypoints` 非空，`environment` 为环境名，`substitutes` 列替代依赖；`isolation` 为 `isolated/shared-reviewed/unresolved`。共享环境填写 `isolation_evidence`，隔离解决后执行。业务验收核对检查通过、隔离已解决、替身获准和方案及评审指定用例通过；声明的业务适用性由独立评审确认。准备阶段的 `verification_gaps` 给改法，标题“验收无法满足”，作为提示返回。
+
+### 用例导入与覆盖
+
+`scenarios import-cases --task <身份> <文件>` 读取 YAML 子集或 JSON，顶层 `test_cases` 或 `cases` 数组中每条含 `id`、`title`，其余字段原样保存在快照。`case_imports` 按导入顺序累积，同编号采用最后一次完整内容。
+
+代理按业务语义把用例转换为团队场景，写配对文件后运行 `scenarios coverage --task <身份> --pairs <文件>`。每条已导入用例恰好归入 `covered` 或 `disposed`；`conflict`、缺归类、重复归类或引用未知编号时报 `scenario-coverage-incomplete`。`covered`、`conflict` 含 `case`、`scenarios`、`note`；`disposed` 含 `case`、`state`（`blocked/deferred/out-of-scope`）、`reason`、`confirmed_by`。通过后保存 `case_coverage`。覆盖的语义及充分性由评审确认。
+
+### 待执行清单与结果
+
+`scenarios pending --task <身份>` 按本任务引用节点列当前场景。相同场景编号与内容指纹的最近结果用于判定：
+
+| 输入 | 当前状态与处理 |
+| --- | --- |
+| 当前产品上的 `pass`，或此前 `pass` 且 `regression` 指定检查和用例在当前源码有效运行中通过 | `passed` |
+| 最近结果为 `fail` | `failed`，进入待执行清单 |
+| 最近结果为 `blocked` 或 `skip` | `blocked`，交验收核对问题处置 |
+| 新场景、内容指纹变化，或此前通过但产品变化且回归尚未通过 | `pending`，进入待执行清单 |
+
+清单给场景内容、入口声明、内容指纹、原因、当前 `source_digest` 和 `product_digest`。独立执行者经声明入口执行，按行写 JSON 对象，再运行 `scenarios submit --task <身份> --results <文件>`。必填 `scenario`、`status`、`actual`、`executed_at`、`executor`、`evidence`；可选 `session`、`finding`、`note`。每个场景每文件一条结果；状态为 `pass/fail/blocked/skip`，`blocked`、`skip` 填 `finding`，时间为带时区且截至当前的 ISO 时间。证据路径相对结果文件目录，`pass`、`fail` 至少一份。
+
+提交须覆盖全部待执行及失败场景，也可包含本任务其他场景。工具核对执行者独立性、证据文件与复制期间指纹、提交期间源码及场景内容稳定，将证据复制到本轮目录并登记轮次。结果文件和原始证据放在仓库外或 `.tw/local/` 下；仓内普通未跟踪文件参与产品指纹。代理、人和项目看板均通过同一契约登记。
+
+### 轮次、验收与回归
+
+轮次保存逐场景结果与通过、失败、受阻、跳过数；`metrics` 的每轮通过率为通过数除以本轮结果数。`first_pass` 按登记轮次取当前场景内容的首次结果，通过数除以首次为 `pass` 或 `fail` 的场景数，空分母返回 null。`by_executor` 按规范化执行者身份取当前场景内容的最新结果；`agreement` 在至少两位执行者有通过或失败结果的场景中，统计所有结果均通过的比例。
+
+`accept` 要求检查通过、场景均为 `passed` 或受阻已处置；`blocked`、`skip` 对应问题在评审中为 `accepted` 或 `deferred`，按[问题处置](#问题处置与交接)填写确认人及依据。复杂任务需导入测试同事的用例；任务有导入时，`accept` 用当前用例并集重新核对覆盖；没有导入的中等、简单任务按自写场景验收。
+
+评审观察种类为 `execution` 和 `scenarios`：前者含 `{run:{path,sha256}, check, cases}`，运行属于本任务且为选中的有效结果；后者含本任务轮次引用 `rounds`。评审稿预填场景状态、实际结果、执行者、轮次和证据；受阻场景的问题按验收负责人及受影响验收节补入清单。`reviewer` 与场景 `executor` 均独立于 `roles.implementation_owner`，姓名比较折叠大小写和多余空格，实施负责人必填。成员和代理使用稳定、可区分的身份。
+
+每条场景的 `regression` 写 `{check, cases}`、`{manual, owner, trigger}` 或 `{pending}`，分别表示仓内回归、保留人工责任、待沉淀的问题编号；缺省表示待沉淀。`check` 引用 `junit` 或 `go-json` 检查，场景读取统一核对格式并报行号。工具生成 `automation_status`：检查及指定用例在当前源码有效运行中通过时归入 `automated`；人工责任归入 `manual-only`；其他归入 `pending`，每项含 `reason`：`not-declared`（缺省）、`deferred`（引用已延期问题）、`check-not-passed`（当前源码缺有效通过运行）、`cases-not-passed`（指定用例缺失或尚待通过）。`regression.pending` 引用评审中 `deferred` 的问题。
+
+`delivery_complete` 表示验收、知识处置和交接记录齐全；`regression_pending` 表示存在待沉淀场景；`overall_complete` 为前者成立且后者为假。概要、摘要与交付步骤共用该判定：条件齐全写“交付完成”；材料齐全且回归待沉淀写“交付材料齐全；整体交付未完成：N 条场景的回归待沉淀”，逐条显示场景与原因；材料待补时报告停止步骤。整体交付依据见[业务验收标准](business-acceptance.md#5-交付报告)。
 
 ## 问题处置与交接
 
@@ -426,16 +337,8 @@ journey 检查。入口、环境及验收层级不作逐字比对，声明仍需
  "blocks":["implementation","acceptance"],"state":"open","resolution":{}}
 ```
 
-`affects` 为空表示全局；`blocks` 明确阻塞实施、验收或两者。评估中的 `uncertainties` 只引用这些问题编号，具体问题正文保存在 `issues`。`state` 为 `open`、`resolved`、
-`accepted`、`deferred`。关闭问题的 `resolution` 含非空 `reason` 与 `evidence` 来源列表；
-接受限制另需确认人 `confirmed_by`，确认依据 `confirmation` 可选，与方案批准一致；延期同样需要
-确认人，并另需 `follow_up`、`scope_change`。
-已记录问题的编号、责任和影响不能在后续记录中悄然改变或删除；若原记录有误，明确处置
-原问题再记录新的问题。验收方面的问题无需重新批准无关方案，但其处置仍须明确。
+`affects` 为空表示全局；`blocks` 指实施、验收或两者。评估的 `uncertainties` 引用问题编号，正文保存在 `issues`。`state` 为 `open`、`resolved`、`accepted`、`deferred`；`open` 的 `resolution` 为 `{}`，其他状态填非空 `reason` 与 `evidence` 来源列表。`accepted` 另填 `confirmed_by`；`deferred` 另填确认人、`follow_up`、`scope_change`；`confirmation` 可选。
 
-成功提交的 Markdown 和交给 `accept`、`verify` 的既有 JSON 评审问题，都保留在不可覆盖的请求材料中；即使评审不通过或本次验收失败，问题仍进入历史，下一次评审表也会带入。共享平台的方案、交接历史与进度问题同样纳入核对。工具无法从任意自由文本
-识别全部遗漏，评审人必须先把讨论中的已知问题写入这些字段。
+已知问题保留编号、摘要、责任、影响与阻塞阶段；原记录有误时明确处置后再新增问题。成功提交的 Markdown、交给 `accept` 或 `verify` 的 JSON 评审，以及平台方案、交接和进度的问题均进入历史，验收失败时也保留，后续草稿带入。评审人将讨论中的已知问题写入这些字段。
 
-交接 `verified` 改为原始执行或业务验收文件引用 `{path,sha256}`，跨仓引用可加 `repository`。
-接手者需要原件及被引用输出；通过共享材料包或现有 `import-result` 提供。只给源码链接
-不构成验证证明，源码链接放在 `references`。缺失原件会在接手或最终核对中保留缺口。
+交接 `verified` 使用原始执行或业务验收引用 `{path,sha256}`，跨仓可加 `repository`。通过共享材料包或 `import-result` 提供原件和引用输出；源码与说明链接放入 `references`，证据类别见[业务验收术语](business-acceptance.md#1-术语)。接手或最终核对时，缺失原件列为缺口。
