@@ -42,7 +42,7 @@ def _artifact_value(root, response):
         return None
 
 
-def source_stale(root, value, source_digest, profile=None):
+def source_stale(root, value, source_digest, profile=None, *, workspace=None):
     """Read the source binding each record actually stores; never query its environment."""
     if not isinstance(value, dict):
         return False
@@ -57,7 +57,7 @@ def source_stale(root, value, source_digest, profile=None):
             sensitive = bool((profile or {}).get('checks', {}).get(row.get('id'), {}).get('revision_sensitive'))
             if sensitive not in sources:
                 from validation import source
-                sources[sensitive] = digest(source(root, profile, revision_sensitive=sensitive))
+                sources[sensitive] = digest(source(root, profile, revision_sensitive=sensitive, workspace=workspace))
             if row.get('binding', {}).get('source') != sources[sensitive]:
                 return True
         return False
@@ -89,7 +89,7 @@ def recorded_steps(root, rows):
 
 
 def steps(root, task, source_digest, context=None, task_arg=None, profile=None, current=None,
-          task_identity=None, material_group=None, review_inputs=None):
+          task_identity=None, material_group=None, review_inputs=None, *, workspace=None):
     rows = records(root, task['id'])
     if current:
         rows = [(c, current[1] if c == current[0] else r) for c, r in rows]
@@ -116,7 +116,7 @@ def steps(root, task, source_digest, context=None, task_arg=None, profile=None, 
     for row in result:
         if row['id'] in selected:
             response = selected[row['id']][1]
-            if row['state'] == 'done' and source_stale(root, _artifact_value(root, response), source_digest, profile):
+            if row['state'] == 'done' and source_stale(root, _artifact_value(root, response), source_digest, profile, workspace=workspace):
                 row['state'] = 'stale'
             if row['state'] == 'failed' and response.get('next_action'):
                 from repairs import recorded_action
@@ -133,7 +133,7 @@ def steps(root, task, source_digest, context=None, task_arg=None, profile=None, 
     if profile is not None:
         editor = reviews._state(root, task['id'])
         draft_binding = read(artifact_valid(root, editor['current'])) if editor['current'] else None
-        review_state = review_history.status(root, profile, task, editor, draft_binding, material_group, review_inputs)
+        review_state = review_history.status(root, profile, task, editor, draft_binding, material_group, review_inputs, workspace=workspace)
         if review_state and review_state['review'] and not review_state['current']:
             row = next(row for row in result if row['id'] == 'review')
             row.update(state='stale', evidence=review_state['review']['path'], stale_reason='评审绑定已变化，需要逐项复核')

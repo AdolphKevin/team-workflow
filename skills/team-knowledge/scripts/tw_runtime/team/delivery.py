@@ -28,20 +28,21 @@ def evidence(root, profile, item):
     return evidence_file(path, allow_large=allow_large)
 
 
-def design_material(root, profile, task, report, completed_tasks=()):
+def design_material(root, profile, task, report, completed_tasks=(), *, workspace=None):
+    workspace = workspace or validation.Workspace(root, profile)
     import designs
     from coordination import validate_task_design
-    design = design_files.read(inside(root, report['design']))
+    design = design_files.read(inside(root, report['design']), workspace=workspace)
     validate_task_design(task, design)
     approvals = [read(inside(root, p)) for p in report['approvals']]
-    history = [design_files.read(inside(root, p)) for p in report.get('design_history', [])]
+    history = [design_files.read(inside(root, p), workspace=workspace) for p in report.get('design_history', [])]
     refs = [artifact(root, inside(root, p)) for p in report['runs']]
-    code = validation.source_digest(root, profile)
+    code = validation.source_digest(root, profile, workspace=workspace)
     selected_refs = None
     if any(row.get('mode') == 'combined' and row.get('code_digest') == code
            and row.get('run_refs') != sorted(refs, key=lambda ref: (ref['path'], ref['sha256'])) for row in approvals):
         try:
-            execution = validation.verify_runs(root, profile, task, report['runs'], live=False)
+            execution = validation.verify_runs(root, profile, task, report['runs'], live=False, workspace=workspace)
             selected_refs = list({path: artifact(root, inside(root, path)) for path in execution['selected_runs'].values()}.values())
         except (Invalid, OSError, ValueError, TypeError, KeyError):
             pass  # Missing required execution never supplies an alternate approval binding.
@@ -49,8 +50,8 @@ def design_material(root, profile, task, report, completed_tasks=()):
                                      root=root, profile=profile,
                                      section_ids=task['section_ids'],
                                      completed_tasks=completed_tasks,
-                                     changed_paths=validation.changed_paths(root, task, profile, design),
-                                     code_digest=code, run_refs=refs, selected_run_refs=selected_refs)
+                                     changed_paths=validation.changed_paths(root, task, profile, design, workspace=workspace),
+                                     code_digest=code, run_refs=refs, selected_run_refs=selected_refs, workspace=workspace)
     fingerprints = designs.fingerprints(design)['sections']
     selected = {key: fingerprints[key] for key in task['section_ids']}
     return design, approvals, status, selected
@@ -84,16 +85,17 @@ def passed(row, label):
     text(row.get('summary'))
 
 
-def review_template(root, profile, task, report):
-    design, _, _, selected = design_material(root, profile, task, report)
+def review_template(root, profile, task, report, *, workspace=None):
+    workspace = workspace or validation.Workspace(root, profile)
+    design, _, _, selected = design_material(root, profile, task, report, workspace=workspace)
     import issue_history
     known = {v['id']: v for v in issue_history.known(root, task['id'])}
     known.update({v['id']: v for v in design.get('issues', [])})
-    _, state = scenario_acceptance.current(root, profile, task, design, report['runs'])
+    _, state = scenario_acceptance.current(root, profile, task, design, report['runs'], workspace=workspace)
     known.update({v['id']: v for v in scenario_acceptance.findings(state, list(known.values()), design, task)})
     pending = {'status': 'pending', 'summary': '', 'evidence': []}
     return {'data_version': RECORD_SCHEMA, 'kind': 'review', 'task_id': task['id'],
-            'task_digest': digest(task), 'source_digest': validation.source_digest(root, profile),
+            'task_digest': digest(task), 'source_digest': validation.source_digest(root, profile, workspace=workspace),
             'validation_policy': review_policy(root, profile, task),
             **scenario_acceptance.bindings(state), 'sections': selected, 'reviewer': '', 'standards': dict(pending), 'spec': dict(pending),
             'risks': task['risks'], 'knowledge_conflicts_resolved': False,
@@ -107,11 +109,12 @@ def review_policy(root, profile, task):
             'risk_checks': {risk: sorted(profile['risk_checks'][risk]) for risk in sorted(task['risks'])}}
 
 
-def check_review_format(root, profile, task, review, selected, design):
+def check_review_format(root, profile, task, review, selected, design, *, workspace=None):
+    workspace = workspace or validation.Workspace(root, profile)
     require(review.get('data_version') == RECORD_SCHEMA and review.get('kind') == 'review',
             f'Expected a schema {RECORD_SCHEMA} code review; regenerate and submit it with review')
     require(review.get('task_digest') == digest(task) and review.get('task_id') == task['id'], 'Review belongs to another task/version')
-    require(review.get('source_digest') == validation.source_digest(root, profile), 'Review does not cover current source', error_code=Code.SOURCE_STALE)
+    require(review.get('source_digest') == validation.source_digest(root, profile, workspace=workspace), 'Review does not cover current source', error_code=Code.SOURCE_STALE)
     require(review.get('sections') == selected, 'Review does not cover current approved sections')
     require(review.get('validation_policy') == review_policy(root, profile, task), 'Review must cover current validation policy')
     text(review.get('reviewer'))
@@ -123,7 +126,7 @@ def check_review_format(root, profile, task, review, selected, design):
         require(bool(row.get('evidence')), 'Review needs actual evidence')
         for ref in row['evidence']:
             evidence(root, profile, ref)
-    _, state = scenario_acceptance.current(root, profile, task, design)
+    _, state = scenario_acceptance.current(root, profile, task, design, workspace=workspace)
     require(all(review.get(key) == value for key, value in scenario_acceptance.bindings(state).items()),
             '评审所用场景文件或轮次已变化，请重新复核', error_code=Code.REVIEW_BINDING_STALE)
     require(review.get('risks') == task['risks'], 'Review must assess the current risks')
@@ -196,8 +199,8 @@ def require_review_passed(task, review, required):
         raise ReviewBlocked(task, failures)
 
 
-def check_review(root, profile, task, review, selected, design, status, execution, run_paths):
-    check_review_format(root, profile, task, review, selected, design)
+def check_review(root, profile, task, review, selected, design, status, execution, run_paths, *, workspace=None):
+    check_review_format(root, profile, task, review, selected, design, workspace=workspace)
     from contracts import independent
     independent(design, review['reviewer'], 'Reviewer')
     require_review_passed(task, review, status['required_sections'])
@@ -207,10 +210,11 @@ def check_review(root, profile, task, review, selected, design, status, executio
         require(len(refs) == 1 and refs[0].get('rounds') == review['scenario_rounds'], '验收观察引用评审所用的场景轮次')
 
 
-def verify(root, profile, task, report, phase='delivery', _seen=None, live=None):
+def verify(root, profile, task, report, phase='delivery', _seen=None, live=None, *, workspace=None):
     """live: re-run environment identity commands. Only the first acceptance does; later checks of the
     same acceptance at delivery rely on the environment it recorded, so a removed fixture
     no longer invalidates finished evidence. Source, definitions, reviews and platform are always rechecked."""
+    workspace = workspace or validation.Workspace(root, profile)
     import designs
     import coordination
     from common import now
@@ -222,7 +226,7 @@ def verify(root, profile, task, report, phase='delivery', _seen=None, live=None)
         {'acceptance', 'knowledge', 'design_history', 'close_authorization', 'dependencies'},
         error_code=Code.REPORT_INCOMPLETE)
     import task_inputs
-    task = task_inputs.expand(task, design_files.read(inside(root, report['design'])))
+    task = task_inputs.expand(task, design_files.read(inside(root, report['design']), workspace=workspace))
     task_valid(task, profile, root)
     require(report['data_version'] == RECORD_SCHEMA and report['task_id'] == task['id'],
             f'Expected a schema {RECORD_SCHEMA} delivery report for this task; regenerate it with delivery-template', error_code=Code.REPORT_INCOMPLETE)
@@ -230,7 +234,7 @@ def verify(root, profile, task, report, phase='delivery', _seen=None, live=None)
     strings(report['approvals'])
     import issue_history
     issues_before = digest(issue_history.known(root, task['id']))
-    before = validation.source_digest(root, profile)
+    before = validation.source_digest(root, profile, workspace=workspace)
     platform_state = None
     if platform_read.is_task(root, task['id']):
         platform_state = coordination.load(task['id'], root=root)
@@ -251,13 +255,13 @@ def verify(root, profile, task, report, phase='delivery', _seen=None, live=None)
         dep_task_path, dep_report_path = inside(root, dependency['task']), inside(root, dependency['report'])
         dep_task, dep_report = read(dep_task_path), read(dep_report_path)
         require(dependency['section'] in dep_task.get('section_ids', []), 'Dependency evidence belongs to another section')
-        proof = verify(root, profile, dep_task, dep_report, 'acceptance', seen, live)
-        current_design = design_files.read(inside(root, report['design']))
+        proof = verify(root, profile, dep_task, dep_report, 'acceptance', seen, live, workspace=workspace)
+        current_design = design_files.read(inside(root, report['design']), workspace=workspace)
         require(dep_task.get('design_id') == task['design_id'] and proof['sections'][dependency['section']]
                 == designs.fingerprints(current_design)['sections'][dependency['section']], 'Dependency uses a different plan section')
         completed_tasks.add(dependency['section'])
         dependency_materials += [artifact(root, dep_task_path), artifact(root, dep_report_path), *proof['materials']]
-    design, approvals, status, selected = design_material(root, profile, task, report, completed_tasks)
+    design, approvals, status, selected = design_material(root, profile, task, report, completed_tasks, workspace=workspace)
     review = read(inside(root, report['review']))
     if platform_state is not None:
         require(platform_state['design'] == design, 'Local design differs from the shared plan')
@@ -267,14 +271,14 @@ def verify(root, profile, task, report, phase='delivery', _seen=None, live=None)
                 error_code=Code.APPROVAL_NOT_SHARED,
                 next_action=reviews.submission_action(root, task['id'],
                     reviews.case_repair(root, task['id'], artifact(root, inside(root, report['review'])))['review_file']))
-    scenario_group, scenario_state = scenario_acceptance.current(root, profile, task, design, report['runs'])
+    scenario_group, scenario_state = scenario_acceptance.current(root, profile, task, design, report['runs'], workspace=workspace)
     from contracts import unsourced
     missing = unsourced(task, design)
     require(not missing, 'Acceptance scenario needs confirmed business sources: ' + ', '.join(missing))
     if review.get('source_digest') == before:
-        scenario_acceptance.check(root, profile, task, design, review, scenario_group, scenario_state)
+        scenario_acceptance.check(root, profile, task, design, review, scenario_group, scenario_state, workspace=workspace)
     try:
-        check_review_format(root, profile, task, review, selected, design)
+        check_review_format(root, profile, task, review, selected, design, workspace=workspace)
     except Invalid as exc:
         import shlex
         incomplete = Invalid('Current approval/review materials are incomplete: ' + str(exc),
@@ -295,7 +299,7 @@ def verify(root, profile, task, report, phase='delivery', _seen=None, live=None)
             next_action='补齐方案中的职责、待定事项与前置任务材料后重新开工：tw team start --task '
                         + quote(task['id']) + ' --design ' + quote(report['design'])
                         + ' --root ' + quote(str(root)))
-    execution = validation.verify_runs(root, profile, task, report['runs'], live=live)
+    execution = validation.verify_runs(root, profile, task, report['runs'], live=live, workspace=workspace)
     initial = read(inside(root, report['brief']))
     require(initial.get('data_version') == RECORD_SCHEMA and initial.get('kind') == 'knowledge-brief'
             and initial.get('task_id') == task['id'] and initial.get('task_digest') == digest(task),
@@ -311,13 +315,13 @@ def verify(root, profile, task, report, phase='delivery', _seen=None, live=None)
     review = read(inside(root, report['review']))
     run_paths = [inside(root, p).relative_to(root).as_posix() for p in report['runs']]
     try:
-        check_review(root, profile, task, review, selected, design, status, execution, run_paths)
+        check_review(root, profile, task, review, selected, design, status, execution, run_paths, workspace=workspace)
     except ReviewCaseError as exc:
         import reviews
         repair = reviews.case_repair(root, task['id'], artifact(root, inside(root, report['review'])))
         exc.next_action, exc.review_file = repair['next_action'], repair['review_file']
         raise
-    regression = scenario_acceptance.regression(root, profile, task, scenario_group, scenario_state, review['findings'])
+    regression = scenario_acceptance.regression(root, profile, task, scenario_group, scenario_state, review['findings'], workspace=workspace)
     from execution import output_excerpt
     materials = [artifact(root, inside(root, report[p])) for p in ('design', 'brief', 'review')]
     materials += [artifact(root, inside(root, p)) for p in report['approvals'] + report['runs'] + report.get('design_history', [])]
@@ -397,7 +401,7 @@ def verify(root, profile, task, report, phase='delivery', _seen=None, live=None)
                                                 'knowledge_disposition': summary.disposition(completed)}, task, profile)}
             if report.get('close_authorization'):
                 close['close_authorization'] = report['close_authorization']
-            current, note = coordination.closing(root, profile, task['id'], completed_tasks, close, review['findings'])
+            current, note = coordination.closing(root, profile, task['id'], completed_tasks, close, review['findings'], workspace=workspace)
             publication_verified = note is None
             from contracts import reconcile, unresolved
             reconcile(review['findings'], current.get('questions', []))
@@ -423,9 +427,10 @@ def verify(root, profile, task, report, phase='delivery', _seen=None, live=None)
         require(all(latest[key] == platform_state[key] for key in observed) and not latest['gaps'],
                 'Platform requirements, approvals or progress changed during verification', error_code=Code.PLATFORM_CHANGED)
     require(digest(issue_history.known(root, task['id'])) == issues_before, 'Known issues changed during verification')
-    require(scenario_acceptance.bindings(scenario_acceptance.current(root, profile, task, design, report['runs'])[1])
+    workspace.refresh()
+    require(scenario_acceptance.bindings(scenario_acceptance.current(root, profile, task, design, report['runs'], workspace=workspace)[1])
             == scenario_acceptance.bindings(scenario_state), '验收期间场景文件或轮次已变化', error_code=Code.ACCEPTANCE_STALE)
-    require(validation.source_digest(root, profile) == before, 'Source changed during verification', error_code=Code.SOURCE_STALE)
+    require(validation.source_digest(root, profile, workspace=workspace) == before, 'Source changed during verification', error_code=Code.SOURCE_STALE)
     return result
 
 

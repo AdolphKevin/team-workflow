@@ -17,7 +17,7 @@ import json
 import zipfile
 
 from common import (RECORD_SCHEMA, Invalid, artifact, artifact_valid, create, digest, git, inside, now, obj,
-                    load_profile, profile_valid, local_write_guard, read, require, reserved, sha, snapshot, text)
+                    load_profile, profile_valid, local_write_guard, read, require, reserved, sha, text)
 from tw_runtime.team import platform_script as platform_read
 from tw_runtime import gitutil
 
@@ -37,12 +37,13 @@ def repository_id(root):
     return platform_read.repository(identity)
 
 
-def source_state(root, profile):
+def source_state(root, profile, *, workspace=None):
+    from validation import Workspace
+    workspace = workspace or Workspace(root, profile)
     repositories, files = {}, {}
 
-    def capture(path, inputs):
+    def capture(path, inputs, state):
         repo = repository_id(path)
-        state = snapshot(path, {'inputs': inputs})
         changes = git(path, 'diff', 'HEAD', '--name-only', '-z').split(b'\0')
         changes += git(path, 'ls-files', '--others', '--exclude-standard', '-z').split(b'\0')
         dirty = sorted({n.decode() for n in changes if n and not reserved(n.decode(), inputs)})
@@ -53,15 +54,15 @@ def source_state(root, profile):
         repositories[repo] = {'commit': state['head'], 'content': digest(state['files']), 'clean': not dirty,
                               'changes': dirty[:20]}
 
-    capture(root, profile['inputs'])
+    capture(root, profile['inputs'], workspace.state)
     for name, item in profile.get('external_inputs', {}).items():
         from common import external_path
         path = external_path(root, name, item)
         if item['kind'] == 'repository':
-            capture(path, [])
+            capture(path, [], workspace.state['external_inputs'][name])
         else:
             require(path.is_file(), 'Missing external input: ' + name)
-            files[name] = sha(path)
+            files[name] = workspace.state['external_inputs'][name]['sha256']
     return {'repositories': repositories, 'files': files}
 
 
@@ -183,8 +184,10 @@ def _time(start, finish):
         raise Invalid('Invalid portable execution timestamps') from exc
 
 
-def validate_result(root, profile, manifest, directory, *, remote=False, live=True):
+def validate_result(root, profile, manifest, directory, *, remote=False, live=True, workspace=None):
     """Re-decode originals and return a normalized local view, without changing them."""
+    from validation import Workspace
+    workspace = workspace or Workspace(root, profile)
     import validation
     from execution import decode
     profile_valid(profile, root)
@@ -206,11 +209,11 @@ def validate_result(root, profile, manifest, directory, *, remote=False, live=Tr
     require(row['source_unchanged'] is True, 'Source or environment changed during execution')
     require(row['argv'] == check['argv'] and row['cwd'] == check['cwd']
             and row['repository'] == check.get('repository'), 'Portable command or repository mismatch')
-    current_sources = source_state(root, profile)
+    current_sources = source_state(root, profile, workspace=workspace)
     _source(current_sources)
     require(set(current_sources['repositories']) == set(manifest['source_after']['repositories'])
             and current_sources['files'] == manifest['source_after']['files'], 'Portable source inputs differ')
-    current = validation.check_binding(root, profile, check, remote=remote, live=live)
+    current = validation.check_binding(root, profile, check, remote=remote, live=live, workspace=workspace)
     obj(row['binding'], {'source', 'definition', 'environment', 'producer'})
     for part in current:
         require(row['binding'][part] == current[part], 'Imported execution ' + part + ' changed: ' + key)
@@ -270,11 +273,13 @@ def _archive_matches(archive, directory, manifest):
         raise Invalid('Missing or invalid original provider archive') from exc
 
 
-def import_result(root, profile, locator, directory=None):
+def import_result(root, profile, locator, directory=None, *, workspace=None):
     """核对平台来源与原始报告，保存导入材料，返回生成文件路径和记录。
 
     默认保存到项目的 .tw/local/imports；业务交付结论由交付核对生成。
     """
+    from validation import Workspace
+    workspace = workspace or Workspace(root, profile)
     directory = Path(directory) if directory is not None else root / '.tw/local/imports' / uuid.uuid4().hex
     if not directory.is_absolute():
         directory = root / directory
@@ -297,7 +302,7 @@ def import_result(root, profile, locator, directory=None):
     unpack(data, directory / 'content')
     manifest_path = inside(directory, 'content/result.json')
     manifest = read(manifest_path)
-    row = validate_result(root, profile, manifest, manifest_path.parent, remote=True)
+    row = validate_result(root, profile, manifest, manifest_path.parent, remote=True, workspace=workspace)
     _provider_source(root, locator, receipt, manifest)
     fresh = provider(root, locator)['provenance']
     require(fresh == receipt, 'Provider run or artifact changed during import')
@@ -308,14 +313,14 @@ def import_result(root, profile, locator, directory=None):
               'provider_digest': expected_digest,
               'result': {**row, 'argv': list(profile['checks'][row['id']]['argv'])},
               'tested_source': manifest['source_before'],
-              'import_source': source_state(root, profile),
+              'import_source': source_state(root, profile, workspace=workspace),
               'assurance': 'provider-bound original reports; tested commits retained; not signed business proof'}
     path = directory / 'import.json'
     create(path, record)
     return path, record
 
 
-def validate_import(root, profile, record, *, live=True):
+def validate_import(root, profile, record, *, live=True, workspace=None):
     """只读核对导入材料，返回重新计算的结果与原始执行记录。
 
     live=False 用于验收后的离线环境核查，沿用验收时的环境记录；仍核对
@@ -335,7 +340,7 @@ def validate_import(root, profile, record, *, live=True):
     path = artifact_valid(root, record['manifest'])
     manifest = read(path)
     _archive_matches(archive, path.parent, manifest)
-    result = validate_result(root, profile, manifest, path.parent, remote=True, live=live)
+    result = validate_result(root, profile, manifest, path.parent, remote=True, live=live, workspace=workspace)
     _provider_source(root, record['locator'], receipt, manifest)
     require(record['started_at'] == manifest['started_at'] and record['finished_at'] == manifest['finished_at']
             and record['tested_source'] == manifest['source_before'], 'Imported provenance differs from original execution')

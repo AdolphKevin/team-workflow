@@ -3,6 +3,8 @@ import copy
 import hashlib
 import os
 import re
+import subprocess
+from unittest.mock import patch
 import unittest
 
 import test_markdown_review as markdown
@@ -19,6 +21,21 @@ class ReviewRecheck(unittest.TestCase):
         base.rule, base.current_path, base.current)
     prepared, draft, field, completed, submit, assert_position = (
         base.prepared, base.draft, base.field, base.completed, base.submit, base.assert_position)
+
+    def setUp(self):
+        self.git_calls = []
+        original = subprocess.Popen
+
+        def counted(argv, *args, **kwargs):
+            if isinstance(argv, (list, tuple)) and argv[0] == 'git':
+                self.git_calls.append(argv)
+            return original(argv, *args, **kwargs)
+
+        # 同口径覆盖测试准备与内嵌命令；命令子进程的 git 另行测量。
+        counter = patch.object(subprocess, 'Popen', side_effect=counted)
+        counter.start()
+        self.addCleanup(counter.stop)
+        self.base.setUp(self)
 
     def submitted(self, manual=False, issues=None):
         path, _ = self.draft(manual=manual, issues=issues)
@@ -126,6 +143,7 @@ class ReviewRecheck(unittest.TestCase):
         code, accepted = self.command('accept', '--task', self.task['id'])
         self.assertEqual(code, 0, accepted)
         self.assertTrue(accepted['business_accepted'])
+        self.assertLessEqual(len(self.git_calls), 105)
 
     def test_rewritten_conclusions_require_confirmation_and_replace_old_summaries(self):
         path, _ = self.submitted()

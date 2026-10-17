@@ -21,8 +21,9 @@ def approval_plan(design, history):
     return digest({'design': design, 'history': history})
 
 
-def source_record(root, profile, task):
-    state = validation.source(root, profile)
+def source_record(root, profile, task, *, workspace=None):
+    workspace = workspace or validation.Workspace(root, profile)
+    state = validation.source(root, profile, workspace=workspace)
     files = {}
 
     def collect(value, prefix=''):
@@ -113,7 +114,8 @@ def carry(candidate, previous, fields, baseline):
     candidate['generated']['changes'] = '\n'.join(lines)
 
 
-def status(root, profile, task, state, current, group=None, inputs=None):
+def status(root, profile, task, state, current, group=None, inputs=None, *, workspace=None):
+    workspace = workspace or validation.Workspace(root, profile)
     previous = latest(root, state, current, group)
     if not previous and not current:
         return None
@@ -121,27 +123,27 @@ def status(root, profile, task, state, current, group=None, inputs=None):
     import designs
     from commands import local
     binding = {'task_id': task['id'], 'task_digest': digest(task),
-               'source_digest': validation.source_digest(root, profile),
+               'source_digest': validation.source_digest(root, profile, workspace=workspace),
                'validation_policy': delivery.review_policy(root, profile, task), 'risks': task['risks']}
     try:
         design_path = getattr(inputs, 'design', None) or (group or {}).get('design', {}).get('path')
-        design = design_files.read(local(root, design_path))
+        design = design_files.read(local(root, design_path), workspace=workspace)
         hashes = designs.fingerprints(design)['sections']
         binding['sections'] = {key: hashes[key] for key in task['section_ids']}
         history_paths = getattr(inputs, 'design_history', None)
         if history_paths is None:
             history_paths = [row['path'] for row in (group or {}).get('design_history', [])]
-        binding['approval_plan'] = approval_plan(design, [design_files.read(local(root, path)) for path in history_paths])
+        binding['approval_plan'] = approval_plan(design, [design_files.read(local(root, path), workspace=workspace) for path in history_paths])
         paths = getattr(inputs, 'run', None)
         if paths is None:
             refs = (group or {}).get('selected_runs')
             paths = [row['path'] for row in refs if row] if refs is not None else [row['path'] for row in (group or {}).get('runs', [])]
         paths = [local(root, path).relative_to(root).as_posix() for path in paths]
-        execution = validation.verify_runs(root, profile, task, paths, live=False)
+        execution = validation.verify_runs(root, profile, task, paths, live=False, workspace=workspace)
         from common import artifact
         binding['selected_runs'] = {key: artifact(root, local(root, path)) for key, path in execution['selected_runs'].items()}
         import scenario_acceptance
-        binding.update(scenario_acceptance.bindings(scenario_acceptance.current(root, profile, task, design, paths)[1]))
+        binding.update(scenario_acceptance.bindings(scenario_acceptance.current(root, profile, task, design, paths, workspace=workspace)[1]))
         valid = previous is not None and same_group(previous['value']['bindings'], binding)
     except (Invalid, OSError, ValueError, TypeError, KeyError):
         valid = False

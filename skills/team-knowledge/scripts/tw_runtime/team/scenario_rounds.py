@@ -80,7 +80,7 @@ def statistics(entries, history, states):
                                for state in ('passed', 'failed', 'blocked', 'pending')}}
 
 
-def regression_reason(root, profile, task, group, entry, checks=None):
+def regression_reason(root, profile, task, group, entry, checks=None, *, workspace=None):
     """回归待沉淀原因；None 表示指定用例在当前源码有效运行中通过。"""
     checks = checks if checks is not None else {}
     regression = entry.get('regression', {})
@@ -94,7 +94,7 @@ def regression_reason(root, profile, task, group, entry, checks=None):
         try:
             check = profile['checks'][key]
             paths = regression_runs(root, group)
-            validation.verify_runs(root, profile, task, paths, checks=[key])
+            validation.verify_runs(root, profile, task, paths, checks=[key], workspace=workspace)
         except (Invalid, OSError, ValueError, TypeError, KeyError):
             checks[selection] = 'check-not-passed'
             return checks[selection]
@@ -102,18 +102,18 @@ def regression_reason(root, profile, task, group, entry, checks=None):
         try:
             selected_profile = {**profile, 'checks': {**profile['checks'], key: {
                 **check, 'required_cases': list(dict.fromkeys(check['required_cases'] + regression['cases']))}}}
-            validation.verify_runs(root, selected_profile, task, paths, checks=[key])
+            validation.verify_runs(root, selected_profile, task, paths, checks=[key], workspace=workspace)
             checks[selection] = None
         except (Invalid, OSError, ValueError, TypeError, KeyError):
             checks[selection] = 'cases-not-passed'
     return checks[selection]
 
 
-def current_state(root, profile, group, inputs=None):
+def current_state(root, profile, group, inputs=None, *, workspace=None):
     """所有场景命令共用的当前状态入口；历史只按内容与源码判定。"""
-    design, task, entries = inputs or scenarios.task_entries(root, group, profile)
-    source = validation.source_digest(root, profile)
-    product = validation.product_digest(root, profile, design)
+    workspace = workspace or validation.Workspace(root, profile)
+    design, task, entries = inputs or scenarios.task_entries(root, group, profile, workspace=workspace)
+    source, product = workspace.fingerprints(design)
     history = rounds(root, group)
     previous, latest = set(), {}
     for record in history:
@@ -133,7 +133,7 @@ def current_state(root, profile, group, inputs=None):
                 state, reason = 'failed', 'failed'
             elif row['status'] in ('blocked', 'skip'):
                 state, reason = 'blocked', None
-            elif record['product_digest'] == product or regression_reason(root, profile, task, group, entry, checks) is None:
+            elif record['product_digest'] == product or regression_reason(root, profile, task, group, entry, checks, workspace=workspace) is None:
                 state, reason = 'passed', None
             else:
                 reason = 'source-changed'
@@ -165,26 +165,28 @@ def pending_lines(rows, counts):
     return lines
 
 
-def pending_result(root, task_id, value):
+def pending_result(root, task_id, value, *, workspace=None):
     rows = [row for row in value['scenarios'] if row['state'] in ('pending', 'failed')]
     from commands import current_status
     return {'ok': True, 'task_id': task_id, **{key: item for key, item in value.items() if key != 'scenarios'},
             'pending': rows, 'pending_count': len(rows),
             'summary': f'本任务有 {len(rows)} 条待执行场景。',
             'next_action': ('按清单执行场景，然后提交结果：' + repairs.task_command(
-                root, task_id, 'scenarios submit', '--results <文件>')) if rows else current_status(root, task_id)['next_action']}
+                root, task_id, 'scenarios submit', '--results <文件>')) if rows else current_status(
+                    root, task_id, workspace=workspace, scenario_state=value)['next_action']}
 
 
-def pending(root, task_id, profile):
-    return pending_result(root, task_id, current_state(root, profile, scenarios.current(root, task_id)))
+def pending(root, task_id, profile, *, workspace=None):
+    workspace = workspace or validation.Workspace(root, profile)
+    return pending_result(root, task_id, current_state(root, profile, scenarios.current(root, task_id), workspace=workspace), workspace=workspace)
 
 
-def status_step(root, profile, task_id, progress, group=None):
+def status_step(root, profile, task_id, progress, group=None, *, workspace=None, state=None):
     """在检查之后展示场景执行，未执行的场景先于评审。"""
     group = group or materials.load(root, task_id)
     if group is None:
         return
-    value = current_state(root, profile, group)
+    value = state if state is not None else current_state(root, profile, group, workspace=workspace)
     counts = value['summary_counts']
     todo = counts['pending'] + counts['failed']
     row = {'id': 'scenarios', 'label': '场景验收', 'state': 'pending' if todo else 'done',
@@ -198,20 +200,23 @@ def status_step(root, profile, task_id, progress, group=None):
         progress.update(next_step=row, finished=False)
 
 
-def task_metrics(root, profile, group, since=None):
-    value = current_state(root, profile, group)
+def task_metrics(root, profile, group, since=None, *, workspace=None):
+    workspace = workspace or validation.Workspace(root, profile)
+    value = current_state(root, profile, group, workspace=workspace)
     return {'statistics': value['statistics'],
             'rounds': [{'round': row['round'], 'submitted_at': row['submitted_at'], 'statistics': row['statistics'],
                         'pass_rate': ratio(row['statistics']['pass'], row['statistics']['executed'])}
                        for row in rounds(root, group) if not since or row['submitted_at'] >= since]}
 
 
-def submit(root, task_id, profile, path):
+def submit(root, task_id, profile, path, *, workspace=None):
+    workspace = workspace or validation.Workspace(root, profile)
     from cleanup import guard
     from contracts import independent
     with guard(root):
         group = scenarios.current(root, task_id)
-        before = current_state(root, profile, group)
+        inputs = scenarios.task_entries(root, group, profile, workspace=workspace)
+        before = current_state(root, profile, group, inputs, workspace=workspace)
         entries = {row['id']: row for row in before['scenarios']}
         rows = scenario_results.load(path, entries)
         missing = [key for key, row in entries.items() if row['state'] in ('pending', 'failed')
@@ -219,7 +224,7 @@ def submit(root, task_id, profile, path):
         if missing:
             return {'ok': False, 'error_code': Code.SCENARIO_RESULTS_INCOMPLETE, 'missing': missing,
                     'problem': '补齐待执行场景的结果：' + '、'.join(missing)}
-        design = scenarios.task_entries(root, group, profile)[0]
+        design = inputs[0]
         for row in rows:
             try:
                 independent(design, row['executor'], '场景执行者')
@@ -243,7 +248,9 @@ def submit(root, task_id, profile, path):
                 except (Invalid, OSError, ValueError, TypeError) as exc:
                     raise FileProblems([{'line': index + 1, 'problem': 'evidence：' + str(exc)}], Code.SCENARIO_RESULT) from exc
             row.update(evidence=refs, fingerprint=entries[row['scenario']]['fingerprint'])
-        after = current_state(root, profile, group)
+        workspace.refresh()
+        inputs = scenarios.task_entries(root, group, profile, workspace=workspace)
+        after = current_state(root, profile, group, inputs, workspace=workspace)
         require(after['source_digest'] == before['source_digest']
                 and {row['id']: row['fingerprint'] for row in after['scenarios']} == {key: row['fingerprint'] for key, row in entries.items()},
                 '提交期间源码或场景内容已变化，请按当前内容重新执行。', error_code=Code.SOURCE_STALE,
@@ -257,6 +264,6 @@ def submit(root, task_id, profile, path):
         ref = artifact(root, target)
         group.setdefault('scenario_rounds', []).append(ref)
         write(materials.path(root, task_id), group)
-        updated = pending_result(root, task_id, current_state(root, profile, group))
+        updated = pending_result(root, task_id, current_state(root, profile, group, inputs, workspace=workspace), workspace=workspace)
         return {**updated, 'artifact': ref, 'round': number, 'round_statistics': record['statistics'],
                 'summary': f'第 {number} 轮已登记，共执行 {len(rows)} 条场景。'}

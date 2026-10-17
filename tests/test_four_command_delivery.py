@@ -448,11 +448,11 @@ class FourCommandDelivery(unittest.TestCase):
         original = commands.dispatch
         interrupted = []
 
-        def dispatch(args, root):
+        def dispatch(args, root, **kwargs):
             if args.command == 'verify' and not interrupted:
                 interrupted.append(True)
                 raise KeyboardInterrupt('stop at the public verify entry')
-            return original(args, root)
+            return original(args, root, **kwargs)
 
         with patch.object(commands, 'dispatch', side_effect=dispatch), contextlib.redirect_stdout(io.StringIO()), self.assertRaises(KeyboardInterrupt):
             workflow.main(['deliver', '--root', str(self.root), '--task', self.task['id'], '--reason', 'No knowledge change.'])
@@ -472,11 +472,11 @@ class FourCommandDelivery(unittest.TestCase):
         original = commands.dispatch
         interrupted = []
 
-        def dispatch(args, root):
+        def dispatch(args, root, **kwargs):
             if args.command == 'delivery-template' and not interrupted:
                 interrupted.append(True)
                 raise KeyboardInterrupt('stop after business acceptance')
-            return original(args, root)
+            return original(args, root, **kwargs)
 
         with patch.object(commands, 'dispatch', side_effect=dispatch), contextlib.redirect_stdout(io.StringIO()), self.assertRaises(KeyboardInterrupt):
             workflow.main(['deliver', '--root', str(self.root), '--task', self.task['id'], '--reason', 'No knowledge change.'])
@@ -509,10 +509,10 @@ class FourCommandDelivery(unittest.TestCase):
         original = commands.dispatch
         inserted = []
 
-        def dispatch(args, root):
+        def dispatch(args, root, **kwargs):
             if args.command == 'verify' and not inserted:
                 inserted.append(self.rule('late-rule', '交付期间新增的规则'))
-            return original(args, root)
+            return original(args, root, **kwargs)
 
         output = io.StringIO()
         with patch.object(commands, 'dispatch', side_effect=dispatch), contextlib.redirect_stdout(output):
@@ -535,12 +535,12 @@ class FourCommandDelivery(unittest.TestCase):
         original = commands.dispatch
         removed = []
 
-        def dispatch(args, root):
+        def dispatch(args, root, **kwargs):
             if args.command == 'verify' and not removed:
                 path = artifact_valid(self.root, self.current()['delivery_report'])
                 removed.append((path, path.read_bytes()))
                 path.unlink()
-            return original(args, root)
+            return original(args, root, **kwargs)
 
         output = io.StringIO()
         try:

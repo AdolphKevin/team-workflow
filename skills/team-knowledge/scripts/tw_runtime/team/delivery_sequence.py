@@ -32,23 +32,23 @@ def child_args(args, task_id, command, request_id=None):
     return child
 
 
-def current_report(args, root, task, include_knowledge=False):
+def current_report(args, root, task, include_knowledge=False, *, workspace=None):
     from commands import report_input
     current = child_args(args, task['id'], 'delivery-template')
-    materials.resolve(current, root)
+    materials.resolve(current, root, workspace=workspace)
     return report_input(current, root, task, include_knowledge=include_knowledge)
 
 
-def usable_acceptance(args, root, profile, task, group):
+def usable_acceptance(args, root, profile, task, group, *, workspace=None):
     if not group.get('acceptance'):
         return None
     try:
         accepted = read(artifact_valid(root, group['acceptance']))
         if not (accepted.get('kind') == 'acceptance' and accepted.get('business_accepted') is True):
             return None
-        report = current_report(args, root, task)
+        report = current_report(args, root, task, workspace=workspace)
         report.pop('acceptance', None)
-        checked = delivery.verify(root, profile, task, report, 'acceptance', live=False)
+        checked = delivery.verify(root, profile, task, report, 'acceptance', live=False, workspace=workspace)
         keys = ('task_id', 'task_digest', 'source_digest', 'sections')
         if all(accepted.get(key) == checked.get(key) for key in keys) and delivery.contents(accepted.get('materials')) == delivery.contents(checked['materials']):
             return {'ok': True, 'artifact': group['acceptance'], 'business_accepted': True,
@@ -58,12 +58,12 @@ def usable_acceptance(args, root, profile, task, group):
     return None
 
 
-def usable_report(args, root, task, group):
+def usable_report(args, root, task, group, *, workspace=None):
     if not group.get('delivery_report'):
         return None
     try:
         report = read(artifact_valid(root, group['delivery_report']))
-        expected = current_report(args, root, task, include_knowledge=True)
+        expected = current_report(args, root, task, include_knowledge=True, workspace=workspace)
         for key in ('task_id', 'design', 'approvals', 'design_history', 'brief', 'runs', 'review', 'acceptance', 'dependencies'):
             if report.get(key) != expected.get(key):
                 return None
@@ -87,7 +87,7 @@ def validate_retry(root, task, cached):
                 'Request ID already belongs to different inputs; use a new request ID', error_code=Code.REQUEST_CONFLICT)
 
 
-def deliver(args, root, profile, task, request):
+def deliver(args, root, profile, task, request, *, workspace=None):
     import commands
     steps = []
     task_arg = '--task ' + shlex.quote(task['id'])
@@ -96,7 +96,7 @@ def deliver(args, root, profile, task, request):
         key = hashlib.sha256((request.directory.name + ':' + step).encode('utf-8')).hexdigest()[:32]
         child = child_args(args, task['id'], command, 'deliver-' + key)
         try:
-            return commands.dispatch(child, root)
+            return commands.dispatch(child, root, workspace=workspace)
         except Exception as exc:
             # Material/platform preconditions can fail before dispatch creates its request.
             # Retain that step's diagnosis as well as the sequence's stopping point.
@@ -170,7 +170,7 @@ def deliver(args, root, profile, task, request):
         if not reviewed.get('ok'):
             return finish(reviewed, 'review')
         group = materials.load(root, task['id'])
-    accepted = usable_acceptance(args, root, profile, task, group)
+    accepted = usable_acceptance(args, root, profile, task, group, workspace=workspace)
     reused = accepted is not None
     accepted = accepted or execute('accept', 'acceptance')
     append('acceptance', accepted, reused)
@@ -178,7 +178,7 @@ def deliver(args, root, profile, task, request):
         return finish(accepted, 'acceptance')
 
     group = materials.load(root, task['id'])
-    report = usable_report(args, root, task, group)
+    report = usable_report(args, root, task, group, workspace=workspace)
     reused = report is not None
     report = report or execute('delivery-template', 'delivery-report')
     append('delivery-report', report, reused)

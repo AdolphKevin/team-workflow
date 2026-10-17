@@ -152,7 +152,7 @@ def report_input(args, root, task, include_knowledge=True):
     return result
 
 
-def predecessor_checks(args, root, profile, task, design, dependencies=None):
+def predecessor_checks(args, root, profile, task, design, dependencies=None, *, workspace=None):
     """Explicit preparation/hand-off checks may revalidate predecessor evidence."""
     import delivery
     import designs
@@ -164,14 +164,14 @@ def predecessor_checks(args, root, profile, task, design, dependencies=None):
         dependency = read(local(root, value['task']))
         require(value['section'] in dependency['section_ids'] and dependency['design_id'] == task['design_id'],
                 'Predecessor evidence belongs to another task section')
-        proof = delivery.verify(root, profile, dependency, read(local(root, value['report'])), phase='acceptance')
+        proof = delivery.verify(root, profile, dependency, read(local(root, value['report'])), phase='acceptance', workspace=workspace)
         require(proof['sections'][value['section']] == hashes.get(value['section']), 'Predecessor plan changed')
         completed.append(value['section'])
         proofs.append({'section': value['section'], 'acceptance': proof})
     return completed, proofs
 
 
-def cached_predecessors(args, root, profile):
+def cached_predecessors(args, root, profile, *, workspace=None):
     """Only continuation readiness uses a prepared observation; delivery always rechecks."""
     if not args.context:
         return []
@@ -182,7 +182,7 @@ def cached_predecessors(args, root, profile):
         proof = value['acceptance']
         require(proof.get('kind') == 'acceptance' and proof.get('business_accepted') is True,
                 'Prepared predecessor was not accepted')
-        require(proof['source_digest'] == validation.source_digest(root, profile), '前置任务的源码与当前源码不同',
+        require(proof['source_digest'] == validation.source_digest(root, profile, workspace=workspace), '前置任务的源码与当前源码不同',
                 next_action=repairs.command(args, 'start'))
         for item in proof['materials']:
             artifact_valid(root, item)
@@ -204,7 +204,7 @@ def approval_recovery(args, value, status):
     return True
 
 
-def dispatch(args, root):
+def dispatch(args, root, *, workspace=None):
     if args.command == 'review' and args.from_platform:
         require(not args.file, '--from-platform 不能与本地 --file 混用')
         args.submit = True
@@ -220,7 +220,7 @@ def dispatch(args, root):
         return completed
     if args.command == 'scenarios':
         import scenarios
-        return scenarios.dispatch(args, root, load_profile(root))
+        return scenarios.dispatch(args, root, load_profile(root), workspace=workspace)
     if args.command == 'project':
         return project_report(root, args.home)
     if args.command == 'cleanup':
@@ -235,19 +235,20 @@ def dispatch(args, root):
     from tw_runtime.team import platform_script as platform_read
     # Validate caller paths before materials.resolve replaces them with tool-owned snapshots.
     for path in ([args.design] if args.design else []) + list(args.design_history):
-        design_files.read(local(root, path), internal=False)
+        design_files.read(local(root, path), internal=False, workspace=workspace)
     if args.command == 'design-draft' and args.record:
-        design_files.read(local(root, args.record), internal=False)
+        design_files.read(local(root, args.record), internal=False, workspace=workspace)
     candidate = args.issue or (str(args.task) if args.task else None)
     if candidate:
         platform_read.is_task(root, candidate)
     profile = load_profile(root)
+    workspace = workspace or validation.Workspace(root, profile)
     task_files = ([args.task] if args.task and (root / args.task).is_file() else []) + list(args.with_task)
     for value in task_files:
         path = local(root, value)
         task_inputs.validate_written(read(path), path.relative_to(root).as_posix())
     import materials
-    materials.resolve(args, root)
+    materials.resolve(args, root, workspace=workspace)
     start = None
     if args.command == 'start':
         import starting
@@ -278,7 +279,7 @@ def dispatch(args, root):
         from artifacts import directory
         task_ids = [(read(local(root, args.task))['id'] if (root / args.task).is_file() else str(args.task))] if args.task else [args.issue] if args.issue else sorted(
             {read(p).get('task_id') for p in (root / '.tw/local/tasks').glob('*/requests/*/request.json')} - {None})
-        rows = [metrics.task_metrics(root, task_id, args.since) for task_id in task_ids]
+        rows = [metrics.task_metrics(root, task_id, args.since, workspace=workspace) for task_id in task_ids]
         return {'ok': True, 'kind': 'workflow-metrics', 'read_only': True, 'metrics': rows,
                 'summary': f'{len(rows)} 个任务的本机运行统计；只辅助复盘，不是质量结论。',
                 'lines': [line for row in rows for line in metrics.render(row)]}
@@ -286,7 +287,7 @@ def dispatch(args, root):
         import issue_draft
         require(bool(args.task), 'issue-draft needs --task (the structured task for the issue)')
         return issue_draft.draft(root, profile, read(local(root, args.task)),
-                                 design_files.read(local(root, args.design)) if args.design else None,
+                                 design_files.read(local(root, args.design), workspace=workspace) if args.design else None,
                                  [read(local(root, p)) for p in args.with_task], args.reviewer,
                                  design_path=local(root, args.design) if args.design else None)
     platform = start['platform'] if start else None
@@ -318,14 +319,14 @@ def dispatch(args, root):
         from cleanup import guard
         locator_path = local(root, args.result)
         inputs = {'command': 'import-result', 'locator': artifact(root, locator_path),
-                  'profile': digest(profile), 'source': validation.source_digest(root, profile),
+                  'profile': digest(profile), 'source': validation.source_digest(root, profile, workspace=workspace),
                   'options': {'allow_modified_tool': args.allow_modified_tool}}
         with guard(root):
             request = Request(root, 'imports:' + profile['project'], inputs, args.request_id)
         if request.cached is not None:
             return request.cached
         try:
-            path, record = portable.import_result(root, profile, read(locator_path), request.directory / 'import')
+            path, record = portable.import_result(root, profile, read(locator_path), request.directory / 'import', workspace=workspace)
             ref = request.publish('import.json', record, args.out) if args.out else artifact(root, path)
             return request.finish({'ok': True, 'artifact': ref, 'scope': 'execution-only'})
         except (Invalid, OSError, ValueError, TypeError, KeyError) as exc:
@@ -335,13 +336,13 @@ def dispatch(args, root):
                                    'next_action': getattr(exc, 'next_action', None) or
                                        'Inspect provider identity and original reports; retry with a new request ID.'}))
     require(task is not None and task.get('data_version') == 1, 'This operation requires a data_version 1 task')
-    selected_design = (start['design'] if start else design_files.read(local(root, args.design)) if args.design else
-                       design_files.read(local(root, args.record)) if args.command == 'design-draft' and args.record else
+    selected_design = (start['design'] if start else design_files.read(local(root, args.design), workspace=workspace) if args.design else
+                       design_files.read(local(root, args.record), workspace=workspace) if args.command == 'design-draft' and args.record else
                        platform['design'] if platform else None)
     if selected_design is None and args.report:
         report = read(local(root, args.report))
         if report.get('design'):
-            selected_design = design_files.read(local(root, report['design']))
+            selected_design = design_files.read(local(root, report['design']), workspace=workspace)
     if selected_design is not None:
         task = task_inputs.expand(task, selected_design)
     if args.command != 'status' or task_phase(platform) != 'closed':
@@ -352,7 +353,7 @@ def dispatch(args, root):
         else:
             require(task_inputs.written(platform['task']) == task_inputs.written(task), 'Local task differs from platform requirements')
     if args.command == 'status':
-        value = status(args, root, profile, task, platform)
+        value = status(args, root, profile, task, platform, workspace=workspace)
         from validation_session import active
         running = active(root)
         value['validation_active'] = running
@@ -362,7 +363,7 @@ def dispatch(args, root):
                          next_action='Wait for the active validation to finish before editing or changing checkouts.')
         return materials.record_status(args, root, value)
     if args.command == 'snapshot':
-        return {'ok': True, 'source_digest': validation.source_digest(root, profile), 'task_digest': digest(task)}
+        return {'ok': True, 'source_digest': validation.source_digest(root, profile, workspace=workspace), 'task_digest': digest(task)}
     from artifacts import Request
     if args.command == 'review' and args.submit:
         import reviews
@@ -376,7 +377,7 @@ def dispatch(args, root):
             input_files[name] = artifact(root, local(root, value))
     query_paths = relative_paths(root, args.path)
     inputs = {'command': args.command, 'phase': args.phase, 'task': digest(task), 'profile': digest(profile),
-              'files': input_files, 'source': validation.source_digest(root, profile),
+              'files': input_files, 'source': validation.source_digest(root, profile, workspace=workspace),
               'approvals': [artifact(root, local(root, p)) for p in args.approval],
               'history': [artifact(root, local(root, p)) for p in args.design_history],
               'runs': [artifact(root, local(root, p)) for p in args.run],
@@ -423,7 +424,7 @@ def dispatch(args, root):
         inputs.update(files=start['explicit'], approvals=[], history=[], dependencies=[],
                       preparation=start['signature'])
     else:
-        inputs['resolved_materials'] = materials.fingerprint(args, root)
+        inputs['resolved_materials'] = materials.fingerprint(args, root, workspace=workspace)
     if args.command in ('start', 'brief', 'delivery-template', 'accept', 'verify', 'deliver'):
         inputs['knowledge'] = knowledge.state(root)
     from cleanup import guard
@@ -439,10 +440,10 @@ def dispatch(args, root):
             delivery_sequence.validate_retry(root, task, request.cached)
         return request.cached
     try:
-        result = produce(args, root, profile, task, platform, request)
+        result = produce(args, root, profile, task, platform, request, workspace=workspace)
         if args.command == 'deliver':
             return request.finish(result)
-        return materials.finish(args, root, task, result, request)
+        return materials.finish(args, root, task, result, request, workspace=workspace)
     except (RuntimeInvalid, OSError, ValueError, TypeError, KeyError) as exc:
         return request.finish(repairs.failure(args, exc,
                                **({'review_failures': exc.review_failures} if hasattr(exc, 'review_failures') else {}),
@@ -505,7 +506,7 @@ def verification_report(args, profile, task, value, design):
     return value
 
 
-def produce(args, root, profile, task, platform, request):
+def produce(args, root, profile, task, platform, request, *, workspace=None):
     def emit(value, name):
         return {'ok': value.get('ok', True), 'artifact': request.publish(name, value, args.out),
                 **{k: value[k] for k in ('summary', 'gaps', 'problem', 'next_action', 'implementation_ready',
@@ -513,7 +514,7 @@ def produce(args, root, profile, task, platform, request):
                                        'ci_verified_checks', 'unverified_scope', 'summary_counts', 'statistics', 'scenario_rounds', 'scenario_files', 'summary_markdown', 'close_note', 're_evaluated', 'tool', 'environment_checked', 'pending_acceptance', 'pending_sections', 'authorizations_needed') if k in value}}
     if args.command == 'deliver':
         import delivery_sequence
-        return delivery_sequence.deliver(args, root, profile, task, request)
+        return delivery_sequence.deliver(args, root, profile, task, request, workspace=workspace)
     if args.command == 'start' and args.start_selection['continued']:
         from validation_session import active
         selection = args.start_selection
@@ -521,11 +522,11 @@ def produce(args, root, profile, task, platform, request):
         try:
             if selection['platform_gap']:
                 raise Invalid(selection['platform_gap'])
-            resumed_inputs = continuation_status_inputs(args, root, task)
-            value = status(resumed_inputs, root, profile, task, platform)
+            resumed_inputs = continuation_status_inputs(args, root, task, workspace=workspace)
+            value = status(resumed_inputs, root, profile, task, platform, workspace=workspace)
             if platform:
                 import coordination
-                continuation = coordination.resume(root, profile, task['id'], cached_predecessors(args, root, profile))
+                continuation = coordination.resume(root, profile, task['id'], cached_predecessors(args, root, profile, workspace=workspace), workspace=workspace)
                 gaps = [row['problem'] for row in continuation['gap_errors']
                         if row['error_code'] not in (Code.HANDOFF_MISSING, Code.OWNER_MISSING)]
                 ready = not gaps and not continuation['closed']
@@ -535,7 +536,7 @@ def produce(args, root, profile, task, platform, request):
                                  next_action='tw team start --issue ' + shlex.quote(task['id']))
         except (RuntimeInvalid, OSError, ValueError, TypeError, KeyError) as exc:
             value = {'ok': False, 'implementation_ready': False, 'ready_to_implement': False,
-                     'gaps': [str(exc)], **task_steps(args, root, profile, task)}
+                     'gaps': [str(exc)], **task_steps(args, root, profile, task, workspace=workspace)}
         running = active(root)
         value['validation_active'] = running
         if running:
@@ -562,11 +563,11 @@ def produce(args, root, profile, task, platform, request):
         design = selection['design']
         coordination.validate_task_design(task, design)
         approvals, history = selection['approvals'], selection['history']
-        completed, predecessors = predecessor_checks(args, root, profile, task, design, selection['dependencies'])
+        completed, predecessors = predecessor_checks(args, root, profile, task, design, selection['dependencies'], workspace=workspace)
         readiness = designs.approval_status(design, approvals, history=history, completed_tasks=completed,
                     root=root, profile=profile,
-                    section_ids=task['section_ids'], changed_paths=validation.changed_paths(root, task, profile, design),
-                    code_digest=validation.source_digest(root, profile), run_refs=[])
+                    section_ids=task['section_ids'], changed_paths=validation.changed_paths(root, task, profile, design, workspace=workspace),
+                    code_digest=validation.source_digest(root, profile, workspace=workspace), run_refs=[], workspace=workspace)
         paths = knowledge.query_paths(root, task, design, args.path)
         brief = knowledge.brief(root, task, paths, args.symbol)
         from validation_session import active
@@ -575,7 +576,7 @@ def produce(args, root, profile, task, platform, request):
         login = selection['login']
         context = {'data_version': RECORD_SCHEMA, 'kind': 'prepared-context', 'at': now(),
                    'task': request.publish('task.json', task), 'design': request.publish('design.json', design),
-                   'brief': request.publish('brief.json', brief), 'source_at_start': validation.source_digest(root, profile),
+                   'brief': request.publish('brief.json', brief), 'source_at_start': validation.source_digest(root, profile, workspace=workspace),
                    'approvals': [request.publish(f'approval-{i}.json', v) for i, v in enumerate(approvals)],
                    'design_history': [request.publish(f'design-history-{i}.json', v) for i, v in enumerate(history)],
                    'predecessors': [request.publish(f'predecessor-{i}.json', v) for i, v in enumerate(predecessors)],
@@ -611,7 +612,7 @@ def produce(args, root, profile, task, platform, request):
         import coordination
         if not args.issue and args.command in ('design-draft', 'approval-draft'):
             import designs
-            design = design_files.read(local(root, args.design or args.record))
+            design = design_files.read(local(root, args.design or args.record), workspace=workspace)
             coordination.validate_task_design(task, design)
             if args.command == 'design-draft':
                 return verification_report(args, profile, task, {**emit(design, 'design.json'),
@@ -620,13 +621,13 @@ def produce(args, root, profile, task, platform, request):
             require(isinstance(supplied, dict) and 'reviewer' in supplied, 'Approval input must name the reviewer', error_code=Code.APPROVAL_INCOMPLETE)
             allowed = {'reviewer', 'confirmation', 'decision', 'section_ids', 'deletion_ids', 'mode', 'revision'}
             require(supplied.keys() <= allowed, 'Unknown approval input fields', error_code=Code.APPROVAL_INCOMPLETE)
-            history = [design_files.read(local(root, p)) for p in args.design_history]
+            history = [design_files.read(local(root, p), workspace=workspace) for p in args.design_history]
             assessments = designs.task_assessments(design, task['section_ids'])
             mode = supplied.pop('mode', 'combined' if any(v['complexity'] == 'simple' for v in assessments.values()) else 'design')
-            binding = {'code_digest': validation.source_digest(root, profile),
+            binding = {'code_digest': validation.source_digest(root, profile, workspace=workspace),
                        'run_refs': [artifact(root, local(root, p)) for p in args.run]} if mode == 'combined' else {}
             supplied = designs.approval_selection(design, [read(local(root, p)) for p in args.approval],
-                task['section_ids'], history, {**supplied, 'mode': mode, **binding}, root=root, profile=profile)
+                task['section_ids'], history, {**supplied, 'mode': mode, **binding}, root=root, profile=profile, workspace=workspace)
             if supplied is None:
                 return verification_report(args, profile, task, {'ok': True, 'summary': '没有需要批准的章节'}, design)
             result = designs.approval_draft(design, history=history, **supplied)
@@ -636,7 +637,7 @@ def produce(args, root, profile, task, platform, request):
         resolution = ({'history_digest': platform['history_digest'], 'reason': args.reconcile}
                       if args.reconcile is not None else None)
         if args.command == 'design-draft':
-            result = coordination.draft_design(args.issue, design_files.read(local(root, args.record or args.design)),
+            result = coordination.draft_design(args.issue, design_files.read(local(root, args.record or args.design), workspace=workspace),
                                                resolution=resolution, path=local(root, args.record or args.design), root=root)
         elif args.command == 'approval-draft':
             supplied = approval_input(args, root)
@@ -647,17 +648,17 @@ def produce(args, root, profile, task, platform, request):
                 assessments = designs.task_assessments(platform['design'], task['section_ids'])
                 mode = supplied.setdefault('mode', 'combined' if any(row['complexity'] == 'simple' for row in assessments.values()) else 'design')
                 if mode == 'combined':
-                    supplied.update(code_digest=validation.source_digest(root, profile),
+                    supplied.update(code_digest=validation.source_digest(root, profile, workspace=workspace),
                                     run_refs=[artifact(root, local(root, p)) for p in args.run])
-            result = coordination.draft_approval(args.issue, supplied, root=root)
+            result = coordination.draft_approval(args.issue, supplied, root=root, workspace=workspace)
         elif args.command == 'progress':
             result = coordination.progress_draft(root, profile, args.issue, read(local(root, args.progress)), request.directory.name)
         else:
-            completed, _ = predecessor_checks(args, root, profile, task, platform['design'])
+            completed, _ = predecessor_checks(args, root, profile, task, platform['design'], workspace=workspace)
             result = coordination.draft(root, profile, args.issue, read(local(root, args.progress)),
-                                        args.kind, completed_tasks=completed)
+                                        args.kind, completed_tasks=completed, workspace=workspace)
         if args.command in ('design-draft', 'approval-draft'):
-            design = (design_files.read(local(root, args.record or args.design))
+            design = (design_files.read(local(root, args.record or args.design), workspace=workspace)
                       if args.command == 'design-draft' else platform['design'])
             verification_report(args, profile, task, result, design)
         if args.command == 'approval-draft' and 'record' not in result:
@@ -667,16 +668,16 @@ def produce(args, root, profile, task, platform, request):
     if args.command == 'design-diff':
         import designs
         require(bool(args.design_history), 'Design diff needs at least the previous snapshot')
-        previous = [design_files.read(local(root, p)) for p in args.design_history]
-        current = design_files.read(local(root, args.design))
+        previous = [design_files.read(local(root, p), workspace=workspace) for p in args.design_history]
+        current = design_files.read(local(root, args.design), workspace=workspace)
         return emit(designs.impact(previous[-1], current, history=previous,
-                    changed_paths=validation.changed_paths(root, task, profile, current)), 'design-diff.json')
+                    changed_paths=validation.changed_paths(root, task, profile, current, workspace=workspace)), 'design-diff.json')
     if args.command == 'run':
         tasks = [task]
         for path in args.with_task:
             sibling = task_inputs.validate_written(read(local(root, path)))
-            tasks.append(task_inputs.expand(sibling, design_files.read(local(root, args.design))))
-        path, record = validation.run_batch(root, profile, tasks, args.check, request.directory / 'execution', args.portable)
+            tasks.append(task_inputs.expand(sibling, design_files.read(local(root, args.design), workspace=workspace)))
+        path, record = validation.run_batch(root, profile, tasks, args.check, request.directory / 'execution', args.portable, workspace=workspace)
         ok = record['source_unchanged'] and all(r['status'] == 'passed' for r in record['results'])
         failed = [f'{r["id"]}: {r["detail"]}' for r in record['results'] if r['status'] != 'passed']
         moved = [r['id'] for r in record['results'] if r['status'] == 'passed' and not r.get('source_unchanged')]
@@ -696,13 +697,13 @@ def produce(args, root, profile, task, platform, request):
                                     'then run ' + (' '.join('--check ' + m for m in moved) or 'the checks') + ' again with a new request ID.')})}
         if ok:
             import reviews
-            result = reviews.from_run(args, root, profile, task, result, request)
+            result = reviews.from_run(args, root, profile, task, result, request, workspace=workspace)
         else:
             repairs.annotate(args, result)
         return result
     if args.command == 'review':
         import reviews
-        return (reviews.submit if args.submit else reviews.generate)(args, root, profile, task, request)
+        return (reviews.submit if args.submit else reviews.generate)(args, root, profile, task, request, workspace=workspace)
     if args.command == 'delivery-template':
         report = report_input(args, root, task)
         if args.reason is not None:
@@ -731,9 +732,9 @@ def produce(args, root, profile, task, platform, request):
             report = report_input(args, root, task, include_knowledge=False)
             request.publish('report.json', report)
         issue_history.capture(request, task, read(local(root, report['review'])),
-            [r['id'] for r in design_files.read(local(root, report['design']))['sections']])
+            [r['id'] for r in design_files.read(local(root, report['design']), workspace=workspace)['sections']])
         phase = 'acceptance' if args.command == 'accept' else 'delivery'
-        return emit(delivery.verify(root, profile, task, report, phase=phase), phase + '.json')
+        return emit(delivery.verify(root, profile, task, report, phase=phase, workspace=workspace), phase + '.json')
     raise Invalid('Unsupported command: ' + args.command)
 
 
@@ -777,7 +778,7 @@ def step_materials(args):
             'material_group': selection.get('effective') or selection.get('value'), 'review_inputs': args}
 
 
-def continuation_status_inputs(args, root, task):
+def continuation_status_inputs(args, root, task, *, workspace=None):
     """Preparation signatures stay fixed; continuation displays the current recorded evidence."""
     selection = getattr(args, 'material_selection', None) or {}
     if not selection.get('value'):
@@ -791,7 +792,7 @@ def continuation_status_inputs(args, root, task):
     for key, value in selection['explicit'].items():
         setattr(current, key, copy.deepcopy(value))
     import materials
-    materials.resolve(current, root)
+    materials.resolve(current, root, workspace=workspace)
     current.material_selection['identity'] = selection['identity']
     return current
 
@@ -860,37 +861,40 @@ def recorded_command(args, root):
     return None
 
 
-def task_steps(args, root, profile, task):
+def task_steps(args, root, profile, task, *, workspace=None):
+    workspace = workspace or validation.Workspace(root, profile)
     import checklist
     from common import rules_digest
     context = read(local(root, args.context)) if args.context else None
-    value = checklist.steps(root, task, validation.source_digest(root, profile), args.context,
-                            str(args.task) if args.task else None, profile=profile, current=getattr(args, 'current_request', None), **step_materials(args))
+    value = checklist.steps(root, task, validation.source_digest(root, profile, workspace=workspace), args.context,
+                            str(args.task) if args.task else None, profile=profile, current=getattr(args, 'current_request', None), **step_materials(args), workspace=workspace)
     if context:
         value['authorizations'] = context.get('authorizations', [])
         value['rules_changed'] = context.get('rules_digest') not in (None, rules_digest())
     return value
 
 
-def current_status(root, task_id, current=None):
+def current_status(root, task_id, current=None, *, workspace=None, scenario_state=None):
     """按任务身份走状态入口的同一套材料读取与流程计算。"""
     from workflow import parser
     args = parser().parse_args(['status', '--root', str(root), '--task', task_id])
     args.current_request = current
-    return dispatch(args, root)
+    args.scenario_state = scenario_state
+    return dispatch(args, root, workspace=workspace)
 
 
-def status(args, root, profile, task, platform=None):
+def status(args, root, profile, task, platform=None, *, workspace=None):
+    workspace = workspace or validation.Workspace(root, profile)
     import checklist
     import status_records
     phase = task_phase(platform, root, task['id'], (getattr(args, 'material_selection', None) or {}).get('value'))
     if phase in ('closed', 'delivered'):
         return status_records.recorded(root, task['id'], phase,
             (getattr(args, 'material_selection', None) or {}).get('value'), platform)
-    progress = task_steps(args, root, profile, task)
-    value = _status(args, root, profile, task, platform)
+    progress = task_steps(args, root, profile, task, workspace=workspace)
+    value = _status(args, root, profile, task, platform, workspace=workspace)
     value['task_phase'] = phase
-    facts = status_records.inspect(args, root, profile, task, progress, value)
+    facts = status_records.inspect(args, root, profile, task, progress, value, workspace=workspace)
     for row in progress['steps']:
         reason = facts['stale_steps'].get(row['id'])
         if reason and (row.get('evidence') or row['state'] in ('done', 'stale')):
@@ -951,13 +955,14 @@ def status(args, root, profile, task, platform=None):
     approval_recovery(args, value, value)
     import scenario_rounds
     scenario_rounds.status_step(root, profile, task['id'], progress,
-                               (getattr(args, 'material_selection', None) or {}).get('effective'))
+                               (getattr(args, 'material_selection', None) or {}).get('effective'), workspace=workspace,
+                               state=getattr(args, 'scenario_state', None))
     if (progress.get('next_step') or {}).get('id') == 'scenarios':
         value.update(next_step=progress['next_step'], next_action=progress['next_step']['next_command'])
     plan_approval = value.get('review_mode') in ('mixed', 'design-first')
     if args.design and plan_approval and not value.get('implementation_ready', True):
-        design = design_files.read(local(root, args.design))
-        history = [design_files.read(local(root, p)) for p in args.design_history]
+        design = design_files.read(local(root, args.design), workspace=workspace)
+        history = [design_files.read(local(root, p), workspace=workspace) for p in args.design_history]
         pending_report(args, root, task, platform, value, design, value, history)
         if value.get('pending_sections'):
             progress['next_step'] = {'id': 'approval', 'label': APPROVAL_RECOVERY_LABELS.get(value.get('error_code'), '取得待确认章节的批准'),
@@ -965,31 +970,31 @@ def status(args, root, profile, task, platform=None):
             value['next_step'] = progress['next_step']
     if args.design:
         value.setdefault('pending_sections', [])
-        verification_report(args, profile, task, value, design_files.read(local(root, args.design)))
+        verification_report(args, profile, task, value, design_files.read(local(root, args.design), workspace=workspace))
     value['step_lines'] = checklist.render(progress)
     if progress.get('rules_changed'):
         value['step_lines'].append('注意：开始任务后团队流程规则已更新；按当前规则核对已完成的步骤。')
     return value
 
 
-def _status(args, root, profile, task, platform=None):
+def _status(args, root, profile, task, platform=None, *, workspace=None):
     if args.report:
         import delivery
         import materials
         report = materials.effective_report(args, root, read(local(root, args.report)))
-        _, _, value, _ = delivery.design_material(root, profile, task, report, cached_predecessors(args, root, profile))
+        _, _, value, _ = delivery.design_material(root, profile, task, report, cached_predecessors(args, root, profile, workspace=workspace), workspace=workspace)
         return value
     require(args.design is not None, 'Local task status needs --design or --context; provide --report to verify acceptance/delivery')
     import designs
     from coordination import validate_task_design
-    design = design_files.read(local(root, args.design))
+    design = design_files.read(local(root, args.design), workspace=workspace)
     validate_task_design(task, design)
     value = designs.approval_status(design, [read(local(root, p)) for p in args.approval],
                 root=root, profile=profile,
-                history=[design_files.read(local(root, p)) for p in args.design_history], section_ids=task['section_ids'],
-                completed_tasks=cached_predecessors(args, root, profile),
-                changed_paths=validation.changed_paths(root, task, profile, design), code_digest=validation.source_digest(root, profile),
-                run_refs=[artifact(root, local(root, p)) for p in args.run])
+                history=[design_files.read(local(root, p), workspace=workspace) for p in args.design_history], section_ids=task['section_ids'],
+                completed_tasks=cached_predecessors(args, root, profile, workspace=workspace),
+                changed_paths=validation.changed_paths(root, task, profile, design, workspace=workspace), code_digest=validation.source_digest(root, profile, workspace=workspace),
+                run_refs=[artifact(root, local(root, p)) for p in args.run], workspace=workspace)
     ready = value['implementation_ready']
     summary = '可以继续实施；方案、代码与交付仍需实际验收。' if ready else '实施条件尚未满足：需补齐方案批准、决策、分派或前置任务证明。'
     next_action = 'Run tw team start with the same plan and existing approvals, then follow its next command.' if ready else 'Resolve the named pending sections or predecessor evidence, then run tw team start again.'

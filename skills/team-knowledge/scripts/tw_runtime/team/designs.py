@@ -471,13 +471,13 @@ def pending_sections(design, status, history=()):
     return sorted(result, key=lambda row: order.index(row['id']))
 
 
-def approval_selection(design, approvals, task_sections, history, value, *, root=None, profile=None):
+def approval_selection(design, approvals, task_sections, history, value, *, root=None, profile=None, workspace=None):
     """Select defaults from current consent; explicit IDs retain explicit deletion semantics."""
     result = dict(value)
     mode = result.get('mode', 'combined' if result.get('code_digest') is not None else 'design')
     status = approval_status(design, approvals, history=history, section_ids=task_sections,
                              code_digest=result.get('code_digest'), run_refs=result.get('run_refs'),
-                             root=root, profile=profile)
+                             root=root, profile=profile, workspace=workspace)
     required = set(status['required_sections'])
     pending_deletions = {row['id'] for row in status['deletions'] if row['state'] != 'approved'}
     if 'section_ids' in result:
@@ -506,7 +506,7 @@ def approval_selection(design, approvals, task_sections, history, value, *, root
 
 def approval_status(design, approvals, previous=None, changed_paths=None, code_digest=None,
                     run_refs=None, completed_tasks=(), *, history=None, section_ids=None, selected_run_refs=None,
-                    root=None, profile=None):
+                    root=None, profile=None, workspace=None):
     """Evaluate oldest-to-newest reviews; missing history or mapping never implies success."""
     validate_design(design)
     require(isinstance(approvals, list), 'Approvals must be an oldest-to-newest list', error_code=Code.APPROVAL_INCOMPLETE)
@@ -539,7 +539,7 @@ def approval_status(design, approvals, previous=None, changed_paths=None, code_d
                 import validation
                 revision = row['revision']
                 if revision not in revisions:
-                    revisions[revision] = validation.source_digest(root, profile, revision=revision)
+                    revisions[revision] = validation.source_digest(root, profile, revision=revision, workspace=workspace)
                 require(revisions[revision] == row['code_digest'], '批准的提交与绑定的源码不一致', error_code=Code.APPROVAL_INCOMPLETE)
             require(row['design_id'] == design['id'] and row['task_id'] == design['task_id'],
                     'Approval belongs to another design or task', error_code=Code.APPROVAL_INCOMPLETE)

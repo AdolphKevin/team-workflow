@@ -1,6 +1,7 @@
 """Execution records: reusable content-bound results, separate task acceptance."""
 from error_codes import Code, check_error_code
 import os
+import copy
 import hashlib
 import posixpath
 import platform
@@ -67,12 +68,79 @@ def revision_files(root, profile, revision):
     return files
 
 
-def source(root, profile, revision_sensitive=False, *, revision=None):
+class Workspace:
+    """一次命令的工作区事实；稳定阶段共用，前后核对处显式 refresh。"""
+
+    def __init__(self, root, profile):
+        self.root, self.profile = root, profile
+        self._state = None
+        self._sources, self._materials, self._digests, self._fingerprints = {}, {}, {}, {}
+        self._repositories = None
+        self._designs = {}
+
+    @property
+    def state(self):
+        if self._state is None:
+            self._state = snapshot(self.root, self.profile, include_names=True)
+        return self._state
+
+    def refresh(self):
+        self._state = None
+        self._repositories = None
+        self._sources.clear()
+        self._materials.clear()
+        self._digests.clear()
+        self._fingerprints.clear()
+        self._designs.clear()
+
+    def source(self, revision_sensitive=False, *, revision=None):
+        key = revision_sensitive, revision
+        if key not in self._sources:
+            if self._repositories is None:
+                self._repositories = repositories(self.root, self.profile)
+            self._sources[key] = _source(self.profile, self.state, self._repositories, revision_sensitive,
+                                         root=self.root, revision=revision)
+        return self._sources[key]
+
+    def acceptance_materials(self, design):
+        key = digest(design)
+        if key not in self._materials:
+            self._materials[key] = _acceptance_materials(self.root, design, self.state['names'])
+        return self._materials[key]
+
+    def source_digest(self, revision_sensitive=False, *, revision=None):
+        key = revision_sensitive, revision
+        if key not in self._digests:
+            self._digests[key] = digest(self.source(revision_sensitive, revision=revision))
+        return self._digests[key]
+
+    def design(self, path, *, internal=True):
+        import design_files
+        key = path.resolve(), internal
+        if key not in self._designs:
+            # 本任务保存的方案副本属于当前项目，沿用快照所属根目录。
+            checkout = self.root if key[0].is_relative_to(self.root / '.tw/local/tasks') else None
+            self._designs[key] = design_files.read(path, internal=internal, checkout=checkout)
+        return copy.deepcopy(self._designs[key])
+
+    def fingerprints(self, design):
+        key = digest(design)
+        if key not in self._fingerprints:
+            state = self.source()
+            materials = self.acceptance_materials(design)
+            product = {**state, 'files': {name: value for name, value in state['files'].items() if name not in materials}}
+            self._fingerprints[key] = self.source_digest(), digest(product)
+        return self._fingerprints[key]
+
+
+def source(root, profile, revision_sensitive=False, *, revision=None, workspace=None):
+    return (workspace or Workspace(root, profile)).source(revision_sensitive, revision=revision)
+
+
+def _source(profile, state, repository_names, revision_sensitive=False, *, root, revision=None):
     """Content excludes workflow policy; each check binds its own policy separately."""
-    state = snapshot(root, profile)
     if revision is not None:
-        state['files'] = revision_files(root, profile, revision)
-        state['head'] = revision
+        state = {**state, 'files': revision_files(root, profile, revision), 'head': revision}
     def content(value, primary=False):
         if 'files' not in value:
             return value
@@ -83,6 +151,13 @@ def source(root, profile, revision_sensitive=False, *, revision=None):
         if value.get('external_inputs'):
             result['external_inputs'] = {k: content(v) for k, v in value['external_inputs'].items()}
         return result
+    result = content(state, True)
+    result['repositories'] = repository_names
+    return result
+
+
+def repositories(root, profile):
+    """同一稳定阶段的源码与产品指纹共用仓库身份。"""
     try:
         remote = git(root, 'remote', 'get-url', 'origin').decode().strip()
     except Invalid:
@@ -96,31 +171,32 @@ def source(root, profile, revision_sensitive=False, *, revision=None):
             parts = urlsplit(remote)
             public = (parts.hostname or '') + parts.path if parts.scheme else remote.rsplit('@', 1)[-1]
             repository = 'origin:' + digest(public)
-    result = content(state, True)
-    result['repositories'] = {'self': repository, **{name: item['repository'].lower()
+    return {'self': repository, **{name: item['repository'].lower()
         for name, item in profile.get('external_inputs', {}).items() if item['kind'] == 'repository'}}
-    return result
 
 
-def source_digest(root, profile, *, revision=None):
-    return digest(source(root, profile, revision=revision))
+def source_digest(root, profile, *, revision=None, workspace=None):
+    return (workspace or Workspace(root, profile)).source_digest(revision=revision)
 
 
-def acceptance_materials(root, design):
+def acceptance_materials(root, design, *, workspace=None):
+    if workspace is None:
+        from common import load_profile
+        workspace = Workspace(root, load_profile(root))
+    return workspace.acceptance_materials(design)
+
+
+def _acceptance_materials(root, design, names):
     """本任务方案原文及验收节引用的场景，供范围核对与产品指纹共同采用。"""
     from design_files import declares
-    names = {os.fsdecode(name) for name in git(root, 'ls-files', '--cached', '--others', '--exclude-standard', '-z').split(b'\0') if name}
     paths = {name for name in names if name.endswith('.md') and declares(root / name, design)}
     paths.update(ref['path'] for section in design['sections'] if section['type'] == 'acceptance'
                  for ref in section['data']['scenarios'])
     return paths
 
 
-def product_digest(root, profile, design):
-    state = source(root, profile)
-    materials = acceptance_materials(root, design)
-    state['files'] = {name: value for name, value in state['files'].items() if name not in materials}
-    return digest(state)
+def product_digest(root, profile, design, *, workspace=None):
+    return (workspace or Workspace(root, profile)).fingerprints(design)[1]
 
 
 def effective_base(root, base):
@@ -141,7 +217,7 @@ def effective_base(root, base):
     return point if contains.returncode == 0 else base
 
 
-def changed_paths(root, task, profile=None, design=None):
+def changed_paths(root, task, profile=None, design=None, *, workspace=None):
     """The task's own design file is process material committed with it, not a change needing a task scope."""
     names = set()
     for args in [('diff', '--name-only', '--no-renames', '-z', effective_base(root, task['base'])),
@@ -149,7 +225,7 @@ def changed_paths(root, task, profile=None, design=None):
         names.update(os.fsdecode(n) for n in git(root, *args).split(b'\0') if n)
     inputs = (profile or {}).get('inputs', [])
     if design is not None:
-        names -= acceptance_materials(root, design)
+        names -= acceptance_materials(root, design, workspace=workspace)
     return sorted(n for n in names if not reserved(n, inputs) and
                   (n != '.tw/config.json' or explicit_input(n, inputs)))
 
@@ -195,9 +271,10 @@ def environment(root, profile, check):
     return result
 
 
-def check_binding(root, profile, check, remote=False, live=True):
+def check_binding(root, profile, check, remote=False, live=True, *, workspace=None):
     """Inputs a result depends on. Offline (live=False) omits the environment, which acceptance recorded."""
-    binding = {'source': digest(source(root, profile, check.get('revision_sensitive', False))),
+    workspace = workspace or Workspace(root, profile)
+    binding = {'source': workspace.source_digest(check.get('revision_sensitive', False)),
                'definition': execution_definition(check), 'producer': producer()}
     if live:
         expected = check.get('environment', {}).get('target') if remote else None
@@ -205,17 +282,18 @@ def check_binding(root, profile, check, remote=False, live=True):
     return binding
 
 
-def capture(root, profile, key, directory, portable=False):
+def capture(root, profile, key, directory, portable=False, *, workspace=None):
+    workspace = workspace or Workspace(root, profile)
     check = profile['checks'][key]
     from contracts import coverage
     coverage(check.get('coverage', {}))
     require(check['coverage']['isolation'] != 'unresolved', 'Environment isolation unresolved: ' + key)
     local_write_guard(directory)
     directory.mkdir(parents=True, exist_ok=False)
-    before = check_binding(root, profile, check)
+    before = check_binding(root, profile, check, workspace=workspace)
     if portable:
         from portable import source_state
-        portable_before = source_state(root, profile)
+        portable_before = source_state(root, profile, workspace=workspace)
     started = now()
     argv = [a.replace('{output}', str(directory)) for a in check['argv']]
     require(all(redact(a) == a for a in argv), 'Pass credentials through the environment, not arguments')
@@ -243,7 +321,8 @@ def capture(root, profile, key, directory, portable=False):
         path = directory / (channel + '.txt')
         path.write_bytes(result.get('raw', {}).get(channel, result[channel].encode('utf-8')))
         artifacts.append(artifact(root, path))
-    after = check_binding(root, profile, check)
+    workspace.refresh()
+    after = check_binding(root, profile, check, workspace=workspace)
     row = {'id': key, 'coverage': check['coverage'], 'binding': before, 'source_unchanged': before == after,
             'argv': list(check['argv']), 'cwd': check['cwd'], 'repository': check.get('repository'),
             'status': status, 'cases': cases, 'detail': detail, 'state': result['state'],
@@ -252,18 +331,19 @@ def capture(root, profile, key, directory, portable=False):
         row['error_code'] = Code.CHECK_RESULT if failures else decoded.error_code
     if portable:
         import portable
-        portable.capture(directory, profile, row, portable_before, source_state(root, profile), started, now())
+        portable.capture(directory, profile, row, portable_before, source_state(root, profile, workspace=workspace), started, now())
         row['portable'] = artifact(root, directory / 'result.json')
     return row
 
 
-def run_batch(root, profile, tasks, selected=None, directory=None, portable=False):
+def run_batch(root, profile, tasks, selected=None, directory=None, portable=False, *, workspace=None):
+    workspace = workspace or Workspace(root, profile)
     from validation_session import session
     with session(root, profile, tasks):
-        return _run_batch(root, profile, tasks, selected, directory, portable)
+        return _run_batch(root, profile, tasks, selected, directory, portable, workspace=workspace)
 
 
-def _run_batch(root, profile, tasks, selected=None, directory=None, portable=False):
+def _run_batch(root, profile, tasks, selected=None, directory=None, portable=False, *, workspace=None):
     require(bool(tasks), 'Batch requires at least one task')
     require(len({t['id'] for t in tasks}) == len(tasks), 'Duplicate batch task')
     required = {t['id']: task_valid(t, profile, root) for t in tasks}
@@ -274,33 +354,35 @@ def _run_batch(root, profile, tasks, selected=None, directory=None, portable=Fal
     directory = directory or root / '.tw/local/batches' / identifier
     local_write_guard(directory)
     directory.mkdir(parents=True, exist_ok=False)
-    before = source_digest(root, profile)
+    before = source_digest(root, profile, workspace=workspace)
     started = now()
     rows = []
     for key in checks:
         try:
-            rows.append(capture(root, profile, key, directory / key, portable))
+            rows.append(capture(root, profile, key, directory / key, portable, workspace=workspace))
         except (Invalid, OSError, ValueError) as exc:
             rows.append({'id': key, 'status': 'incomplete', 'state': 'unavailable', 'exit_code': None,
                          'source_unchanged': False, 'detail': str(exc), 'cases': {}, 'artifacts': []})
+    workspace.refresh()
     record = {'data_version': RECORD_SCHEMA, 'kind': 'execution', 'id': identifier, 'project': profile['project'],
               'tasks': required, 'task_digests': {t['id']: digest(t) for t in tasks},
               'started_at': started, 'finished_at': now(),
               'provenance': {'head': git(root, 'rev-parse', 'HEAD').decode().strip()},
-              'source_unchanged': before == source_digest(root, profile) and all(r['source_unchanged'] for r in rows),
+              'source_unchanged': before == source_digest(root, profile, workspace=workspace) and all(r['source_unchanged'] for r in rows),
               'results': rows}
     path = directory / 'run.json'
     create(path, record)
     return path, record
 
 
-def verify_runs(root, profile, task, paths, live=True, *, checks=None):
+def verify_runs(root, profile, task, paths, live=True, *, checks=None, workspace=None):
     """Select one current, passing result for every required check.
 
     A stale row no longer invalidates its whole batch: other rows stay usable and a focused
     re-run of only the stale check completes the set. The original report is re-evaluated
     with the current required cases, so a registration fix needs no re-run.
     """
+    workspace = workspace or Workspace(root, profile)
     required = set(task_valid(task, profile, root))
     if checks is not None:
         required = set(checks)
@@ -310,7 +392,7 @@ def verify_runs(root, profile, task, paths, live=True, *, checks=None):
 
     def current(key):
         if key not in bindings:
-            bindings[key] = check_binding(root, profile, profile['checks'][key], live=live)
+            bindings[key] = check_binding(root, profile, profile['checks'][key], live=live, workspace=workspace)
         return bindings[key]
 
     for name in paths:
@@ -321,7 +403,7 @@ def verify_runs(root, profile, task, paths, live=True, *, checks=None):
             key = (record.get('result') or {}).get('id')
             if key in required:
                 try:
-                    row, _ = portable.validate_import(root, profile, record, live=live)
+                    row, _ = portable.validate_import(root, profile, record, live=live, workspace=workspace)
                     candidates[key].append((name, record.get('started_at', ''), row, None))
                 except (Invalid, OSError, ValueError, KeyError) as exc:
                     candidates[key].append((name, '', None, exc))

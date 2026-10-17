@@ -8,17 +8,19 @@ import scenario_yaml
 import scenarios
 
 
-def current(root, profile, task, design, run_paths=None):
+def current(root, profile, task, design, run_paths=None, *, workspace=None):
+    from validation import Workspace
+    workspace = workspace or Workspace(root, profile)
     group = materials.load(root, task['id']) or {'task_id': task['id'], 'runs': []}
     if run_paths is not None:
         from common import artifact, inside
         group = {**group, 'selected_runs': [artifact(root, inside(root, path)) for path in run_paths]}
     if group.get('platform'):
-        inputs = scenarios.task_entries(root, group, profile)
+        inputs = scenarios.task_entries(root, group, profile, workspace=workspace)
     else:
         entries = scenarios.design_entries(design, task, profile, design_files.scenario_reader(root))
         inputs = design, task, entries
-    return group, scenario_rounds.current_state(root, profile, group, inputs)
+    return group, scenario_rounds.current_state(root, profile, group, inputs, workspace=workspace)
 
 
 def bindings(value):
@@ -30,7 +32,7 @@ def selected(section, value):
             for ref in section['data']['scenarios'])]
 
 
-def check_cases(root, profile, task, design, group):
+def check_cases(root, profile, task, design, group, *, workspace=None):
     if group.get('case_imports'):
         cases = scenarios.imported_cases(root, group)
         if group.get('case_coverage'):
@@ -38,7 +40,7 @@ def check_cases(root, profile, task, design, group):
             document = scenario_yaml.loads(path.read_text(encoding='utf-8'), '.json')
         else:
             document = scenario_yaml.loads('{"covered": [], "conflict": [], "disposed": []}', '.json')
-        entries = current(root, profile, task, design)[1]['scenarios']
+        entries = current(root, profile, task, design, workspace=workspace)[1]['scenarios']
         result = scenarios.check_coverage(document, cases, {row['id'] for row in entries})
         require(result['ok'], result.get('problem', '补齐当前用例的场景覆盖'), error_code=Code.SCENARIO_COVERAGE)
     else:
@@ -47,8 +49,8 @@ def check_cases(root, profile, task, design, group):
                 '复杂任务需要测试同事的用例集，用 tw team scenarios import-cases 导入', error_code=Code.TESTER_CASES)
 
 
-def check(root, profile, task, design, review, group, value):
-    check_cases(root, profile, task, design, group)
+def check(root, profile, task, design, review, group, value, *, workspace=None):
+    check_cases(root, profile, task, design, group, workspace=workspace)
     from contracts import independent
     incomplete = []
     states = {key: [] for key in ('failed', 'pending', 'blocked')}
@@ -71,13 +73,15 @@ def check(root, profile, task, design, review, group, value):
         raise error
 
 
-def regression(root, profile, task, group, value, findings):
+def regression(root, profile, task, group, value, findings, *, workspace=None):
+    from validation import Workspace
+    workspace = workspace or Workspace(root, profile)
     deferred = {row['id'] for row in findings if row['state'] == 'deferred'}
     status, checks = {'automated': [], 'manual-only': [], 'pending': []}, {}
     for row in value['scenarios']:
         declared = row.get('regression', {})
         category = 'pending'
-        reason = scenario_rounds.regression_reason(root, profile, task, group, row, checks)
+        reason = scenario_rounds.regression_reason(root, profile, task, group, row, checks, workspace=workspace)
         if 'pending' in declared:
             require(declared['pending'] in deferred, '场景 ' + row['id'] + ' 的 regression.pending 引用评审中 deferred 的问题：'
                     + declared['pending'], section='问题清单')

@@ -13,7 +13,7 @@ def _seconds(claim, response):
         return None
 
 
-def task_metrics(root, task_id, since=None):
+def task_metrics(root, task_id, since=None, *, workspace=None):
     rows = [(c, r) for c, r in records(root, task_id) if not since or c.get('started_at', '') >= since]
     by_command, check_runs, total = {}, {}, 0.0
     for claim, response in rows:
@@ -47,7 +47,7 @@ def task_metrics(root, task_id, since=None):
     if group:
         from common import load_profile
         import scenario_rounds
-        result['scenarios'] = scenario_rounds.task_metrics(root, load_profile(root), group, since)
+        result['scenarios'] = scenario_rounds.task_metrics(root, load_profile(root), group, since, workspace=workspace)
     return result
 
 

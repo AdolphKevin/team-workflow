@@ -190,7 +190,7 @@ def _protected(name, text):
     return f'<!-- tw-review:{name}:start -->\n{text.rstrip()}\n<!-- tw-review:{name}:end -->'
 
 
-def preview_execution(root, profile, task, paths):
+def preview_execution(root, profile, task, paths, *, workspace=None):
     """Display original failed/missing results without treating them as verified evidence."""
     from common import task_valid
     required = task_valid(task, profile, root)
@@ -199,7 +199,7 @@ def preview_execution(root, profile, task, paths):
 
     def current(key):
         if key not in bindings:
-            bindings[key] = validation.check_binding(root, profile, profile['checks'][key], live=False)
+            bindings[key] = validation.check_binding(root, profile, profile['checks'][key], live=False, workspace=workspace)
         return bindings[key]
 
     for name in paths:
@@ -236,7 +236,7 @@ def preview_execution(root, profile, task, paths):
             if record.get('kind') == 'imported-execution' and usable:
                 import portable
                 try:
-                    portable.validate_import(root, profile, record, live=False)
+                    portable.validate_import(root, profile, record, live=False, workspace=workspace)
                 except Invalid:
                     usable = False
             candidates[key].append((record.get('started_at', ''), name,
@@ -250,26 +250,28 @@ def preview_execution(root, profile, task, paths):
     return {'results': results, 'selected_runs': selected, 'checks': sorted(required)}
 
 
-def snapshot(args, root, profile, task, draft_id, allow_incomplete=False):
+def snapshot(args, root, profile, task, draft_id, allow_incomplete=False, *, workspace=None):
+    workspace = workspace or validation.Workspace(root, profile)
     from commands import report_input
     report = report_input(args, root, task, include_knowledge=False)
-    template = delivery.review_template(root, profile, task, report)
-    design, _, status, selected = delivery.design_material(root, profile, task, report)
+    template = delivery.review_template(root, profile, task, report, workspace=workspace)
+    design, _, status, selected = delivery.design_material(root, profile, task, report, workspace=workspace)
     try:
-        execution = validation.verify_runs(root, profile, task, report['runs'], live=False)
+        execution = validation.verify_runs(root, profile, task, report['runs'], live=False, workspace=workspace)
     except Invalid as exc:
         if not allow_incomplete:
             raise ReviewError('运行结果', 1, '运行尚不能用于正式评审：' + str(exc),
                               error_code=exc.error_code if exc.error_code in (Code.CHECK_CONFIG, Code.CHECK_RESULT)
                               else Code.REVIEW_RUN_INCOMPLETE) from exc
-        execution = preview_execution(root, profile, task, report['runs'])
+        execution = preview_execution(root, profile, task, report['runs'], workspace=workspace)
         execution['gap'] = str(exc)
     chosen = {key: artifact(root, inside(root, path)) for key, path in execution['selected_runs'].items()}
     bindings = {key: template[key] for key in ('task_id', 'task_digest', 'source_digest', 'validation_policy', 'sections', 'risks')}
     bindings.update({key: template[key] for key in ('scenario_rounds', 'scenario_files')})
     bindings.update(format_version=2, draft_id=draft_id,
                     runs=[artifact(root, inside(root, p)) for p in report['runs']], selected_runs=chosen)
-    source = review_history.source_record(root, profile, task)
+    workspace.refresh()
+    source = review_history.source_record(root, profile, task, workspace=workspace)
     if source['source_digest'] != bindings['source_digest']:
         raise ReviewError('绑定', 1, '生成评审期间源码已改变，请保持工作区稳定后重试。')
     value = {'data_version': 1, 'kind': 'review-draft-binding', 'bindings': bindings, 'template': template,
@@ -280,10 +282,10 @@ def snapshot(args, root, profile, task, draft_id, allow_incomplete=False):
     if status.get('review_mode') == 'combined':
         from commands import local
         bindings['approval_plan'] = review_history.approval_plan(
-            design, [design_files.read(local(root, path)) for path in args.design_history])
+            design, [design_files.read(local(root, path), workspace=workspace) for path in args.design_history])
     from contracts import execution_environment
     sections = {row['id']: row for row in design['sections']}
-    _, scenario_state = scenario_acceptance.current(root, profile, task, design, report['runs'])
+    _, scenario_state = scenario_acceptance.current(root, profile, task, design, report['runs'], workspace=workspace)
     value['scenario_states'] = {row['id']: {'state': row['state'], 'fingerprint': row['fingerprint'],
         'result': row.get('result')} for row in scenario_state['scenarios']}
     for row in task['acceptance']:
@@ -612,11 +614,11 @@ def _existing(root, task_id, target, state, current, fresh):
     return result
 
 
-def generate(args, root, profile, task, request):
+def generate(args, root, profile, task, request, *, workspace=None):
     from cleanup import guard
     from materials import load
     target, state_path = locations(root, task['id'])
-    candidate, _, _, candidate_execution = snapshot(args, root, profile, task, uuid.uuid4().hex, allow_incomplete=True)
+    candidate, _, _, candidate_execution = snapshot(args, root, profile, task, uuid.uuid4().hex, allow_incomplete=True, workspace=workspace)
     with guard(root):
         state = _state(root, task['id'])
         current = read(artifact_valid(root, state['current'])) if state['current'] else None
@@ -725,19 +727,19 @@ def _binding(root, task_id, text, *, current_only=False):
                           error_code=Code.REVIEW_BINDING_STALE if getattr(exc, 'error_code', None) == Code.REVIEW_BINDING_STALE else None) from exc
 
 
-def require_current_runs(root, profile, bindings):
+def require_current_runs(root, profile, bindings, *, workspace=None):
     for key, ref in bindings['selected_runs'].items():
         record = read(artifact_valid(root, ref))
         rows = record.get('results', []) if record.get('kind') == 'execution' else [record.get('result', {})]
         row = next((row for row in rows if row.get('id') == key), None)
-        current = validation.check_binding(root, profile, profile['checks'][key], live=False)
+        current = validation.check_binding(root, profile, profile['checks'][key], live=False, workspace=workspace)
         if (row is None or not record.get('source_unchanged', row.get('source_unchanged'))
                 or not row.get('source_unchanged')
                 or any(row.get('binding', {}).get(part) != val for part, val in current.items())):
             raise ReviewError('运行结果绑定', 1, '选中运行的源码或配置已变化，请重跑后生成复核稿。', error_code=Code.REVIEW_BINDING_STALE)
 
 
-def submit(args, root, profile, task, request):
+def submit(args, root, profile, task, request, *, workspace=None):
     item = getattr(args, 'platform_review', None) if getattr(args, 'from_platform', False) else None
     source = item['url'] if item else source_path(args, root, task['id'])
     try:
@@ -750,10 +752,10 @@ def submit(args, root, profile, task, request):
     value = _binding(root, task['id'], raw, current_only=bool(item))
     sections = _sections(raw, value)
     require_rechecks(value, sections)
-    fresh, design, status, execution = snapshot(args, root, profile, task, value['bindings']['draft_id'], allow_incomplete=True)
+    fresh, design, status, execution = snapshot(args, root, profile, task, value['bindings']['draft_id'], allow_incomplete=True, workspace=workspace)
     if not _usable_draft(value, fresh):
         raise ReviewError('绑定', 1, '评审绑定的任务、方案、批准状态、源码、策略、章节或运行与当前材料不同。', error_code=Code.REVIEW_BINDING_STALE)
-    require_current_runs(root, profile, fresh['bindings'])
+    require_current_runs(root, profile, fresh['bindings'], workspace=workspace)
     review = compile_review(root, value, sections)
     if item:
         review.update(platform_author=item['author'], platform_url=item['url'])
@@ -761,7 +763,7 @@ def submit(args, root, profile, task, request):
     if approval_choice not in ('', '是', '否'):
         raise ReviewError('评审信息', sections['评审信息']['line'], '批准方案与代码只能填写“是”或“否”，也可留空。')
     try:
-        delivery.check_review_format(root, profile, task, review, fresh['bindings']['sections'], design)
+        delivery.check_review_format(root, profile, task, review, fresh['bindings']['sections'], design, workspace=workspace)
     except (Invalid, ValueError, TypeError, KeyError) as exc:
         message = str(exc)
         section = getattr(exc, 'section', None) or '验收 ' + task['acceptance'][0]['id']
@@ -777,7 +779,7 @@ def submit(args, root, profile, task, request):
             _value(sections, '评审信息', '批准说明', False), mode='combined',
             section_ids=status['required_sections'],
             deletion_ids=[row['id'] for row in status['deletions'] if row['required']],
-            history=[design_files.read(local(root, path)) for path in args.design_history],
+            history=[design_files.read(local(root, path), workspace=workspace) for path in args.design_history],
             code_digest=fresh['bindings']['source_digest'], run_refs=refs)
     import issue_history
     issue_history.capture(request, task, review, [row['id'] for row in design['sections']])
@@ -843,7 +845,7 @@ def exclude_own_approval(args, root, task_id):
         return  # The normal submission path reports malformed Markdown and material errors.
 
 
-def from_run(args, root, profile, task, result, request):
+def from_run(args, root, profile, task, result, request, *, workspace=None):
     """Prepare an editable review after real execution; the review draft is a separate request."""
     selection = getattr(args, 'material_selection', None) or {}
     group = selection.get('effective') or selection.get('value')
@@ -859,10 +861,10 @@ def from_run(args, root, profile, task, result, request):
         refs.append(result['artifact'])
     child_args.run = [Path(ref['path']) for ref in refs]
     from scenario_rounds import pending_action
-    _, scenario_state = scenario_acceptance.current(root, profile, task, design_files.read(Path(root) / args.design),
-                                                   [ref['path'] for ref in refs])
+    _, scenario_state = scenario_acceptance.current(root, profile, task, design_files.read(Path(root) / args.design, workspace=workspace),
+                                                   [ref['path'] for ref in refs], workspace=workspace)
     try:
-        validation.verify_runs(root, profile, task, [ref['path'] for ref in refs], live=False)
+        validation.verify_runs(root, profile, task, [ref['path'] for ref in refs], live=False, workspace=workspace)
     except Invalid as exc:
         result['review_gap'] = str(exc)
         result['next_action'] = pending_action(root, task['id'])
@@ -871,7 +873,7 @@ def from_run(args, root, profile, task, result, request):
         result['next_action'] = pending_action(root, task['id'])
         return result
     inputs = {'command': 'review', 'task': digest(task), 'profile': digest(profile),
-              'source': validation.source_digest(root, profile), 'runs': refs,
+              'source': validation.source_digest(root, profile, workspace=workspace), 'runs': refs,
               'options': {'submit': False, 'automatic': True},
               'history': history_inputs(root, task['id'], group),
               'context': group['context'], 'approvals': group['approvals']}
@@ -882,7 +884,7 @@ def from_run(args, root, profile, task, result, request):
         reviewed = child.cached
     else:
         try:
-            reviewed = child.finish(generate(child_args, root, profile, task, child))
+            reviewed = child.finish(generate(child_args, root, profile, task, child, workspace=workspace))
         except (Invalid, OSError, ValueError, TypeError, KeyError) as exc:
             reviewed = child.finish({'ok': False, 'problem': str(exc),
                 'next_action': 'tw team review --task ' + shlex.quote(task['id'])})

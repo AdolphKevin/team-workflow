@@ -83,10 +83,10 @@ def import_cases(root, task_id, path):
             'artifact': ref, 'summary': '用例快照已登记，累积集合已更新。'}
 
 
-def task_entries(root, group, profile):
+def task_entries(root, group, profile, *, workspace=None):
     """按本任务验收节引用的节点读取完整场景，平台材料沿用方案提交。"""
     import design_files
-    design = design_files.read(materials.checked(root, group['design'], 'design', group['task_id']))
+    design = design_files.read(materials.checked(root, group['design'], 'design', group['task_id']), workspace=workspace)
     # 平台方案已由其不可变原文解析，场景读取沿用同一提交。
     if group.get('platform'):
         import coordination
@@ -189,7 +189,9 @@ def coverage(root, task_id, path):
             'artifact': ref, 'summary': '全部导入用例已覆盖或已处置。'}
 
 
-def dispatch(args, root, profile):
+def dispatch(args, root, profile, *, workspace=None):
+    from validation import Workspace
+    workspace = workspace or Workspace(root, profile)
     try:
         if args.scenario_action == 'check':
             return scenario_files.check(root / args.file, profile)
@@ -197,10 +199,10 @@ def dispatch(args, root, profile):
             return import_cases(root, str(args.task), root / args.file)
         if args.scenario_action == 'pending':
             import scenario_rounds
-            return scenario_rounds.pending(root, str(args.task), profile)
+            return scenario_rounds.pending(root, str(args.task), profile, workspace=workspace)
         if args.scenario_action == 'submit':
             import scenario_rounds
-            return scenario_rounds.submit(root, str(args.task), profile, root / args.results)
+            return scenario_rounds.submit(root, str(args.task), profile, root / args.results, workspace=workspace)
         return coverage(root, str(args.task), root / args.pairs)
     except scenario_files.FileProblems as exc:
         return exc.result()

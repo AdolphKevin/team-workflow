@@ -220,23 +220,29 @@ def local_write_guard(path):
             return
 
 
-def snapshot(root, profile):
+def snapshot(root, profile, *, include_names=False):
     root = root.resolve()
-    require(Path(git(root, 'rev-parse', '--show-toplevel').decode().strip()).resolve() == root, '--root must be the Git root')
-    head = git(root, 'rev-parse', 'HEAD').decode().strip()
-    staged = {}
-    for line in git(root, 'ls-files', '--stage', '-z').split(b'\0'):
+    top, head = git(root, 'rev-parse', '--show-toplevel', 'HEAD').decode().rstrip('\n').rsplit('\n', 1)
+    require(Path(top).resolve() == root, '--root must be the Git root')
+    staged, names = {}, set()
+    # 标签区分未跟踪路径与索引记录，一次列举同时取得两者，路径中的制表符保持原样。
+    for line in git(root, 'ls-files', '--stage', '--cached', '--others', '--exclude-standard', '-t', '-z').split(b'\0'):
         if not line:
             continue
-        header, raw_name = line.split(b'\t', 1)
+        tag, entry = line[:1], line[2:]
+        if tag == b'?':
+            names.add(os.fsdecode(entry))
+            continue
+        header, raw_name = entry.split(b'\t', 1)
         mode, oid, stage = header.decode().split()
         name = os.fsdecode(raw_name)
+        names.add(name)
         require(mode != '160000', 'Submodules must be verified as separate participating repositories')
         require(stage == '0', f'Unresolved merge: {name}')
         require(not (name == '.tw/local' or name.startswith('.tw/local/')), '.tw/local/ 本地证据不能被 Git 跟踪')
         if not reserved(name, profile['inputs']):
             staged[name] = header.decode()
-    names = {os.fsdecode(x) for x in git(root, 'ls-files', '--cached', '--others', '--exclude-standard', '-z').split(b'\0') if x}
+    listed_names = sorted(names)
     for name in profile['inputs']:
         path = inside(root, name)
         require(not (name == '.tw/local' or name.startswith('.tw/local/')), '.tw/local/ 本地证据不能作为 inputs')
@@ -271,7 +277,7 @@ def snapshot(root, profile):
             external[key] = snapshot(path, {'inputs': []})
     if external:
         data['external_inputs'] = external
-    return {'digest': digest(data), **data}
+    return {'digest': digest(data), **data, **({'names': listed_names} if include_names else {})}
 
 
 def accounts(values):

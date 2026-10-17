@@ -96,7 +96,7 @@ def platform_signature(value):
     return {'design': digest(value['design']), 'approvals': [digest(v) for v in value['approvals']]}
 
 
-def resolve(args, root):
+def resolve(args, root, *, workspace=None):
     """Resolve only roles consumed by this command; publication never fingerprints its own output."""
     if args.command not in COMMANDS:
         return None
@@ -150,7 +150,7 @@ def resolve(args, root):
     snapshot['stale_roles'] = []
     validate(root, defaults, replaced)
     if args.command == 'status' and args.design and defaults.get('design'):
-        if digest(design_files.read(local(root, args.design))) != digest(design_files.read(checked(root, defaults['design'], 'design', task_id))):
+        if digest(design_files.read(local(root, args.design), workspace=workspace)) != digest(design_files.read(checked(root, defaults['design'], 'design', task_id), workspace=workspace)):
             snapshot['stale_roles'].append('design')
     if not value['context']:
         raise MaterialGap('context', '不存在；请先 start', task_id)
@@ -192,7 +192,7 @@ def resolve(args, root):
             platform = coordination.load(task_id, root=root)
         except (Invalid, OSError, ValueError, TypeError, KeyError) as exc:
             raise MaterialGap('current', '无法核对平台材料：' + str(exc), task_id) from exc
-        stored = defaults.get('platform') or {'design': digest(design_files.read(root / defaults['design']['path'])),
+        stored = defaults.get('platform') or {'design': digest(design_files.read(root / defaults['design']['path'], workspace=workspace)),
                                              'approvals': [digest(read(root / ref['path'])) for ref in defaults['approvals']]}
         fresh = platform_signature(platform)
         for role in ('design', 'approvals'):
@@ -201,7 +201,7 @@ def resolve(args, root):
                     snapshot['stale_roles'].append(role)
                 else:
                     raise MaterialGap(role, '平台材料比记录更新，须重新 start', task_id)
-        selected_design = design_files.read(local(root, args.design)) if args.design else None
+        selected_design = design_files.read(local(root, args.design), workspace=workspace) if args.design else None
         if selected_design != platform['design']:
             if args.command == 'status':
                 snapshot['stale_roles'].append('design')
@@ -218,15 +218,15 @@ def resolve(args, root):
             import designs
             status = designs.approval_status(selected_design, selected_approvals,
                 root=root, profile=load_profile(root),
-                history=[design_files.read(local(root, p)) for p in args.design_history],
-                section_ids=read(args.task)['section_ids'], changed_paths=[])
+                history=[design_files.read(local(root, p), workspace=workspace) for p in args.design_history],
+                section_ids=read(args.task)['section_ids'], changed_paths=[], workspace=workspace)
             if set(status['stale']) & set(status['required_sections']) and args.command != 'status':
                 raise MaterialGap('approvals', '所选批准已过期，不能覆盖平台当前批准', task_id)
         args.issue = task_id
     return snapshot
 
 
-def fingerprint(args, root):
+def fingerprint(args, root, *, workspace=None):
     """The resolved roles enter the same request fingerprint as explicit files."""
     from commands import local
     if not getattr(args, 'material_selection', None) or args.command == 'start':
@@ -238,9 +238,9 @@ def fingerprint(args, root):
     if getattr(args, 'design', None):
         from scenario_acceptance import bindings, current
         from common import load_profile
-        design = design_files.read(local(root, args.design))
+        design = design_files.read(local(root, args.design), workspace=workspace)
         task = read(local(root, args.task))
-        result['scenario_bindings'] = bindings(current(root, load_profile(root), task, design)[1])
+        result['scenario_bindings'] = bindings(current(root, load_profile(root), task, design, workspace=workspace)[1])
     if args.command == 'review' and not args.submit:
         import reviews
         result['review_history'] = reviews.history_inputs(root, selection['task_id'], selection.get('effective') or selection['value'])
@@ -378,7 +378,7 @@ def record_status(args, root, result):
     return result
 
 
-def finish(args, root, task, result, request):
+def finish(args, root, task, result, request, *, workspace=None):
     """CAS for start, merge concurrent runs, and publish under the cleanup maintenance lock."""
     selection = getattr(args, 'material_selection', None)
     if not selection or not (result.get('ok') or args.command == 'run' and result.get('artifact')):
@@ -388,7 +388,7 @@ def finish(args, root, task, result, request):
     def finish_start():
         if args.command == 'start':
             from commands import current_status
-            progress = current_status(root, task['id'], (read(request.directory / 'request.json'), result))
+            progress = current_status(root, task['id'], (read(request.directory / 'request.json'), result), workspace=workspace)
             for key in ('steps', 'next_step', 'step_lines', 'pending_sections'):
                 if key in progress:
                     result[key] = progress[key]

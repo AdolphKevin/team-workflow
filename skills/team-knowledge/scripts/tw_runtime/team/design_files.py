@@ -78,8 +78,10 @@ def scenario_reader(root, commit=None):
     return read_scenario
 
 
-def read(path, *, internal=True):
+def read(path, *, internal=True, workspace=None, checkout=None):
     path = Path(path)
+    if workspace is not None:
+        return workspace.design(path, internal=internal)
     try:
         raw = path.read_bytes().decode('utf-8')
     except (OSError, UnicodeError) as exc:
@@ -95,7 +97,7 @@ def read(path, *, internal=True):
                 if context_path.is_file():
                     context = json.loads(context_path.read_text(encoding='utf-8'))
                     from tw_runtime import gitutil
-                    root = gitutil.toplevel(path.resolve().parent)
+                    root = checkout or gitutil.toplevel(path.resolve().parent)
                     if root and context.get('design', {}).get('path') == path.resolve().relative_to(root).as_posix():
                         origin = context.get('design_source')
                         reader = (scenario_reader(_checkout(root, origin['repository']), origin['commit']) if origin

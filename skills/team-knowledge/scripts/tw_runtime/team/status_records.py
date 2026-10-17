@@ -8,7 +8,7 @@ import knowledge
 import validation
 
 
-def inspect(args, root, profile, task, progress, approval_status):
+def inspect(args, root, profile, task, progress, approval_status, *, workspace=None):
     from commands import local, report_input
     selection = getattr(args, 'material_selection', None) or {}
     group = selection.get('effective') or selection.get('value') or {}
@@ -50,16 +50,16 @@ def inspect(args, root, profile, task, progress, approval_status):
     if expected and expected.get('review'):
         try:
             import designs
-            design = design_files.read(local(root, expected['design']))
+            design = design_files.read(local(root, expected['design']), workspace=workspace)
             hashes = designs.fingerprints(design)['sections']
             selected = {key: hashes[key] for key in task['section_ids']}
             review = read(local(root, expected['review']))
-            delivery.check_review_format(root, profile, task, review, selected, design)
+            delivery.check_review_format(root, profile, task, review, selected, design, workspace=workspace)
             result['review_current'] = rows['review']['state'] != 'stale'
             result['review_failures'] = delivery.review_failures(review, approval_status['required_sections'])
             if result['review_current'] and any(row.get('cases') for row in review['acceptance']):
                 try:
-                    execution = validation.verify_runs(root, profile, task, expected['runs'], live=False)
+                    execution = validation.verify_runs(root, profile, task, expected['runs'], live=False, workspace=workspace)
                 except Invalid:
                     pass  # The existing run step reports unavailable execution separately.
                 else:
@@ -83,7 +83,7 @@ def inspect(args, root, profile, task, progress, approval_status):
     if expected and accepted:
         try:
             proof = read(artifact_valid(root, accepted))
-            checked = delivery.verify(root, profile, task, expected, 'acceptance', live=False)
+            checked = delivery.verify(root, profile, task, expected, 'acceptance', live=False, workspace=workspace)
             keys = ('task_id', 'task_digest', 'source_digest', 'sections')
             if not (proof.get('kind') == 'acceptance' and proof.get('business_accepted') is True
                     and all(proof.get(key) == checked[key] for key in keys)
@@ -112,7 +112,7 @@ def inspect(args, root, profile, task, progress, approval_status):
             report = copy.deepcopy(proof['report'])
             report.update({key: value for key, value in expected.items() if key not in ('knowledge', 'acceptance')})
             report['acceptance'] = accepted['path']
-            verified = delivery.verify(root, profile, task, report, 'delivery', live=False)
+            verified = delivery.verify(root, profile, task, report, 'delivery', live=False, workspace=workspace)
             keys = ('task_id', 'task_digest', 'source_digest', 'sections')
             if not (proof.get('kind') == 'delivery-verification' and proof.get('delivery_complete') is True
                     and all(proof.get(key) == verified[key] for key in keys)
