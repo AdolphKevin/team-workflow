@@ -83,7 +83,7 @@ def recorded_steps(root, rows):
                 evidence = (response or {}).get('request_directory') or claim.get('started_at')
         row = {'id': key, 'label': label, 'state': state, 'evidence': evidence}
         if state == 'done' and (_artifact_value(root, last[1]) or {}).get('tool', {}).get('override'):
-            row['note'] = '使用了 --allow-modified-tool'
+            row['tool_override'] = True
         result.append(row)
     return result
 
@@ -184,7 +184,7 @@ def render(value):
     words = {'done': '', 'stale': '（源码已变，需要重做）', 'failed': '（上次失败）',
              'running-or-interrupted': '（正在运行或被中断，换新的请求编号重试）', 'pending': '',
              'not-recorded': '（工具没有记录，可能已在工具外完成）'}
-    lines = [f'{i}. {marks[row["state"]]} {row["label"]}' + (f'（{row["stale_reason"]}）' if row.get('stale_reason') else words[row['state']]) + ('（使用了被修改的工具安装）' if row.get('note') else '')
+    lines = [f'{i}. {marks[row["state"]]} {row["label"]}' + (f'（{row["stale_reason"]}）' if row.get('stale_reason') else words[row['state']]) + (f'（{row["summary"]}）' if row.get('summary') else '') + ('（使用了被修改的工具安装）' if row.get('tool_override') else '')
              for i, row in enumerate(value['steps'], 1)]
     for index, row in reversed(list(enumerate(value['steps']))):
         if row['id'] == 'scenarios':

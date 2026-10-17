@@ -36,7 +36,25 @@ class ChecklistRecords(unittest.TestCase):
             ('prepare', 'done'), ('run', 'failed'), ('review', 'done'),
             ('acceptance', 'pending'), ('knowledge', 'pending'), ('delivery', 'running-or-interrupted')])
         self.assertEqual(steps[1]['evidence'], failed.relative_to(self.root).as_posix())
-        self.assertIn('--allow-modified-tool', steps[0]['note'])
+        self.assertTrue(steps[0]['tool_override'])
+        self.assertNotIn('summary', steps[0])
+
+    def test_text_labels_follow_their_own_fields(self):
+        value = {'steps': [
+            {'id': 'prepare', 'label': '准备任务与知识简报', 'state': 'done', 'tool_override': True},
+            {'id': 'delivery', 'label': '最终交付核查', 'state': 'done', 'summary': '交付材料齐全；整体交付未完成：3 条场景的回归待沉淀'}], 'next_step': None}
+        lines = checklist.render(value)
+        self.assertIn('1. [x] 准备任务与知识简报（使用了被修改的工具安装）', lines)
+        self.assertIn('2. [x] 最终交付核查（交付材料齐全；整体交付未完成：3 条场景的回归待沉淀）', lines)
+        self.assertNotIn('被修改的工具安装', lines[1])
+
+    def test_empty_files_are_content_bound_artifacts(self):
+        path = self.root / '.tw/local/evidence/empty-stderr.txt'
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(b'')
+        self.assertEqual(artifact(self.root, path), {
+            'path': '.tw/local/evidence/empty-stderr.txt',
+            'sha256': 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'})
 
     def test_in_progress_adds_trust_source_and_start_checks_to_recorded_results(self):
         trusted = self.record('review-trusted', 'review', 1, submit=True)

@@ -514,8 +514,7 @@ def evidence_file(path, allow_large=False):
 def artifact(root, path):
     path = Path(path)
     relative = path.relative_to(root).as_posix()
-    require(inside(root, relative).is_file() and (path.stat().st_size > 0 or path.name in ('stdout.txt', 'stderr.txt')),
-            f'Missing/empty artifact: {relative}')
+    require(inside(root, relative).is_file(), f'Missing artifact: {relative}')
     return {'path': relative, 'sha256': sha(path)}
 
 

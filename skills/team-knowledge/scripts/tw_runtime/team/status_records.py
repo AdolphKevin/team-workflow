@@ -173,7 +173,7 @@ def recorded(root, task_id, phase, group, platform):
             'summary_counts', 'statistics', 'scenario_rounds', 'scenario_files') if key in proof}
         state = delivery_status(proof)
         delivery_fields['overall_complete'] = state['overall_complete']
-        next(row for row in progress['steps'] if row['id'] == 'delivery')['note'] = state['summary']
+        next(row for row in progress['steps'] if row['id'] == 'delivery')['summary'] = state['summary']
     view = None
     if platform:
         view = platform if 'items' not in platform else {'current': None, 'previous': None}

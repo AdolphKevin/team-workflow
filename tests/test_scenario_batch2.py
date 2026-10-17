@@ -72,7 +72,8 @@ class Batch2Regressions(unittest.TestCase):
         self.assertEqual(code, 0, status)
         self.assertFalse(status['overall_complete'])
         step = next(row for row in status['steps'] if row['id'] == 'delivery')
-        self.assertEqual(step['note'], delivered['summary'])
+        self.assertEqual(step['summary'], delivered['summary'])
+
 
     def test_delivery_with_all_regressions_passed_is_overall_complete(self):
         self.declare_regression()
