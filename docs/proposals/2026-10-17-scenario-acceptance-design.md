@@ -98,7 +98,7 @@ roles: {"design_owner":"Claude","implementation_owner":"Codex","acceptance_owner
 方案第 6 节段 1a、1b-1、1b-2。
 
 - 验收：A1、A2、A3、A4、A5、A6、A8
-- 范围：skills/team-knowledge/scripts、skills/team-knowledge/MANIFEST.json、tests、.tw/config.json
+- 范围：skills/team-knowledge/scripts、skills/team-knowledge/MANIFEST.json、tests、.tw/config.json、docs/sop
 - 前置任务：无
 
 ## 任务 T2：指令文本
@@ -106,5 +106,5 @@ roles: {"design_owner":"Claude","implementation_owner":"Codex","acceptance_owner
 方案第 6 节段 0、2a、2b、2c。
 
 - 验收：A7
-- 范围：skills/team-workflow、skills/team-knowledge/SKILL.md、skills/team-knowledge/references、scripts/check_release.py、docs/proposals/2026-10-14-sop-retest-trust.md
+- 范围：skills/team-workflow、skills/team-knowledge/SKILL.md、skills/team-knowledge/references、scripts、docs/proposals
 - 前置任务：无
