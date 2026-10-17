@@ -166,6 +166,14 @@ def recorded(root, task_id, phase, group, platform):
                'evidence': (proof.get('scenario_rounds') or [{}])[-1].get('path'),
                'summary_counts': proof['summary_counts'], 'first_pass': proof['statistics']['first_pass']}
         progress['steps'].insert(2, row)
+    delivery_fields = {}
+    if proof:
+        from summary import delivery_status
+        delivery_fields = {key: proof[key] for key in ('delivery_complete', 'regression_pending', 'automation_status',
+            'summary_counts', 'statistics', 'scenario_rounds', 'scenario_files') if key in proof}
+        state = delivery_status(proof)
+        delivery_fields['overall_complete'] = state['overall_complete']
+        next(row for row in progress['steps'] if row['id'] == 'delivery')['note'] = state['summary']
     view = None
     if platform:
         view = platform if 'items' not in platform else {'current': None, 'previous': None}
@@ -179,6 +187,6 @@ def recorded(root, task_id, phase, group, platform):
     summary = progress['completion_summary']
     action = '任务已关闭' if phase == 'closed' else closing_action(root, task_id)
     progress['completion_summary'] = summary if phase == 'closed' else action
-    return {'ok': True, 'task_phase': phase, 'summary': summary, 'next_action': action,
+    return {'ok': True, 'task_phase': phase, 'summary': summary, 'next_action': action, **delivery_fields,
             'steps': progress['steps'], 'next_step': None, 'step_lines': checklist.render(progress),
             'verified_records': verified, 'publication': publication(view), 'warnings': []}

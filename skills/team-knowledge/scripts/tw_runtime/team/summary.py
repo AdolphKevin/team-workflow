@@ -14,6 +14,20 @@ def _lines(items, empty):
     return [f'- {item}' for item in items] or [f'- {empty}']
 
 
+def delivery_status(result):
+    complete = bool(result.get('delivery_complete')) and not result.get('regression_pending', False)
+    headline = result.get('summary', '交付材料待齐全')
+    if result.get('delivery_complete'):
+        count = len(result.get('automation_status', {}).get('pending', []))
+        headline = '交付完成' if complete else f'交付材料齐全；整体交付未完成：{count} 条场景的回归待沉淀'
+    return {'overall_complete': complete, 'summary': headline}
+
+
+def regression_lines(result):
+    return [row['id'] + ('：' + row['reason'] if row.get('reason') else '')
+            for row in result.get('automation_status', {}).get('pending', [])]
+
+
 def render(result, task, profile=None):
     checks = (profile or {}).get('checks', {})
     accepted = result.get('business_accepted')
@@ -36,14 +50,15 @@ def render(result, task, profile=None):
                     '没有必需检查')
     for row in result.get('re_evaluated', []):
         lines.append(f'- {row["check"]}：按当前用例登记，用原始运行报告重新判定为通过（运行时判定为 {row["original_status"]}，未重跑）')
+    for key, excerpt in result.get('output_excerpts', {}).items():
+        lines += ['- ' + key + ' 原始输出摘录：'] + ['    ' + line for line in excerpt]
     environment = result.get('environment_checked')
     if environment:
         lines.append(f'- 运行环境：{"本次实际核对" if environment == "now" else "沿用业务验收当时记录的环境"}')
     ci_checks = result.get('ci_verified_checks', [])
     open_items = ['导入的 CI 检查：' + '、'.join(ci_checks)] if ci_checks else ['检查只在本机运行，CI 未验证']
     if result.get('regression_pending'):
-        open_items.append('整体交付未完成：以下场景尚未沉淀回归')
-        open_items += [row['id'] for row in result['automation_status']['pending']]
+        open_items += regression_lines(result)
     if result.get('superseded_execution'):
         open_items.append(f'{len(result["superseded_execution"])} 份较早或已过期的运行记录未被采用，仅作历史保留')
     if result.get('tool', {}).get('override'):
@@ -57,6 +72,7 @@ def render(result, task, profile=None):
     if knowledge:
         lines += ['', f'**知识处置**：{knowledge}']
     lines += ['', '**状态**']
+    lines.append('- ' + delivery_status(result)['summary'])
     lines.append(f'- 业务验收：{"已通过" if accepted else "未通过"}')
     lines.append(f'- 交付材料（验收、知识处置、交接）：{"齐全" if delivered else "未齐全"}')
     if result.get('closable'):

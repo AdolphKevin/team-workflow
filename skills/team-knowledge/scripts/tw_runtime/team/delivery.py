@@ -318,6 +318,7 @@ def verify(root, profile, task, report, phase='delivery', _seen=None, live=None)
         exc.next_action, exc.review_file = repair['next_action'], repair['review_file']
         raise
     regression = scenario_acceptance.regression(root, profile, task, scenario_group, scenario_state, review['findings'])
+    from execution import output_excerpt
     materials = [artifact(root, inside(root, report[p])) for p in ('design', 'brief', 'review')]
     materials += [artifact(root, inside(root, p)) for p in report['approvals'] + report['runs'] + report.get('design_history', [])]
     materials += dependency_materials + scenario_state['scenario_rounds']
@@ -345,6 +346,7 @@ def verify(root, profile, task, report, phase='delivery', _seen=None, live=None)
               'environment': {key: row.get('binding', {}).get('environment')
                               for key, row in sorted(execution['results'].items())},
               'environment_checked': 'now' if live else 'recorded at acceptance',
+              'output_excerpts': {key: output_excerpt(root, row['artifacts']) for key, row in execution['results'].items()},
               'regression_pending': bool(regression['pending']),
               'assurance': 'content-bound records and explicit reviews; delivery_complete covers acceptance, knowledge '
                            'and handoff records, not regression automation (see automation_status); '
@@ -412,6 +414,7 @@ def verify(root, profile, task, report, phase='delivery', _seen=None, live=None)
             result['closable'] = publication_verified
             result['close_authorization'] = authorization
     import summary
+    result.update(summary.delivery_status(result))
     result['summary_markdown'] = summary.render({**result, 'knowledge_disposition': (
         summary.disposition(completed) if phase == 'delivery' else None)}, task, profile)
     if platform_state is not None:

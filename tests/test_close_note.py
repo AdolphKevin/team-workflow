@@ -82,6 +82,8 @@ class CloseNote(unittest.TestCase):
         self.assertIn('未指明用例，证据为整项检查通过', result['summary_markdown'])
         self.assertEqual(record['close']['close_authorization']['confirmed_by'], 'blur-yin')
         self.assertIn('## 收尾说明', note['markdown'])
+        self.assertIn('原始输出摘录', note['markdown'])
+        self.assertIn('（无输出）', note['markdown'])
         self.assertIn('draft-only', note['publication'])
         self.assertEqual(self.issue['comments_data'][-1]['user']['login'], 'carol')  # nothing was posted
         self.publish(note, 'bob')

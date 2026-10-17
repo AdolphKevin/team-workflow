@@ -35,11 +35,21 @@ class DeliveredTask(unittest.TestCase):
         self.assertEqual(code, 0, status)
         self.assertEqual(status['task_phase'], 'delivered')
         self.assertEqual(status['summary'], '任务已交付')
+        self.assertIsNone(status['next_step'])
         self.assertEqual(status['verified_records']['delivery'], original)
         self.assertEqual(status['verified_records']['acceptance'], self.current()['acceptance'])
         self.assertEqual([r['state'] for r in status['steps']], ['done'] * 7)
         self.assertIn('关闭授权', status['next_action'])
         self.assertIn('--task ' + self.task['id'], status['next_action'])
+        code, pending = self.command('scenarios', 'pending', '--task', self.task['id'])
+        self.assertEqual(code, 0, pending)
+        self.assertEqual(pending['task_phase'], status['task_phase'])
+        self.assertEqual(pending['summary'], status['summary'])
+        self.assertEqual(pending['pending'], [])
+        self.assertEqual(pending['pending_count'], 0)
+        proof = read(self.root / original['path'])
+        self.assertEqual(pending['summary_counts'], proof['summary_counts'])
+        self.assertEqual(pending['statistics'], proof['statistics'])
         code, checked = self.command('verify', '--task', self.task['id'],
             '--report', self.current()['delivery_report']['path'])
         self.assertEqual(code, 1, checked)
@@ -62,6 +72,10 @@ class DeliveredTask(unittest.TestCase):
         self.assertEqual(next(r['state'] for r in status['steps'] if r['id'] == 'run'), 'failed')
         self.assertEqual(status['next_step']['id'], 'run')
         self.assertIn('tw team run', status['next_step']['next_command'])
+        code, pending = self.command('scenarios', 'pending', '--task', self.task['id'])
+        self.assertEqual(code, 0, pending)
+        self.assertTrue(pending['pending'])
+        self.assertEqual({row['reason'] for row in pending['pending']}, {'source-changed'})
 
     def test_start_review_generation_and_submission_reopen_task(self):
         for command, extra in (('start', []), ('review', []), ('review', ['--submit'])):
@@ -107,6 +121,10 @@ class DeliveredTask(unittest.TestCase):
         self.assertEqual(code, 0, status)
         self.assertEqual(status['summary'], '任务已交付')
         self.assertEqual([r['state'] for r in status['steps']], ['done'] * 7)
+        code, pending = self.command('scenarios', 'pending', '--task', self.task['id'])
+        self.assertEqual(code, 0, pending)
+        self.assertEqual(pending['pending'], [])
+        self.assertEqual(pending['task_phase'], 'delivered')
 
     def test_in_progress_legacy_snapshot_directs_to_start(self):
         self.start()

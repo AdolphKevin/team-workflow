@@ -40,7 +40,8 @@ class ScenarioNextStep(unittest.TestCase):
         write(path, document)
         code, pending = self.command('scenarios', 'pending', '--task', self.task['id'])
         self.assertEqual(code, 0, pending)
-        self.assertEqual([row['id'] for row in pending['pending']], ['S-ADDED'])
+        self.assertEqual(pending['pending'], [])
+        self.assertEqual(pending['task_phase'], 'delivered')
         results = self.root / '.tw/local/rework-results.jsonl'
         results.write_text(json.dumps({'scenario': 'S-ADDED', 'status': 'blocked', 'finding': 'Q9',
             'actual': '新入口等待环境开放', 'executor': 'carol',

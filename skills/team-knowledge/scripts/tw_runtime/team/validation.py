@@ -241,7 +241,7 @@ def capture(root, profile, key, directory, portable=False):
         status, detail = 'incomplete', '; '.join(failures)
     for channel in ('stdout', 'stderr'):
         path = directory / (channel + '.txt')
-        path.write_text(result[channel] or '(empty)\n', encoding='utf-8')
+        path.write_bytes(result.get('raw', {}).get(channel, result[channel].encode('utf-8')))
         artifacts.append(artifact(root, path))
     after = check_binding(root, profile, check)
     row = {'id': key, 'coverage': check['coverage'], 'binding': before, 'source_unchanged': before == after,
@@ -400,7 +400,7 @@ def reevaluate(root, profile, key, row):
     out, captured = original_files(root, check, row)
     native = out / check['report'][len('{output}/'):] if check.get('report') else None
     decoded = decode(check, {'state': row['state'], 'exit_code': row['exit_code'],
-                                           'stdout': (out / 'stdout.txt').read_text()}, native)
+                                           'stdout': (out / 'stdout.txt').read_text(errors='replace')}, native)
     status, cases, detail = decoded.status, decoded.cases, decoded.detail
     require(status == 'passed', f'Original report does not confirm result: {key}: {detail}', error_code=decoded.error_code)
     require(row.get('status') != 'passed' or cases == row.get('cases'), 'Original report does not confirm result: ' + key, error_code=Code.CHECK_RESULT)

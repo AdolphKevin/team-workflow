@@ -925,6 +925,30 @@ def draft(root, profile, url, progress, kind='implementation', completed_tasks=(
     if set(available) - set(included):
         gaps.append('New progress must be read and explicitly included before handoff')
     result = _draft_result('handoff', url, row, sorted(set(gaps)))
+    if kind != 'close':
+        from delivery import evidence
+        from execution import output_excerpt
+        from common import external_path
+        excerpts = []
+        for ref in row['verified']:
+            try:
+                value = read(evidence(root, profile, ref))
+                evidence_root = root
+                if 'repository' in ref:
+                    entry = next(item for item in profile['external_inputs'].values()
+                                 if item.get('repository') == ref['repository'])
+                    evidence_root = external_path(root, ref['repository'], entry)
+                rows = value.get('results', []) if value.get('kind') == 'execution' else (
+                    [value['result']] if value.get('kind') == 'imported-execution' else [])
+                outputs = {item['id']: output_excerpt(evidence_root, item['artifacts']) for item in rows}
+                outputs.update(value.get('output_excerpts', {}))
+                for key, lines in outputs.items():
+                    excerpts += ['- ' + key + ' 原始输出摘录：'] + ['    ' + line for line in lines]
+            except (Invalid, OSError, ValueError, TypeError, KeyError, StopIteration):
+                continue  # 证据缺口已由交接核对列出。
+        if excerpts:
+            result['markdown'] = result['markdown'].replace('\n\n<!-- tw-record',
+                '\n\n' + records.prose('\n'.join(excerpts)) + '\n\n<!-- tw-record', 1)
     result.update(knowledge=brief, approval_status=status)
     return result
 

@@ -116,12 +116,12 @@ def readable(result):
             lines.append('任务 ' + name + '：' + labels.get(value.get('state'), str(value.get('state'))))
     if result.get('checks'):
         lines += ['检查：', *readable_fields(result['checks'])]
-    for key in ('implementation_ready', 'business_accepted', 'delivery_complete', 'regression_pending', 'closable'):
+    for key in ('implementation_ready', 'business_accepted', 'delivery_complete', 'overall_complete', 'regression_pending', 'closable'):
         if key in result:
             lines.append(key + ': ' + str(result[key]))
     if isinstance(result.get('automation_status'), dict):
-        for row in result['automation_status']['pending']:
-            lines.append('尚未沉淀回归：' + row['id'])
+        from summary import regression_lines
+        lines += ['回归待沉淀：' + line for line in regression_lines(result)]
     return '\n'.join(lines)
 
 
@@ -215,6 +215,9 @@ def dispatch(args, root):
                 'reference': str(skill_resource('references/contracts.md')),
                 'data_version': RECORD_SCHEMA,
                 'next_action': 'Read the installed template and replace every placeholder.'}
+    completed = recorded_command(args, root)
+    if completed is not None:
+        return completed
     if args.command == 'scenarios':
         import scenarios
         return scenarios.dispatch(args, root, load_profile(root))
@@ -230,9 +233,6 @@ def dispatch(args, root):
         mappings = {key: (root / Path(path).expanduser()).resolve() for key, path in location_settings(root)['repositories'].items()}
         return portable.aggregate(root, read(local(root, args.joint)), mappings)
     from tw_runtime.team import platform_script as platform_read
-    completed = recorded_command(args, root)
-    if completed is not None:
-        return completed
     # Validate caller paths before materials.resolve replaces them with tool-owned snapshots.
     for path in ([args.design] if args.design else []) + list(args.design_history):
         design_files.read(local(root, path), internal=False)
@@ -509,7 +509,7 @@ def produce(args, root, profile, task, platform, request):
     def emit(value, name):
         return {'ok': value.get('ok', True), 'artifact': request.publish(name, value, args.out),
                 **{k: value[k] for k in ('summary', 'gaps', 'problem', 'next_action', 'implementation_ready',
-                                       'business_accepted', 'delivery_complete', 'regression_pending', 'automation_status', 'closable', 'acceptance_scope', 'scope', 'validation_active', 'verification_gaps',
+                                       'business_accepted', 'delivery_complete', 'overall_complete', 'regression_pending', 'automation_status', 'closable', 'acceptance_scope', 'scope', 'validation_active', 'verification_gaps',
                                        'ci_verified_checks', 'unverified_scope', 'summary_counts', 'statistics', 'scenario_rounds', 'scenario_files', 'summary_markdown', 'close_note', 're_evaluated', 'tool', 'environment_checked', 'pending_acceptance', 'pending_sections', 'authorizations_needed') if k in value}}
     if args.command == 'deliver':
         import delivery_sequence
@@ -824,7 +824,8 @@ def task_phase(platform, root=None, task_id=None, group=None):
 
 def recorded_command(args, root):
     """完成阶段在方案解析之前读取；显式 verify 保留当前核对。"""
-    if args.command not in ('status', 'deliver'):
+    scenario_pending = args.command == 'scenarios' and args.scenario_action == 'pending'
+    if args.command not in ('status', 'deliver') and not scenario_pending:
         return None
     import materials
     import status_records
@@ -847,10 +848,15 @@ def recorded_command(args, root):
     if args.command == 'deliver' and phase == 'delivered':
         ref = group['delivery']
         proof = read(artifact_valid(root, ref))
+        from summary import delivery_status
         return {**proof, 'artifact': ref, 'reused': True, 'task_phase': phase,
-                'summary': '任务已交付', 'next_action': status_records.closing_action(root, identity)}
-    if args.command == 'status':
-        return status_records.recorded(root, identity, phase, group, platform)
+                **delivery_status(proof), 'next_action': status_records.closing_action(root, identity)}
+    if args.command == 'status' or scenario_pending:
+        result = status_records.recorded(root, identity, phase, group, platform)
+        if scenario_pending:
+            result.update(task_id=identity, pending=[], pending_count=0)
+            result.setdefault('summary_counts', {key: 0 for key in ('passed', 'failed', 'blocked', 'pending')})
+        return result
     return None
 
 
@@ -1034,6 +1040,8 @@ def project_report(root, home=None):
     if profile is not None:
         problems, input_warnings = external_repository_problems(root, profile)
         config_errors += problems
+        if not profile['context']:
+            input_warnings.append('项目验收方案与真实验证操作手册尚未登记到 context')
     checked = check.run(Project(root, require_config=False))
     installed = install.check_install(home, require_team=True)
     override = os.environ.get(ALLOW_MODIFIED) == '1'

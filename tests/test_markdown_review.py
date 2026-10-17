@@ -315,6 +315,18 @@ class MarkdownReview(unittest.TestCase):
                 self.assert_position(refused, '问题 Q1')
                 self.assertIsNone(self.current()['review'])
 
+    def test_disposition_evidence_uses_indented_lines_for_multiple_references(self):
+        issue = {'id': 'Q-multi', 'owner': 'carol', 'affects': ['A1'], 'blocks': ['acceptance'],
+                 'state': 'resolved', 'summary': '核对两项来源',
+                 'resolution': {'reason': '两项原文已核对', 'evidence': ['https://example.invalid/spec#1', 'SOP#2']}}
+        path, _ = self.draft(issues=[issue])
+        self.assertIn('- 处置证据：https://example.invalid/spec#1\n  SOP#2', path.read_text())
+        text = self.completed(path.read_text())
+        code, submitted = self.submit(path, text)
+        self.assertEqual(code, 0, submitted)
+        issue = read(self.root / submitted['artifact']['path'])['findings'][0]
+        self.assertEqual(issue['resolution']['evidence'], ['https://example.invalid/spec#1', 'SOP#2'])
+
     def test_implementer_review_is_still_rejected_by_accept(self):
         path, _ = self.draft()
         code, submitted = self.submit(path, self.completed(path.read_text()))

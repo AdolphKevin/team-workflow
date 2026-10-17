@@ -421,6 +421,8 @@ class FourCommandDelivery(unittest.TestCase):
         code, result = self.command('deliver', '--task', self.task['id'])
         self.assertEqual(code, 1, result)
         self.assertEqual(result['stopped_at'], 'delivery-report')
+        self.assertFalse(result['overall_complete'])
+        self.assertEqual(result['summary'], '交付停在交付报告。')
         self.assertIn('--reason', result['next_action'])
         accepted = self.current()['acceptance']
         self.assertTrue(accepted)

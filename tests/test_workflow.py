@@ -289,7 +289,7 @@ class WorkflowCases(unittest.TestCase):
         self.assertNotEqual(before, snapshot(self.root, self.profile))
 
     def test_edited_or_emptied_output_cannot_verify(self):
-        self.check("import app; assert app.add(1,2)==3")
+        self.check("import app; assert app.add(1,2)==3; print('sum=3')")
         path, record = self.run_check()
         run = str(path.relative_to(self.root))
         validation.verify_runs(self.root, self.profile, self.task, [run])

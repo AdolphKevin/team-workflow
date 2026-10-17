@@ -466,6 +466,7 @@ class CoordinationCases(unittest.TestCase):
 
     def test_completed_implementation_handoff_reads_original_verification_records(self):
         self.prepare()
+        self.check("import sys; sys.stderr.write('handoff-stderr\\n')")
         import validation
         from common import artifact
         run, _ = validation.run_batch(self.root, self.profile, [self.task])
@@ -480,6 +481,10 @@ class CoordinationCases(unittest.TestCase):
             for verified, gap in cases:
                 with self.subTest(gap=gap):
                     draft = coordination.draft(self.root, self.profile, self.url, dict(finished, verified=verified), kind='implementation')
+                    if gap is None:
+                        self.assertIn('原始输出摘录', draft['markdown'])
+                        self.assertIn('stderr', draft['markdown'])
+                        self.assertIn('handoff-stderr', draft['markdown'])
                     if gap is None:
                         self.assertTrue(draft['ok'], draft)
                     else:

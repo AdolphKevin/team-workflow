@@ -138,6 +138,9 @@ def validate(document, profile):
                 elif 'check' in r:
                     if not isinstance(r['check'], str) or r['check'] not in profile.get('checks', {}):
                         v.add(rp + ('check',), 'regression.check 引用 checks 已登记的检查')
+                    elif profile['checks'][r['check']]['format'] not in ('junit', 'go-json'):
+                        v.add(rp + ('check',), 'regression 指向的检查需要逐项用例报告（junit 或 go-json），当前 '
+                              + r['check'] + ' 为 ' + profile['checks'][r['check']]['format'])
                     v.texts(r['cases'], rp + ('cases',), True)
                 else:
                     for key in r:

@@ -84,7 +84,7 @@ class ScenarioAcceptance(unittest.TestCase):
         self.assertEqual([r['id'] for r in accepted['automation_status']['pending']], ['S-P', 'S-N', 'T-P', 'T-N'])
         self.assertIn('一次通过率：4/4', accepted['summary_markdown'])
         self.assertIn('多人一致：0/0', accepted['summary_markdown'])
-        self.assertIn('整体交付未完成：以下场景尚未沉淀回归', accepted['summary_markdown'])
+        self.assertIn('S-P：not-declared', accepted['summary_markdown'])
 
     def test_review_protects_scenarios_and_prefills_blocked_issue(self):
         self.prepare()
@@ -149,6 +149,8 @@ class ScenarioAcceptance(unittest.TestCase):
         self.assertEqual(refused['scenario_states'], {'failed': [], 'pending': [], 'blocked': ['S-P', 'T-N']})
         self.assertIn('review', refused['next_action'])
         self.assertIn('--submit', refused['next_action'])
+        self.assertEqual(refused['next_action'], '在评审的问题小节填写处置后提交：tw team review --task '
+                         + self.task['id'] + ' --submit --root ' + str(self.root))
         self.assertNotIn('scenarios pending', refused['next_action'])
         code, stopped = self.call('deliver', '--task', self.task['id'], '--reason', '现有知识已覆盖')
         self.assertEqual(code, 1, stopped)
@@ -197,6 +199,8 @@ class ScenarioAcceptance(unittest.TestCase):
         self.assertEqual([r['id'] for r in delivered['automation_status']['automated']], ['S-P'])
         self.assertEqual([r['id'] for r in delivered['automation_status']['manual-only']], ['T-P'])
         self.assertEqual([r['id'] for r in delivered['automation_status']['pending']], ['S-N', 'T-N'])
+        self.assertEqual([r['reason'] for r in delivered['automation_status']['pending']],
+                         ['cases-not-passed', 'not-declared'])
         code, report = self.call('delivery-template', '--task', self.task['id'])
         self.assertEqual(code, 0, report)
         value = read(self.root / report['artifact']['path'])
@@ -272,7 +276,24 @@ class ScenarioAcceptance(unittest.TestCase):
         path.write_text(json.dumps(review))
         code, accepted = self.call('accept', '--task', self.task['id'], '--review', path)
         self.assertEqual(code, 0, accepted)
-        self.assertEqual(accepted['automation_status']['pending'][0], {'id': 'S-P', 'pending': 'F-reg'})
+        self.assertEqual(accepted['automation_status']['pending'][0],
+                         {'id': 'S-P', 'pending': 'F-reg', 'reason': 'deferred'})
+
+    def test_regression_check_without_a_current_passing_run_explains_pending(self):
+        self.prepare()
+        self.profile['checks']['reg'] = {**self.profile['checks']['unit'], 'format': 'go-json'}
+        import test_workflow
+        test_workflow.write_config(self.root, self.profile)
+        self.scenarios['sops'][0]['scenarios'][0]['regression'] = {'check': 'reg', 'cases': ['p::TestA']}
+        self.save_scenarios()
+        self.approve_start()
+        self.call('run', '--task', self.task['id'])
+        self.assertEqual(self.submit(self.all_results())[0], 0)
+        self.reviewed()
+        code, accepted = self.call('accept', '--task', self.task['id'])
+        self.assertEqual(code, 0, accepted)
+        self.assertEqual(accepted['automation_status']['pending'][0],
+                         {'id': 'S-P', 'check': 'reg', 'cases': ['p::TestA'], 'reason': 'check-not-passed'})
     def test_failed_scenario_rejects_a_passed_review_and_names_its_state(self):
         self.prepare()
         self.call('run', '--task', self.task['id'])

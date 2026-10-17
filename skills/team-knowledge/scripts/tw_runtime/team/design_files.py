@@ -7,6 +7,7 @@ from pathlib import Path
 from common import Invalid, require
 import designs
 from error_codes import Code, fields
+from scenario_files import FileProblems
 
 
 def path_label(path):
@@ -106,11 +107,15 @@ def read(path, *, internal=True):
                                                                for ref in section['data']['scenarios']]
                 return design
             except ValueError as exc:
+                if isinstance(exc, Invalid):
+                    raise
                 raise Invalid(f'无法读取内部方案快照：{exc}') from exc
         from tw_runtime import gitutil
         checkout = gitutil.toplevel(path.resolve().parent) or path.resolve().parent
         return designs.load(raw, scenario_reader=scenario_reader(checkout))
     except Invalid as exc:
+        if isinstance(exc, FileProblems):
+            raise
         error = DesignReadError(path, str(exc), **{key: value for key, value in fields(exc).items() if key != 'error_code'})
         if internal and raw.lstrip().startswith(('{', '[')) and path.suffix == '.json':
             error.error_code = Code.DESIGN_SNAPSHOT

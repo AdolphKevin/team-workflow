@@ -328,6 +328,19 @@ class UnifiedTeam(unittest.TestCase):
         self.assertTrue(result['installation']['ok'], result['installation'])
         self.assertNotIn('cs', result)
 
+    def test_project_warns_for_missing_or_empty_context_and_preserves_ok(self):
+        config = read(self.root / '.tw/config.json')
+        for context in (None, []):
+            if context is None:
+                config.pop('context', None)
+            else:
+                config['context'] = context
+            write(self.root / '.tw/config.json', config)
+            code, result = self.command('project', '--home', str(self.root / '.tw/local/empty-home'))
+            self.assertEqual(code, 0, result)
+            self.assertTrue(result['ok'])
+            self.assertIn('项目验收方案与真实验证操作手册尚未登记到 context', result['warnings'])
+
     def test_original_documents_are_read_from_configuration(self):
         config = read(self.root / '.tw/config.json')
         config['documents'] = [{'id': 'sop', 'title': '加法原文', 'source': 'self:AGENTS.md'}]

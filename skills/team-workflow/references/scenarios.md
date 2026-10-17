@@ -4,20 +4,22 @@
 
 ## 1. 场景文件
 
-场景放在业务仓库，推荐 `docs/sop/<批次>.yaml`，按原文登记。采用 JSON 或 YAML 子集：对象、数组、字符串、数字、布尔值与空值；缩进用空格，字符串按需加引号。结构完整的示例见[场景模板](../templates/scenarios.yaml)。
+场景放在业务仓库，推荐 `docs/sop/<批次>.yaml`，按原文登记。采用 JSON 或 YAML 子集：对象、数组、字符串、数字、布尔值与空值；空格缩进，字符串按需加引号。示例见[场景模板](../templates/scenarios.yaml)。
+
+`sources.confirmed_by` 填原文的实际确认人。代理推断的预期先写方案问题清单，阻塞 `acceptance`；确认后并入场景并补确认人。
 
 - 顶层为 `metadata` 与 `sops`。`metadata` 必填 `requirement`、`batch`、`version`、`owner`、非空 `sources`；每项来源含 `ref`、`version`、`confirmed_by`，可选 `tags`。
 - 节点必填 `id`、`title`、`actor`、`entry`、`scenarios`，可选 `must`、`negative_exempt`。每个节点至少一条正向 `positive` 和一条反向 `negative` 场景；反向豁免理由写入 `negative_exempt`。
 - 场景必填 `id`、`polarity`、`title`、`actor`、`priority`、`verify`、`initial_state`、`steps`、`expected`、`forbidden_effects`。后四项为字符串数组：前三项非空，副作用数组可空。可选 `refs`、`evidence_hints`、`tags`、`regression`。节点编号在文件内唯一，场景编号在任务内唯一。
 - 反向场景另填 `negative_type`：`empty-input`、`over-length`、`not-found`、`permission`、`cross-tenant`、`duplicate`、`concurrency`、`disconnect`、`timeout`、`archived`、`invalid-input`、`incomplete-input`、`interrupted`、`stale-input`、`tampered-input`、`other`，分别对应空输入、超长、对象缺失、权限、跨租户、重复、并发、断线、超时、归档、输入错误、输入缺漏、中断、过期输入、篡改及其他。
 
-方案验收节用 `- 场景：docs/sop/<批次>.yaml#SOP-02、SOP-03` 引用节点。运行 `tw team scenarios check <文件>` 核对结构、来源、正反向规则和已声明的入口；问题附原文行号。
+方案验收节用 `- 场景：docs/sop/<批次>.yaml#SOP-02、SOP-03` 引用节点。用 `tw team scenarios check <文件>` 核对结构、来源、正反向规则及入口；问题附行号。
 
 `regression` 记录沉淀后的保护方式，三种形状如下。独立验收后沉淀用例并登记检查。写回 `regression` 会使检查运行过期，在生成评审稿之前写回并重跑 `run`。
 
 | 形状 | 含义 |
 | --- | --- |
-| `{check: unit, cases: [CalcTests::test_add]}` | `check` 引用登记的检查，`cases` 为非空用例名数组，名称与检查报告中的用例名一致，JUnit 使用 `类名::测试名`；回归使用逐项用例报告 |
+| `{check: unit, cases: [CalcTests::test_add]}` | `check` 引用 `junit` 或 `go-json` 检查，`cases` 填报告中的用例名数组（至少一项）；JUnit 使用 `类名::测试名` |
 | `{manual: 原因, owner: 负责人, trigger: 触发时机}` | 仍需手动 |
 | `{pending: Q1}` 或省略 | 尚待沉淀；显式问题编号引用评审中已延期的事项 |
 

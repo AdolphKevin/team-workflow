@@ -104,6 +104,19 @@ class ScenarioCases(unittest.TestCase):
             target['regression'] = regression
             self.assertEqual(self.call('scenarios', 'check', self.save(value))[1]['error_code'], 'scenario-file-invalid')
 
+    def test_regression_command_check_is_rejected_at_its_line(self):
+        fixtures.WorkflowCases.check(self, "print('ok')")
+        write_config(self.root, self.profile)
+        value = scenario_file()
+        value['sops'][0]['scenarios'][0]['regression'] = {'check': 'unit', 'cases': ['C1']}
+        path = self.save(value)
+        code, result = self.call('scenarios', 'check', path)
+        self.assertEqual((code, result.get('error_code')), (1, 'scenario-file-invalid'), result)
+        error = next(row for row in result['errors'] if '逐项用例报告' in row['problem'])
+        self.assertEqual(error['problem'], 'regression 指向的检查需要逐项用例报告（junit 或 go-json），当前 unit 为 command')
+        self.assertEqual(error['line'], next(i for i, line in enumerate(path.read_text().splitlines(), 1)
+                                             if '"check": "unit"' in line))
+
     def test_malformed_values_and_negative_type_enum_are_input_errors(self):
         for field, bad in (('negative_type', []), ('negative_type', 'unknown'), ('verify', []), ('id', {}), ('steps', '一行')):
             value = scenario_file()

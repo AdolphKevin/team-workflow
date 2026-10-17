@@ -2,9 +2,8 @@
 import copy
 import json
 import unittest
-from common import read, artifact_valid
-
 import test_scenario_acceptance as acceptance
+from common import read, artifact_valid
 
 
 class Batch2Regressions(unittest.TestCase):
@@ -55,6 +54,8 @@ class Batch2Regressions(unittest.TestCase):
         code, delivered = self.call('deliver', '--task', self.task['id'], '--reason', '现有知识已覆盖')
         self.assertEqual(code, 0, delivered)
         self.assertTrue(delivered['delivery_complete'])
+        self.assertFalse(delivered['overall_complete'])
+        self.assertEqual(delivered['summary'], '交付材料齐全；整体交付未完成：3 条场景的回归待沉淀')
         group = self.current()
         for key in ('acceptance', 'delivery_report', 'delivery'):
             self.assertEqual(read(artifact_valid(self.root, group[key]))['task_id'], self.task['id'])
@@ -64,7 +65,31 @@ class Batch2Regressions(unittest.TestCase):
             {'id': 'S-P', 'check': 'unit', 'cases': ['CalcTests::test_add']}])
         self.assertIn('整体交付未完成', delivered['summary_markdown'])
         for key in ('S-N', 'T-P', 'T-N'):
-            self.assertIn(key, delivered['summary_markdown'])
+            self.assertIn(key + '：not-declared', delivered['summary_markdown'])
+        from commands import readable
+        self.assertNotIn('交付完成', readable(delivered))
+        code, status = self.call('status', '--task', self.task['id'])
+        self.assertEqual(code, 0, status)
+        self.assertFalse(status['overall_complete'])
+        step = next(row for row in status['steps'] if row['id'] == 'delivery')
+        self.assertEqual(step['note'], delivered['summary'])
+
+    def test_delivery_with_all_regressions_passed_is_overall_complete(self):
+        self.declare_regression()
+        for node in self.scenarios['sops']:
+            for row in node['scenarios']:
+                row['regression'] = {'check': 'unit', 'cases': ['CalcTests::test_add']}
+        self.save_scenarios()
+        self.approve_start()
+        self.assertEqual(self.call('run', '--task', self.task['id'])[0], 0)
+        self.assertEqual(self.submit(self.all_results())[0], 0)
+        self.reviewed()
+        code, delivered = self.call('deliver', '--task', self.task['id'], '--reason', '现有知识已覆盖')
+        self.assertEqual(code, 0, delivered)
+        self.assertTrue(delivered['overall_complete'])
+        self.assertEqual(delivered['summary'], '交付完成')
+        self.assertIn('交付完成', delivered['summary_markdown'])
+        self.assertNotIn('整体交付未完成', delivered['summary_markdown'])
 
     def test_start_reports_inline_scenario_or_manual_verification_line_without_new_context(self):
         self.prepare()

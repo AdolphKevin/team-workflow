@@ -77,14 +77,15 @@ def regression(root, profile, task, group, value, findings):
     for row in value['scenarios']:
         declared = row.get('regression', {})
         category = 'pending'
+        reason = scenario_rounds.regression_reason(root, profile, task, group, row, checks)
         if 'pending' in declared:
             require(declared['pending'] in deferred, '场景 ' + row['id'] + ' 的 regression.pending 引用评审中 deferred 的问题：'
                     + declared['pending'], section='问题清单')
         elif 'manual' in declared:
             category = 'manual-only'
-        elif scenario_rounds.regression_passed(root, profile, task, group, row, checks):
+        elif reason is None:
             category = 'automated'
-        status[category].append({'id': row['id'], **declared})
+        status[category].append({'id': row['id'], **declared, **({'reason': reason} if category == 'pending' else {})})
     return status
 
 

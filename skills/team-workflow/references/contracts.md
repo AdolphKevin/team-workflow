@@ -40,6 +40,8 @@ tw team guidance --root "$PROJECT" [--scope project|global|all] [--file AGENTS.m
 
 检查包含 `argv` 参数数组、`purpose`、仓内 `cwd`、秒数 `timeout`、`format`、`required_cases`、`required_env` 和 `environment`。命令直接启动进程，凭证通过环境传递，记录必要变量名；日志遵循项目脱敏规则。本地与可携带记录的 `argv` 保存含 `{output}` 的配置模板，启动进程时展开为绝对路径；输出目录由 `stdout.txt` 等产物的相对路径确定。
 
+`stdout.txt`、`stderr.txt` 按脱敏后的原始字节保存，空输出保存为空文件。评审稿、交接和收尾说明分别标明两路输出的末尾 12 行，两者皆空时显示“（无输出）”；历史文件按原内容读取。
+
 `format` 为 `command`、`go-json` 或 `junit`。`command` 记录命令退出结果；Go 解析 `go test -json`；JUnit 使用 `report: "{output}/results.xml"`，命令生成本次运行的新报告。逐项报告的通过条件：用例数大于零，全部发现的用例为通过或跳过，必要用例齐全并通过。`required_cases` 指定必要用例，名称为准确的 `包::测试名` 或 `classname::name`；空数组表示全部发现的用例均为必要用例。Go 的必要父用例另要求其子用例全部通过。额外产物放在 `{output}/` 内；证据含义见[业务验收术语](business-acceptance.md#1-术语)。
 
 `environment` 写 `{"kind":"stateless"}`（检查独立于可变外部数据），或 `{"kind":"fixture","identity":["业务仓的只读命令","参数"]}`（表达服务、数据库或夹具状态）。身份核对成功后复用结果。`revision_sensitive: true` 用于依赖 Git 提交编号的检查。
@@ -156,14 +158,15 @@ tw team review --root "$PROJECT" --task "$TASK_ID" --from-platform
 - 状态：open
 - 摘要：实际问题
 - 处置理由：
-- 处置证据：
+- 处置证据：SOP#Q1
+  https://example.invalid/confirmation
 - 确认人：
 - 确认依据：
 - 跟进任务：
 - 范围调整：
 ```
 
-`open` 的六个处置字段留空；其他状态填写处置理由（单值文字）和处置证据（列表，每行一项来源引用）。`accepted`、`deferred` 另填确认人（单值姓名）；确认依据可选，为单值文字；`deferred` 另填跟进任务与范围调整（各为单值文字）。
+`open` 的六个处置字段留空；其他状态填写处置理由（单值文字）和处置证据（每行一项来源引用，首项写在字段后，其余项各缩进两个空格续行）。`accepted`、`deferred` 另填确认人（单值姓名）；确认依据可选，为单值文字；`deferred` 另填跟进任务与范围调整（各为单值文字）。
 
 ### 变化后逐项复核
 
@@ -257,10 +260,12 @@ tw team metrics --root "$PROJECT" [--task "$TASK"] [--since 2026-10-01] [--forma
 `task_phase` 由同一入口判定，分为三个阶段：
 
 - `closed`：平台任务已关闭，优先于其他阶段；`status` 按各步骤最后记录报告，概要及 `next_action` 为“任务已关闭”，`next_step` 为 null。
-- `delivered`：当前材料组含通过的最终交付记录，且交付后本任务尚无新的开工、运行、评审或场景轮次；`status` 概要为“任务已交付”，按最后记录展示步骤，`verified_records` 列出验收和交付记录（`path`、`sha256`），下一步为发布收尾说明或交接、记录关闭授权。`deliver` 返回已有交付记录及摘要，标明 `reused: true`。这两个阶段直接读取记录，方案快照保留为历史材料。
+- `delivered`：当前材料组含通过的最终交付记录，且交付后本任务尚无新的开工、运行、评审或场景轮次；`status` 概要为“任务已交付”，按最后记录展示步骤，`verified_records` 列出验收和交付记录（`path`、`sha256`）。`next_step` 为 null，表示流程核查步骤已走完；`next_action` 给出发布收尾说明或交接、记录关闭授权与关闭任务的操作。`deliver` 返回已有交付记录及摘要，标明 `reused: true`。
 - `in-progress`：其余情况；为本任务重新 `start`、`run`、`review`（生成或提交）或 `scenarios submit` 后按当前材料核对。进行中读取旧格式内部快照时，用当前格式方案重新 `start`。
 
 `verify --report <报告>` 继续按当前材料显式复核；业务结论以该次核对为准。
+
+`delivered`、`closed` 阶段的读取命令直接读取记录，方案快照保留为历史材料；`scenarios pending` 返回空清单，概要与 `status` 一致，场景统计取交付时记录。交付步骤的整体状态见[回归约定](#轮次验收与回归)。
 
 评审在成功提交后计为完成。步骤状态为 `done`、`pending`、`stale`、`failed`、`running-or-interrupted`、`not-recorded`。场景验收步骤列通过、失败、受阻、待执行数量；待执行或失败时指向 `scenarios pending`。采用有效评审后指向 `deliver`；绑定变化时受影响步骤过期。显式方案内容变化时重新 `start`，相同内容换路径可经核对登记。
 
@@ -319,7 +324,9 @@ tw team metrics --root "$PROJECT" [--task "$TASK"] [--since 2026-10-01] [--forma
 
 评审观察种类为 `execution` 和 `scenarios`：前者含 `{run:{path,sha256}, check, cases}`，运行属于本任务且为选中的有效结果；后者含本任务轮次引用 `rounds`。评审稿预填场景状态、实际结果、执行者、轮次和证据；受阻场景的问题按验收负责人及受影响验收节补入清单。`reviewer` 与场景 `executor` 均独立于 `roles.implementation_owner`，姓名比较折叠大小写和多余空格，实施负责人必填。成员和代理使用稳定、可区分的身份。
 
-每条场景的 `regression` 写 `{check, cases}`、`{manual, owner, trigger}` 或 `{pending}`，分别表示仓内回归、保留人工责任、待沉淀的问题编号；缺省表示待沉淀。工具生成 `automation_status` 的 `automated`、`manual-only`、`pending` 列表：检查及指定用例在当前源码有效运行中通过时归入 `automated`；人工责任归入 `manual-only`；其他归入 `pending`。`regression.pending` 引用评审中 `deferred` 的问题。`verify` 存在待沉淀场景时返回 `regression_pending: true` 并逐条列出，摘要写明整体交付未完成（[业务验收标准](business-acceptance.md)第 5 节）。
+每条场景的 `regression` 写 `{check, cases}`、`{manual, owner, trigger}` 或 `{pending}`，分别表示仓内回归、保留人工责任、待沉淀的问题编号；缺省表示待沉淀。`check` 引用 `junit` 或 `go-json` 检查，场景读取统一核对格式并报行号。工具生成 `automation_status`：检查及指定用例在当前源码有效运行中通过时归入 `automated`；人工责任归入 `manual-only`；其他归入 `pending`，每项含 `reason`：`not-declared`（缺省）、`deferred`（引用已延期问题）、`check-not-passed`（当前源码缺有效通过运行）、`cases-not-passed`（指定用例缺失或尚待通过）。`regression.pending` 引用评审中 `deferred` 的问题。
+
+`delivery_complete` 表示验收、知识处置和交接记录齐全；`regression_pending` 表示存在待沉淀场景；`overall_complete` 为前者成立且后者为假。概要、摘要与交付步骤共用该判定：条件齐全写“交付完成”；材料齐全且回归待沉淀写“交付材料齐全；整体交付未完成：N 条场景的回归待沉淀”，逐条显示场景与原因；材料待补时报告停止步骤。整体交付依据见[业务验收标准](business-acceptance.md#5-交付报告)。
 
 ## 问题处置与交接
 

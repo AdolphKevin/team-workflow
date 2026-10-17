@@ -124,10 +124,13 @@ def deliver(args, root, profile, task, request):
                  'delivery_complete': bool(result.get('delivery_complete')) if not stopped else False,
                  'closable': bool(result.get('closable')) if not stopped else False,
                  'summary_markdown': result.get('summary_markdown', ''),
-                 'summary': '交付完成。' if not stopped else '交付停在' + {'review': '平台评审', 'acceptance': '业务验收', 'delivery-report': '交付报告', 'delivery': '最终核查'}[stopped] + '。'}
+                 'summary': ('交付停在' + {'review': '平台评审', 'acceptance': '业务验收', 'delivery-report': '交付报告',
+                              'delivery': '最终核查'}[stopped] + '。') if stopped else ''}
         for key in ('ci_verified_checks', 'unverified_scope', 'close_note', 'acceptance_scope', 'scope', 'automation_status', 'regression_pending', 'summary_counts', 'statistics', 'scenario_rounds', 'scenario_files'):
             if key in result:
                 value[key] = result[key]
+        from summary import delivery_status
+        value.update(delivery_status(value))
         if stopped:
             value['problem'] = problem or result.get('problem', '本步骤尚未完成。')
             for key in ('error_code', 'review_failures', 'review_file', 'scenario_states'):

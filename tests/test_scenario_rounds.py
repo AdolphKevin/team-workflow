@@ -408,11 +408,19 @@ class ScenarioRounds(unittest.TestCase):
         self.assertEqual(value['summary_counts'], {'passed': 1, 'failed': 0, 'blocked': 0, 'pending': 3})
         self.assertEqual(next(row['reason'] for row in value['pending'] if row['id'] == 'S-N'), 'source-changed')
 
-    def test_command_check_without_case_report_keeps_regression_pending(self):
+    def test_command_check_without_case_report_is_rejected_before_submission(self):
         self.prepare()
         self.scenarios['sops'][0]['scenarios'][0]['regression'] = {'check': 'unit', 'cases': ['p::TestA']}
         self.save_scenarios()
-        self.assertEqual(self.submit([self.result(key) for key in ('S-P', 'S-N', 'T-P', 'T-N')])[0], 0)
-        (self.root / 'app.py').write_text('def add(a, b):\n    return a+b  # 新实现\n')
-        self.assertEqual(self.call('run', '--task', self.task['id'])[0], 0)
-        self.assertEqual(self.pending()['summary_counts']['pending'], 4)
+        before = self.current_path().read_bytes()
+        code, refused = self.submit([self.result(key) for key in ('S-P', 'S-N', 'T-P', 'T-N')])
+        self.assertEqual((code, refused['error_code']), (1, 'scenario-file-invalid'), refused)
+        self.assertIn('当前 unit 为 command', refused['problem'])
+        line = next(i for i, text in enumerate(self.scenario_path.read_text().splitlines(), 1)
+                    if '"check": "unit"' in text)
+        self.assertEqual(refused['errors'][0]['line'], line)
+        self.assertEqual(self.current_path().read_bytes(), before)
+        code, refused = self.call('run', '--task', self.task['id'])
+        self.assertEqual((code, refused['error_code']), (1, 'scenario-file-invalid'), refused)
+        self.assertEqual(refused['line'], line)
+        self.assertEqual(self.current_path().read_bytes(), before)

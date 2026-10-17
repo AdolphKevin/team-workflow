@@ -262,6 +262,11 @@ class PlatformReview(unittest.TestCase):
         self.assertEqual([row['state'] for row in closed['steps']], ['done'] * 7)
         self.assertEqual(closed['publication'], before['publication'])
         self.assertNotIn('源码已变', '\n'.join(closed['step_lines']))
+        code, pending = self.command('scenarios', 'pending', '--task', self.url)
+        self.assertEqual(code, 0, pending)
+        self.assertEqual(pending['task_phase'], 'closed')
+        self.assertEqual(pending['summary'], '任务已关闭')
+        self.assertEqual(pending['pending'], [])
         self.platform['state'] = 'open'
         self.response()
         code, opened = self.command('status', '--task', self.url)

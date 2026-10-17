@@ -49,7 +49,7 @@ def locations(root, task_id):
     return base / 'review.md', base / 'reviews' / 'editor.json'
 
 
-def submission_action(root, task_id, review_file=None, *, recheck=False, register=False):
+def submission_action(root, task_id, review_file=None, *, recheck=False, register=False, disposition=False):
     """任务的评审提交方式在此选择，所有下一步共用。"""
     from tw_runtime.team import platform_script
     path = review_file or locations(root, task_id)[0].relative_to(root).as_posix()
@@ -58,12 +58,14 @@ def submission_action(root, task_id, review_file=None, *, recheck=False, registe
                + '；tw team review ' + options + '；') if recheck else ''
     if platform_script.is_task(root, task_id, required=False):
         imported = 'tw team review ' + options + ' --from-platform；' if register else ''
-        return (prepare + '逐项核对并填写 ' + shlex.quote(str(path))
+        instruction = '在问题小节填写处置：' if disposition else '逐项核对并填写 '
+        return (prepare + instruction + shlex.quote(str(path))
                 + '，作为变更请求评审发布，再运行：' + imported + 'tw team deliver ' + options)
     if recheck:
         return prepare.rstrip('；')
     file_option = ' --file ' + shlex.quote(str(path)) if review_file else ''
-    return (prepare + '填写后提交：tw team review --task ' + shlex.quote(task_id)
+    instruction = '在评审的问题小节填写处置后提交：' if disposition else '填写后提交：'
+    return (prepare + instruction + 'tw team review --task ' + shlex.quote(task_id)
             + ' --submit' + file_option + ' --root ' + shlex.quote(str(root)))
 
 
@@ -213,7 +215,7 @@ def preview_execution(root, profile, task, paths):
             out, _ = validation.original_files(root, check, row)
             native = out / check['report'][len('{output}/'):] if check.get('report') else None
             decoded = validation.decode(check, {'state': row['state'], 'exit_code': row['exit_code'],
-                'stdout': (out / 'stdout.txt').read_text()}, native)
+                'stdout': (out / 'stdout.txt').read_text(errors='replace')}, native)
             status, cases, detail = decoded.status, decoded.cases, decoded.detail
             if not cases:
                 try:
@@ -327,10 +329,8 @@ def snapshot(args, root, profile, task, draft_id, allow_incomplete=False):
             if execution.get('gap'):
                 lines.append('  - 此处仅展示原始结果，当前运行材料未通过验收核查；完整意见可提交，验收前仍需修复。')
             lines.append('  - 命令：' + ' '.join(str(v) for v in result.get('argv', [])))
-            for item in result.get('artifacts', []):
-                if item['path'].endswith('/stdout.txt'):
-                    content = artifact_valid(root, item).read_text(errors='replace')
-                    lines += ['  - 原始输出摘录：'] + ['    ' + line for line in content[:4000].splitlines()]
+            from execution import output_excerpt
+            lines += ['  - 原始输出摘录：'] + ['    ' + line for line in output_excerpt(root, result.get('artifacts', []))]
             observations.append({'kind': 'execution', 'run': ref, 'check': check, 'cases': cases})
             if ref not in evidence:
                 evidence.append(ref)
@@ -357,6 +357,7 @@ def render(value):
 
     lines = ['# 任务评审', '', '只填写下方评审字段；工具绑定、运行结果和风险列表保持原样。',
              '结论填写“通过”或“不通过”；证据文件可留空，补充时每行一个项目内路径。知识冲突已处理在没有冲突时填“是”。', '',
+             '处置证据每行一项来源引用；首项写在字段后，其余项各缩进两个空格续行。', '',
              BIND_START, records.comment(binding), BIND_END, '']
     if value.get('changes'):
         lines += ['## 变化', _protected('changes', value['generated']['changes']), '',

@@ -80,24 +80,32 @@ def statistics(entries, history, states):
                                for state in ('passed', 'failed', 'blocked', 'pending')}}
 
 
-def regression_passed(root, profile, task, group, entry, checks=None):
+def regression_reason(root, profile, task, group, entry, checks=None):
+    """回归待沉淀原因；None 表示指定用例在当前源码有效运行中通过。"""
     checks = checks if checks is not None else {}
     regression = entry.get('regression', {})
+    if 'pending' in regression:
+        return 'deferred'
     if 'check' not in regression:
-        return False
+        return 'not-declared'
     key = regression['check']
     selection = (key, tuple(regression['cases']))
     if selection not in checks:
-        # 把场景用例交给原有解码与运行选用，同时核对 Go 父用例的子用例。
         try:
             check = profile['checks'][key]
-            require(check['format'] != 'command', '回归检查提供逐项用例报告')
+            paths = regression_runs(root, group)
+            validation.verify_runs(root, profile, task, paths, checks=[key])
+        except (Invalid, OSError, ValueError, TypeError, KeyError):
+            checks[selection] = 'check-not-passed'
+            return checks[selection]
+        # 用例核对复用原始报告解码，包含 Go 父用例的子用例。
+        try:
             selected_profile = {**profile, 'checks': {**profile['checks'], key: {
                 **check, 'required_cases': list(dict.fromkeys(check['required_cases'] + regression['cases']))}}}
-            validation.verify_runs(root, selected_profile, task, regression_runs(root, group), checks=[key])
-            checks[selection] = True
+            validation.verify_runs(root, selected_profile, task, paths, checks=[key])
+            checks[selection] = None
         except (Invalid, OSError, ValueError, TypeError, KeyError):
-            checks[selection] = False
+            checks[selection] = 'cases-not-passed'
     return checks[selection]
 
 
@@ -125,7 +133,7 @@ def current_state(root, profile, group, inputs=None):
                 state, reason = 'failed', 'failed'
             elif row['status'] in ('blocked', 'skip'):
                 state, reason = 'blocked', None
-            elif record['product_digest'] == product or regression_passed(root, profile, task, group, entry, checks):
+            elif record['product_digest'] == product or regression_reason(root, profile, task, group, entry, checks) is None:
                 state, reason = 'passed', None
             else:
                 reason = 'source-changed'

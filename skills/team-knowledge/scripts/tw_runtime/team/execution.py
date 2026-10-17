@@ -42,7 +42,9 @@ def execute(argv, cwd, timeout):
             out, err = p.communicate()
             state = 'timeout'
         return {'state': state, 'exit_code': p.returncode, 'seconds': round(time.monotonic()-start, 3),
-                'stdout': redact(out.decode(errors='replace')), 'stderr': redact(err.decode(errors='replace'))}
+                'stdout': redact(out.decode(errors='replace')), 'stderr': redact(err.decode(errors='replace')),
+                'raw': {key: redact(value.decode(errors='surrogateescape')).encode(errors='surrogateescape')
+                        for key, value in (('stdout', out), ('stderr', err))}}
     except OSError as exc:
         return {'state': 'unavailable', 'exit_code': None, 'seconds': round(time.monotonic()-start, 3),
                 'stdout': '', 'stderr': redact(str(exc))}
@@ -54,6 +56,22 @@ def execute(argv, cwd, timeout):
                 p.kill()
             p.communicate()
         raise
+
+
+def output_excerpt(root, artifacts, tail_lines=12):
+    """显示原文件的双通道末尾；空输出说明只属于显示层。"""
+    from common import artifact_valid
+    contents = {}
+    for channel in ('stdout', 'stderr'):
+        refs = [ref for ref in artifacts if ref['path'].endswith('/' + channel + '.txt')]
+        contents[channel] = artifact_valid(root, refs[0]).read_text(errors='replace') if refs else ''
+    if not any(contents.values()):
+        return ['（无输出）']
+    lines = []
+    for channel, content in contents.items():
+        lines += [channel + ('：' if content else '：（空输出）')]
+        lines += content.splitlines()[-tail_lines:]
+    return lines
 
 
 def go_cases(output):
