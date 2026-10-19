@@ -7,6 +7,7 @@
 | `team-workflow` | 团队任务入口：评估、分节方案、评审、实施与交接、业务验收、知识更新和最终交付 |
 | `team-knowledge` | 项目知识入口，也承载唯一的 Python 运行时 `tw`：开工前读取 `.tw/` 中的现行约束、决策和踩过的坑，完成后在同一改动中更新 |
 | `matt-*` | 15 个 MATT 方法：规格、拆分、实现、诊断、测试先行、设计、领域建模、审查、PR 等 |
+| `playwright-acceptance` | 浏览器场景验收：用 Playwright 接管已打开的 Chrome，按场景文件的明确步骤执行，结果转成 `tw team scenarios submit` 的契约（试点中，见[技能说明](skills/playwright-acceptance/SKILL.md)） |
 
 用 `team-workflow` 开始新任务时，默认进入团队流程。简单任务可以先实施，再由具体评审人一并批准方案和代码；中等、复杂任务要先批准方案再实施。直接调用 MATT 方法保持轻量，只需要 `.tw/` 知识。
 
