@@ -1,6 +1,6 @@
 # 工作入口
 
-本仓维护集中分发的团队入口 `team-workflow`、知识入口 `team-knowledge`（唯一的 Python 运行时）、直接复用的 MATT 方法和验证工具。
+本仓维护集中分发的团队入口 `team-workflow`、知识入口 `team-knowledge`（唯一的 Python 运行时）、直接复用的 MATT 方法、试点中的浏览器场景验收技能 `playwright-acceptance` 和验证工具。
 架构和边界见 [README](README.md) 与[设计说明](docs/design.md)；本次合并重构见[方案](docs/proposals/2026-10-14-unified-redesign.md)。
 
 - 本仓自己的知识在 `.tw/`，开工前用 `tw brief` 读取，完成后在同一改动中更新。这里不包含消费项目的知识、凭证和运行日志。
