@@ -3,7 +3,8 @@
 # 版本 1（2026-10-19）：Claude 依据上述原文编写，经 AdolphKevin 授权由 Claude 代批。
 # 版本 2（2026-10-19）：随方案修订 2 修改 SOP-03-P01 的步骤与预期（场景指南只放指引，采用方式在接入指南），同日代批。
 # 版本 3（2026-10-19）：依第 1 轮验收改写 SOP-01-P01 的结果表述、SOP-02 改用 /playwright-acceptance 显式调用并只核对实际执行的命令，新增 SOP-01-N04、SOP-02-P02，修正 SOP-03-N01 的措辞，同日代批。
-# 演示项目中的场景按技能的场景写法要求写明具体步骤与可观察的预期；技能场景的新会话以 claude -p 加 --setting-sources project,local 与 --strict-mcp-config 启动，候选技能放在临时项目的 .claude/skills/。
+# 版本 4（2026-10-19）：依第 2 轮验收改写 SOP-02-P02 的原话（写明执行者、实现者与占位截图）与初始状态（全新的 sop-verify 状态目录），写清 SOP-02-P01 的禁止项，写回各场景的 regression，同日代批。
+# 演示项目中的场景按技能的场景写法要求写明具体步骤与可观察的预期；SOP-01-P02 中的"改动前"指提交 0233958 中的 to_scenarios.py；技能场景的新会话以 claude -p 加 --setting-sources project,local 与 --strict-mcp-config 启动，候选技能放在临时项目的 .claude/skills/。
 #
 # 下文"候选技能"指本仓工作区中的 skills/playwright-acceptance；"演示报告"指一份 Playwright JSON reporter 输出，含四个测试：
 # "N1-P01 …" 通过且附截图，"N1-N01 …" 断言失败且附截图，"N2-P01 …" 抛出"受阻：测试店铺未登录"，"N2-N01 …" 调用 test.skip(true, '本轮不覆盖退款')。
@@ -12,14 +13,14 @@
 metadata:
   requirement: "playwright-acceptance 在没有 tw 的项目中读取待执行清单与写受阻原因；场景指南与接入指南的采用方式；SOP 验证独立化的决策记录"
   batch: "tw-sop-1"
-  version: 3
+  version: 4
   owner: "AdolphKevin"
   sources:
     - ref: "sop-board 仓库 docs/proposals/2026-10-19-standalone-sop-verification.md 的 D9、D12 与第 7 节 E-T1"
       version: "v8（2026-10-19）"
       confirmed_by: "AdolphKevin"
     - ref: "docs/proposals/2026-10-19-tw-sop-1-design.md 的 I1、I2、D1 节"
-      version: "修订 3"
+      version: "修订 4"
       confirmed_by: "AdolphKevin"
   tags: ["playwright-acceptance", "sop-verify", "采用说明"]
 
@@ -35,6 +36,7 @@ sops:
     scenarios:
 
       - id: SOP-01-P01
+        regression: {"manual": "登记要用 praxis-skills 的 sop-verify，本仓测试不依赖另一个仓库", "owner": "AdolphKevin", "trigger": "to_scenarios.py 或结果契约变化时"}
         polarity: positive
         title: sop-verify 的清单与原因文字转换出可登记的结果
         actor: 执行浏览器场景的代理
@@ -48,6 +50,7 @@ sops:
         evidence_hints: ["三条命令原文与完整输出", "results.jsonl", "演示项目的 git status"]
 
       - id: SOP-01-P02
+        regression: {"check": "unit", "cases": ["test_playwright_to_scenarios.ConvertTests::test_statuses_actual_and_evidence", "test_playwright_to_scenarios.ConvertTests::test_pending_cross_check"]}
         polarity: positive
         title: tw 的清单与问题编号照旧可用
         actor: 执行浏览器场景的代理
@@ -120,6 +123,7 @@ sops:
         evidence_hints: ["命令原文与完整输出"]
 
       - id: SOP-01-N04
+        regression: {"check": "unit", "cases": ["test_playwright_to_scenarios.StandaloneTests::test_failed_conversion_leaves_result_directory_unchanged"]}
         polarity: negative
         negative_type: invalid-input
         title: 转换失败时结果目录保持原样
@@ -143,6 +147,7 @@ sops:
     scenarios:
 
       - id: SOP-02-P01
+        regression: {"manual": "由只装候选技能的新会话按场景原话执行并复核会话记录", "owner": "AdolphKevin", "trigger": "技能文本或 to_scenarios.py 变化时"}
         polarity: positive
         title: 没有 tw 的项目按 sop-verify 取清单，浏览器不可用时停止
         actor: 执行浏览器场景的代理
@@ -152,23 +157,25 @@ sops:
         initial_state: ["演示项目已运行 sop-verify 的 check", "新会话只装候选技能与 sop-verify", "本机没有开启远程调试的 Chrome"]
         steps: ["在演示项目中对新会话说：/playwright-acceptance 对 docs/sop/demo.yaml 的待执行场景做浏览器验收"]
         expected: ["会话运行 sop-verify 的 pending --format json 取得待执行清单", "会话发现 Chrome 远程调试不可用后停止执行，向用户说明需要打开测试专用 Chrome 并开启远程调试"]
-        forbidden_effects: ["会话编造执行结果或写出 results.jsonl", "会话调用 tw 命令", "演示项目中出现新文件"]
+        forbidden_effects: ["会话编造执行结果或写出 results.jsonl", "会话运行 tw 的子命令（只检查命令是否存在不算）", "演示项目中出现新文件"]
         evidence_hints: ["会话记录", "命令记录", "演示项目的 git status"]
 
       - id: SOP-02-P02
+        regression: {"manual": "由只装候选技能的新会话按场景原话执行并复核会话记录", "owner": "AdolphKevin", "trigger": "技能文本或 to_scenarios.py 变化时"}
         polarity: positive
         title: 没有 tw 的项目把已有报告转换并用 sop-verify 登记
         actor: 执行浏览器场景的代理
         priority: P0
         refs: ["I1", "I2"]
         verify: skill
-        initial_state: ["演示项目已运行 sop-verify 的 check", "演示报告及其截图在演示项目之外的目录中", "新会话只装候选技能与 sop-verify"]
-        steps: ["在演示项目中对新会话说：/playwright-acceptance 已有执行报告 <仓库外目录>/report.json，把结果转换后登记到 docs/sop/demo.yaml"]
+        initial_state: ["演示项目已运行 sop-verify 的 check", "sop-verify 的状态目录为全新的空目录", "演示报告及其截图在演示项目之外的目录中", "新会话只装候选技能与 sop-verify"]
+        steps: ["在演示项目中对新会话说：/playwright-acceptance 已有执行报告 <仓库外目录>/report.json，测试由 执行会话-9 执行，被测代码的实现者为 开发者甲；报告里的截图是演示用的占位图，按报告原样转换后登记到 docs/sop/demo.yaml"]
         expected: ["会话运行 to_scenarios.py，参数含 --finding-from-reason，结果目录在演示项目之外", "会话运行 sop-verify 的 submit 登记结果", "sop-verify 登记第 1 轮成功：pass 1、fail 1、blocked 1、skip 1"]
         forbidden_effects: ["会话调用 tw 命令", "演示项目中出现新文件"]
         evidence_hints: ["会话记录", "命令记录", "sop-verify report 输出", "演示项目的 git status"]
 
       - id: SOP-02-N01
+        regression: {"manual": "由只装候选技能的新会话按场景原话执行并复核会话记录", "owner": "AdolphKevin", "trigger": "技能文本或 to_scenarios.py 变化时"}
         polarity: negative
         negative_type: other
         title: 接入 tw 的项目仍按 tw 取清单
@@ -192,6 +199,7 @@ sops:
     scenarios:
 
       - id: SOP-03-P01
+        regression: {"check": "unit", "cases": ["test_standalone_sop_docs.StandaloneSopDocs::test_scenario_guide_points_to_onboarding_and_onboarding_lists_adoption"]}
         polarity: positive
         title: 两份指南写明采用方式并通过发布检查
         actor: 成员
@@ -205,6 +213,7 @@ sops:
         evidence_hints: ["新增原文与位置", "发布检查输出"]
 
       - id: SOP-03-P02
+        regression: {"check": "unit", "cases": ["test_standalone_sop_docs.StandaloneSopDocs::test_decision_records_ownership_and_handshake"]}
         polarity: positive
         title: 决策记录写明归属与握手规则
         actor: 成员
@@ -218,6 +227,7 @@ sops:
         evidence_hints: ["记录原文", "tw check 输出"]
 
       - id: SOP-03-N01
+        regression: {"check": "unit", "cases": ["test_standalone_sop_docs.StandaloneSopDocs::test_install_steps_keep_praxis_and_board_optional"]}
         polarity: negative
         negative_type: other
         title: 安装说明不要求安装 praxis 或 sop-board
