@@ -252,6 +252,23 @@ class StandaloneTests(unittest.TestCase):
             self.assertIn('--finding SOP-02-P02=', result.stderr)
             self.assertFalse((out / 'results.jsonl').exists())
 
+    def test_failed_conversion_leaves_result_directory_unchanged(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            fresh = Path(tmp) / 'fresh' / 'r'
+            fresh.parent.mkdir()
+            result = self.run_cli(fresh)
+            self.assertEqual(result.returncode, 2)
+            self.assertFalse(fresh.exists())
+            self.assertEqual(sorted(p.name for p in fresh.parent.iterdir()), ['report.json'])
+            existing = Path(tmp) / 'existing' / 'r'
+            existing.mkdir(parents=True)
+            (existing / 'results.jsonl').write_text('earlier\n', encoding='utf-8')
+            result = self.run_cli(existing)
+            self.assertEqual(result.returncode, 2)
+            self.assertEqual(sorted(p.name for p in existing.iterdir()), ['results.jsonl'])
+            self.assertEqual((existing / 'results.jsonl').read_text(encoding='utf-8'), 'earlier\n')
+            self.assertEqual(sorted(p.name for p in existing.parent.iterdir()), ['r', 'report.json'])
+
     def test_skip_finding_uses_skip_annotation_description(self):
         report = load_report()
         test = report['suites'][0]['specs'][3]['tests'][0]

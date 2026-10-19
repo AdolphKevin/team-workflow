@@ -24,6 +24,7 @@ import json
 import re
 import shutil
 import sys
+import tempfile
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -321,24 +322,29 @@ def main(argv=None):
     parser.add_argument('--session', help='可选的会话标识，写入 session 字段')
     parser.add_argument('--skip-large', action='store_true', help='跳过超过 64 MiB 的证据文件而不是报错')
     args = parser.parse_args(argv)
+    out = Path(args.out)
+    # 先在临时目录生成结果与证据，成功后再整体复制到 --out；失败时 --out 保持原样。
+    staging = Path(tempfile.mkdtemp(prefix='to-scenarios-'))
     try:
         report_path = Path(args.report)
         report = json.loads(report_path.read_text(encoding='utf-8'))
         findings = parse_findings(args.finding)
         pending_ids = load_pending(args.pending) if args.pending else None
-        rows, warnings = convert(report, args.out, args.executor, findings, session=args.session,
+        rows, warnings = convert(report, staging, args.executor, findings, session=args.session,
                                  pending_ids=pending_ids, skip_large=args.skip_large, report_dir=report_path.parent,
                                  finding_from_reason=args.finding_from_reason)
+        (staging / 'results.jsonl').write_text(''.join(json.dumps(row, ensure_ascii=False) + '\n' for row in rows),
+                                               encoding='utf-8')
+        shutil.copytree(staging, out, dirs_exist_ok=True)
     except (OSError, ValueError) as exc:
         print('读取输入失败：%s' % exc, file=sys.stderr)
         return 2
     except ConvertError as exc:
         print('转换失败：\n%s' % exc, file=sys.stderr)
         return 2
-    out = Path(args.out)
-    out.mkdir(parents=True, exist_ok=True)
+    finally:
+        shutil.rmtree(staging, ignore_errors=True)
     target = out / 'results.jsonl'
-    target.write_text(''.join(json.dumps(row, ensure_ascii=False) + '\n' for row in rows), encoding='utf-8')
     for warning in warnings:
         print('提示：' + warning, file=sys.stderr)
     counts = {}

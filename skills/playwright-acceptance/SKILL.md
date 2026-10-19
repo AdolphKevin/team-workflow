@@ -1,6 +1,6 @@
 ---
 name: playwright-acceptance
-description: 用 Playwright 连接用户已打开的 Chrome，按场景文件中的明确步骤执行 Web 场景验收（含 Shopify 内嵌应用），录屏、截图与 trace 进入 Playwright HTML report，结果可转成 team-workflow 的 tw scenarios submit 契约并沉淀为回归检查。适用于：按 SOP 场景做浏览器黑盒验收、把已通过的场景固化成 Playwright 回归、在 report 中按上游用例编号查看结果。
+description: 用 Playwright 连接用户已打开的 Chrome，按场景文件中的明确步骤执行 Web 场景验收（含 Shopify 内嵌应用），录屏、截图与 trace 进入 Playwright HTML report，结果可转成 team-workflow 的 tw scenarios submit 契约或 sop-verify 的结果文件，并沉淀为回归检查。适用于：按 SOP 场景做浏览器黑盒验收、把已通过的场景固化成 Playwright 回归、在 report 中按上游用例编号查看结果。
 disable-model-invocation: true
 ---
 
@@ -35,7 +35,7 @@ python3 scripts/case_tags.py --pairs <配对.json> --out <仓库外目录>/cases
 # 执行（环境变量见 templates/fixtures.mjs 顶部注释）
 PW_TAB='/apps/<应用>/' PW_CASES=<目录>/cases.json PW_OUT=<仓库外目录> npx playwright test
 
-# 接入 tw 的项目：取清单、转换、登记；受阻与跳过给出问题编号
+# 接入 tw 的项目：tw 指 python3 <team-knowledge 技能目录>/scripts/tw.py；取清单、转换、登记，受阻与跳过给出问题编号
 tw team scenarios pending --task <身份> --format json > <目录>/pending.json
 python3 scripts/to_scenarios.py --report <目录>/report.json --out <目录>/round-1 \
   --executor "<执行者>" --finding SOP-02-P01=Q3 [--pending <目录>/pending.json] [--session <轮次>]
