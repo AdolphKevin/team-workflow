@@ -1,6 +1,6 @@
 # Shopify 参考
 
-Shopify 项目与普通前端的流程相同，差别都在入口层。一个项目常有多个入口（后台内嵌应用、店面主题扩展、结账扩展、合作伙伴后台），各自在 `.tw/config.json` 的 `acceptance_entries` 里声明，场景用 `verify` 引用。
+Shopify 项目与普通前端的流程相同，差别都在入口层。一个项目常有多个入口（后台内嵌应用、店面主题扩展、结账扩展、合作伙伴后台），在 tw 的 `acceptance_entries` 或 sop-verify 的 `docs/sop/entries.yaml` 中声明，场景用 `verify` 引用。
 
 ## 后台内嵌应用
 

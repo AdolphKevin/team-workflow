@@ -2,6 +2,8 @@
 
 从 `team-workflow` 开始新任务时使用团队流程。独立 MATT 方法的接入要求见[方法与知识约定](matt-integration.md)。先读取项目约定、真实测试入口和所用环境。下文 `tw` 指 `python3 <team-knowledge 技能目录>/scripts/tw.py`。
 
+不接入团队流程的项目可选 praxis-skills 的 `sop-verify` 按同一场景格式验证，轮次与协作在 sop-board。后续接入 tw 时，入口声明可复制进 `acceptance_entries`，看板导出的结果 JSONL 可用 `tw team scenarios submit` 登记，格式见[场景指南](scenarios.md)。
+
 ## 首次接入
 
 1. 项目还有 `.codestable/` 或 `.team-workflow*` 时，先按 team-knowledge 的迁移指南迁移；全新项目运行 `tw init`（预览）和 `tw init --apply`，再填写 `overview.md`。

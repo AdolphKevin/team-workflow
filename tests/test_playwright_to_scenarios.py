@@ -1,5 +1,6 @@
 import io
 import json
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -173,6 +174,133 @@ class ConvertTests(unittest.TestCase):
             to_scenarios.parse_findings(['SOP-02-P02'])
         with self.assertRaises(to_scenarios.ConvertError):
             to_scenarios.parse_findings(['=Q3'])
+
+
+class StandaloneTests(unittest.TestCase):
+    """TW-SOP-1 I1 / SOP-01：经命令入口核对文件与退出码。"""
+
+    def run_cli(self, out, extra=(), pending=None, report=None):
+        report = load_report() if report is None else report
+        for spec in report['suites'][0]['specs']:
+            for test in spec['tests']:
+                for result in test['results']:
+                    for attachment in result.get('attachments', []):
+                        if attachment.get('path'):
+                            attachment['path'] = str(FIXTURES / attachment['path'])
+        report_path = out.parent / 'report.json'
+        report_path.write_text(json.dumps(report), encoding='utf-8')
+        args = [sys.executable, str(ROOT / 'skills/playwright-acceptance/scripts/to_scenarios.py'),
+                '--report', str(report_path), '--out', str(out), '--executor', 'standalone-tester', *extra]
+        if pending is not None:
+            pending_path = out.parent / 'pending.json'
+            pending_path.write_text(json.dumps(pending), encoding='utf-8')
+            args.extend(['--pending', str(pending_path)])
+        return subprocess.run(args, capture_output=True, text=True)
+
+    def test_pending_accepts_tw_sop_verify_and_top_level_arrays(self):
+        ids = ['SOP-02-P01', 'SOP-02-P02', 'SOP-02-P03', 'SOP-02-P04']
+        formats = [
+            {'pending': [{'id': sid} for sid in ids]},
+            {'ok': True, 'pending': [{'scenario': sid, 'reason': 'new'} for sid in ids],
+             'guarded': [], 'blocked': []},
+            ids,
+            [{'id': sid} for sid in ids],
+            [{'scenario': sid} for sid in ids],
+            [ids[0], {'id': ids[1]}, {'scenario': ids[2]}, ids[3]],
+        ]
+        for pending in formats:
+            with self.subTest(pending=pending), tempfile.TemporaryDirectory() as tmp:
+                out = Path(tmp) / 'r'
+                result = self.run_cli(out, FINDINGS, pending=pending)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual([row['scenario'] for row in read_rows(out)], ids)
+
+    def test_pending_without_ids_explains_all_formats_and_writes_no_results(self):
+        for pending in ({'pending': [{'name': 'x'}]}, {'pending': []}, [], {},
+                        {'pending': 'wrong'}, [None, 7, {}, '', '  ', {'id': 7}, {'scenario': []}]):
+            with self.subTest(pending=pending), tempfile.TemporaryDirectory() as tmp:
+                out = Path(tmp) / 'r'
+                result = self.run_cli(out, FINDINGS, pending=pending)
+                self.assertEqual(result.returncode, 2, result.stderr)
+                for accepted in ('tw', 'id', 'sop-verify', 'scenario', '顶层', '数组'):
+                    self.assertIn(accepted, result.stderr)
+                self.assertFalse((out / 'results.jsonl').exists())
+
+    def test_blocked_finding_uses_trimmed_first_error_line(self):
+        report = load_report()
+        result = report['suites'][0]['specs'][1]['tests'][0]['results'][0]
+        result['error']['message'] = 'Error: \x1b[31m受阻：  测试店铺未登录  \n    at test (demo.mjs:1)\x1b[39m'
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp) / 'r'
+            result = self.run_cli(out, ['--finding-from-reason', '--finding', 'SOP-02-P04=Q4'], report=report)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            rows = {row['scenario']: row for row in read_rows(out)}
+            self.assertEqual(rows['SOP-02-P02']['finding'], '测试店铺未登录')
+            self.assertEqual(rows['SOP-02-P02']['status'], 'blocked')
+            self.assertEqual(rows['SOP-02-P04']['finding'], 'Q4')
+
+    def test_blocked_without_reason_text_requests_reason_or_explicit_finding(self):
+        report = load_report()
+        result = report['suites'][0]['specs'][1]['tests'][0]['results'][0]
+        result['error']['message'] = 'Error: 受阻：  \n    at test (demo.mjs:1)'
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp) / 'r'
+            result = self.run_cli(out, ['--finding-from-reason', '--finding', 'SOP-02-P04=Q4'], report=report)
+            self.assertEqual(result.returncode, 2)
+            self.assertIn('SOP-02-P02', result.stderr)
+            self.assertIn('受阻：', result.stderr)
+            self.assertIn('--finding SOP-02-P02=', result.stderr)
+            self.assertFalse((out / 'results.jsonl').exists())
+
+    def test_skip_finding_uses_skip_annotation_description(self):
+        report = load_report()
+        test = report['suites'][0]['specs'][3]['tests'][0]
+        test['annotations'] = [{'type': 'issue', 'description': '其他注解'},
+                               {'type': 'skip', 'description': '本轮不覆盖退款'}]
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp) / 'r'
+            result = self.run_cli(out, ['--finding-from-reason'], report=report)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            rows = {row['scenario']: row for row in read_rows(out)}
+            self.assertEqual(rows['SOP-02-P04']['finding'], '本轮不覆盖退款')
+            self.assertEqual(rows['SOP-02-P04']['status'], 'skip')
+            self.assertNotIn('finding', rows['SOP-02-P01'])
+            self.assertNotIn('finding', rows['SOP-02-P03'])
+
+    def test_skip_without_description_requests_reason_or_explicit_finding(self):
+        for annotations in ([], [{'type': 'skip'}], [{'type': 'skip', 'description': '  '}],
+                            [{'type': 'issue', 'description': '与跳过无关'}]):
+            with self.subTest(annotations=annotations), tempfile.TemporaryDirectory() as tmp:
+                report = load_report()
+                report['suites'][0]['specs'][3]['tests'][0]['annotations'] = annotations
+                out = Path(tmp) / 'r'
+                result = self.run_cli(out, ['--finding-from-reason'], report=report)
+                self.assertEqual(result.returncode, 2, result.stderr)
+                for hint in ('SOP-02-P04', 'test.skip', '原因', '--finding'):
+                    self.assertIn(hint, result.stderr)
+                self.assertFalse((out / 'results.jsonl').exists())
+
+    def test_explicit_findings_override_reasons_and_missing_skip_description(self):
+        for annotations in ([{'type': 'skip', 'description': '本轮不覆盖退款'}], []):
+            with self.subTest(annotations=annotations), tempfile.TemporaryDirectory() as tmp:
+                report = load_report()
+                report['suites'][0]['specs'][3]['tests'][0]['annotations'] = annotations
+                out = Path(tmp) / 'r'
+                result = self.run_cli(out, ['--finding-from-reason', *FINDINGS], report=report)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                rows = {row['scenario']: row for row in read_rows(out)}
+                self.assertEqual(rows['SOP-02-P02']['finding'], 'Q3')
+                self.assertEqual(rows['SOP-02-P04']['finding'], 'Q4')
+
+    def test_without_option_keeps_exact_finding_errors(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp) / 'r'
+            result = self.run_cli(out)
+            self.assertEqual(result.returncode, 2)
+            self.assertEqual(result.stderr, '转换失败：\n'
+                             'SOP-02-P02 为 blocked，请用 --finding SOP-02-P02=<问题编号> 指定问题\n'
+                             'SOP-02-P04 为 skip，请用 --finding SOP-02-P04=<问题编号> 指定问题\n')
+            self.assertFalse((out / 'results.jsonl').exists())
 
 
 def to_scenarios_keys():

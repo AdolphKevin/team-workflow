@@ -47,6 +47,6 @@
 - `initial_state` 无法确定该步会走哪个分支？
 - 某条 `expected` 不能在页面或声明的观察点上看到？
 - 场景会对真实客户、真实店铺或外部系统产生影响，而 `forbidden_effects` 没有覆盖？
-- 场景引用的 `verify` 入口在 `.tw/config.json` 里没有声明？
+- 场景引用的 `verify` 入口未在项目入口声明中定义（tw 的 `acceptance_entries` 或 sop-verify 的 `docs/sop/entries.yaml`）？
 
 代理推断出来的预期不能直接写进脚本：先记入方案问题清单，确认后由场景作者补进场景并写明 `confirmed_by`。

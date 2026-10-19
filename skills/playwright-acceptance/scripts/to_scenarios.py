@@ -3,14 +3,16 @@
 
 用法：
   to_scenarios.py --report <PW_OUT>/report.json --out <目录> --executor "<执行者>"
-                  [--finding SOP-02-P01=Q3 ...] [--pending pending.json] [--session <会话>] [--skip-large]
+                  [--finding SOP-02-P01=Q3 ...] [--finding-from-reason] [--pending pending.json]
+                  [--session <会话>] [--skip-large]
 
 约定：
 - 场景编号 = 测试标题的第一个空白分隔词，例如 "SOP-02-P01 人工接管…" → SOP-02-P01。无编号的测试跳过并提示。
 - passed → pass；skipped → skip；failed / timedOut / interrupted → fail，
   但错误信息以“受阻：”开头时 → blocked。每个测试取最后一次结果（不建议 retries）。
 - 同一场景有多条测试时合并，状态取最差：fail > blocked > skip > pass。
-- blocked 与 skip 必须用 --finding 指定问题编号（tw 契约要求）；pass 与 fail 至少要有一份证据。
+- blocked 与 skip 用 --finding 指定问题编号（tw 契约要求）；独立 SOP 验证可加 --finding-from-reason 提取原因。
+  --finding 的值优先；pass 与 fail 至少要有一份证据。
 - 证据复制到 <out>/evidence/<场景编号>/，结果文件里用相对路径引用；单个文件超过 64 MiB 会被 tw 拒绝，
   默认报错，--skip-large 则跳过该文件并提示。
 - executed_at = 该测试的 startTime + duration，带 +00:00 时区，秒精度。
@@ -210,7 +212,8 @@ def collect(report):
     return grouped, unnamed
 
 
-def convert(report, out, executor, findings, session=None, pending_ids=None, skip_large=False, report_dir=None):
+def convert(report, out, executor, findings, session=None, pending_ids=None, skip_large=False, report_dir=None,
+            finding_from_reason=False):
     out = Path(out)
     report_dir = Path(report_dir) if report_dir else Path.cwd()
     grouped, unnamed = collect(report)
@@ -248,6 +251,19 @@ def convert(report, out, executor, findings, session=None, pending_ids=None, ski
             row['session'] = session
         if sid in findings:
             row['finding'] = findings[sid]
+        elif finding_from_reason and status == 'blocked':
+            reason = error_message(worst[3])[len(BLOCKED_PREFIX):].split('\n', 1)[0].strip()
+            if reason:
+                row['finding'] = reason
+            else:
+                problems.append('%s 为 blocked，请在“受阻：”后写明原因或用 --finding %s=<原因或问题编号> 指定' % (sid, sid))
+        elif finding_from_reason and status == 'skip':
+            reasons = [a.get('description') for a in (worst[2].get('annotations') or [])
+                       if a.get('type') == 'skip' and (a.get('description') or '').strip()]
+            if reasons:
+                row['finding'] = reasons[0]
+            else:
+                problems.append('%s 为 skip，请在 test.skip 中写明原因或用 --finding %s=<原因或问题编号> 指定' % (sid, sid))
         elif status in ('blocked', 'skip'):
             problems.append('%s 为 %s，请用 --finding %s=<问题编号> 指定问题' % (sid, status, sid))
         if status in ('pass', 'fail') and not evidence:
@@ -279,14 +295,18 @@ def parse_findings(values):
 def load_pending(path):
     data = json.loads(Path(path).read_text(encoding='utf-8'))
     items = data.get('pending') if isinstance(data, dict) else data
+    accepted = ('pending 文件应为：tw 的 pending 数组（对象带 id）、'
+                'sop-verify 的 pending 数组（对象带 scenario），'
+                '或顶层场景编号字符串或上述对象的数组')
     if not isinstance(items, list):
-        raise ConvertError('pending 文件应为 tw scenarios pending --format json 的输出')
+        raise ConvertError(accepted)
     ids = []
     for item in items:
-        if isinstance(item, dict) and item.get('id'):
-            ids.append(item['id'])
-        elif isinstance(item, str):
-            ids.append(item)
+        value = item.get('id') or item.get('scenario') if isinstance(item, dict) else item
+        if isinstance(value, str) and value.strip():
+            ids.append(value.strip())
+    if not ids:
+        raise ConvertError('pending 文件取不出任何场景编号；' + accepted)
     return ids
 
 
@@ -295,8 +315,9 @@ def main(argv=None):
     parser.add_argument('--report', required=True, help='Playwright JSON reporter 输出')
     parser.add_argument('--out', required=True, help='结果目录（仓库外），写入 results.jsonl 与 evidence/')
     parser.add_argument('--executor', required=True, help='执行者，写入每条结果')
-    parser.add_argument('--finding', action='append', default=[], help='场景编号=问题编号，可重复；blocked 与 skip 必填')
-    parser.add_argument('--pending', help='tw scenarios pending --format json 的输出，用于核对编号')
+    parser.add_argument('--finding', action='append', default=[], help='场景编号=问题编号或原因，可重复；blocked 与 skip 默认必填')
+    parser.add_argument('--finding-from-reason', action='store_true', help='从受阻错误与跳过说明提取 finding；--finding 优先')
+    parser.add_argument('--pending', help='tw 或 sop-verify 的 pending JSON 输出，或顶层编号/对象数组，用于核对编号')
     parser.add_argument('--session', help='可选的会话标识，写入 session 字段')
     parser.add_argument('--skip-large', action='store_true', help='跳过超过 64 MiB 的证据文件而不是报错')
     args = parser.parse_args(argv)
@@ -306,7 +327,8 @@ def main(argv=None):
         findings = parse_findings(args.finding)
         pending_ids = load_pending(args.pending) if args.pending else None
         rows, warnings = convert(report, args.out, args.executor, findings, session=args.session,
-                                 pending_ids=pending_ids, skip_large=args.skip_large, report_dir=report_path.parent)
+                                 pending_ids=pending_ids, skip_large=args.skip_large, report_dir=report_path.parent,
+                                 finding_from_reason=args.finding_from_reason)
     except (OSError, ValueError) as exc:
         print('读取输入失败：%s' % exc, file=sys.stderr)
         return 2
