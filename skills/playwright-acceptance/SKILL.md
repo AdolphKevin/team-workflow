@@ -52,7 +52,7 @@ sop submit <场景文件> --results <目录>/round-1/results.jsonl
 npx playwright show-report <目录>/html
 ```
 
-超过 64 MiB 的证据可加 `--skip-large` 跳过。`--finding-from-reason` 从 `受阻：` 后的首行取原因，从 skip 注解取说明；跳过时用 `test.skip(true, '<原因>')` 写明。`--finding` 指定的值优先。
+`--executor` 写实际执行这些测试的人或会话；转换他人执行的报告时，执行者与实现者以使用者告知的为准，没有告知时先询问。超过 64 MiB 的证据可加 `--skip-large` 跳过。`--finding-from-reason` 从 `受阻：` 后的首行取原因，从 skip 注解取说明；跳过时用 `test.skip(true, '<原因>')` 写明。`--finding` 指定的值优先。
 
 在 report 搜索框输入 `@CASE-037` 可筛出覆盖该上游用例的全部测试，再加 `s:failed` 只看失败。tag 只表示"覆盖哪条用例"；接入 tw 时，一条用例是否通过，以 `tw` 按配对与轮次算出的结果为准。
 
