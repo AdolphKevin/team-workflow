@@ -3,7 +3,6 @@ title: "删除旧记录时，它承担的核对被一起删掉"
 scope: ["self:skills/team-knowledge/scripts/tw_runtime/team/delivery.py", "self:skills/team-knowledge/scripts/tw_runtime/team/knowledge.py"]
 source: ["self:CHANGELOG.md", "self:docs/validation.md"]
 verified: {"self": {"commit": "b0247ca6a68c818c565dbe60fe6c07e18c61ab52", "date": "2026-10-14"}}
-guards: ["self:tests/test_delivery.py#test_final_delivery_needs_this_tasks_current_acceptance_record", "self:tests/test_unified_team.py#test_listed_knowledge_must_be_changed_by_this_task"]
 tags: ["最终交付", "业务验收", "知识处置", "删除桥接", "删除断言"]
 ---
 # 删除旧记录时，它承担的核对被一起删掉

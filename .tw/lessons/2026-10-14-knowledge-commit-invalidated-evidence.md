@@ -3,7 +3,6 @@ title: "提交知识使执行证据过期，导致整轮重跑"
 scope: ["self:skills/team-knowledge/scripts/tw_runtime/team/common.py", "self:skills/team-knowledge/scripts/tw_runtime/team/validation.py"]
 source: ["https://github.com/AdolphKevin/team-workflow/commit/2b3b8d1", "https://github.com/AdolphKevin/team-workflow/commit/41b1a5a"]
 verified: {"self": {"commit": "b0247ca6a68c818c565dbe60fe6c07e18c61ab52", "date": "2026-10-14"}}
-guards: ["self:tests/test_unified_team.py#test_knowledge_only_commit_preserves_execution_review_and_final_delivery", "self:tests/test_unified_team.py#test_config_in_snapshot_and_bound_only_when_explicitly_declared"]
 tags: ["执行绑定", "证据过期", "重跑", "知识提交"]
 ---
 # 提交知识使执行证据过期，导致整轮重跑

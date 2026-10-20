@@ -1,9 +1,8 @@
 ---
 title: "派生状态重复读取源码使回归超时"
 scope: ["self:skills/team-knowledge/scripts/tw_runtime/team/**"]
-source: ["self:tests/test_command_snapshots.py", "self:tests/test_review_recheck.py"]
+source: ["self:docs/validation.md"]
 verified: {"self": {"commit": "e38d5d4630c17ffbe613839cd137cd20b6dae7be", "date": "2026-10-17"}}
-guards: ["self:tests/test_command_snapshots.py#test_command_snapshot_budgets", "self:tests/test_command_snapshots.py#test_next_command_reads_current_source", "self:tests/test_review_recheck.py#test_every_confirmation_allows_submission_and_accept_with_new_run"]
 tags: ["源码快照", "产品指纹", "命令", "性能退化", "超时"]
 ---
 # 派生状态重复读取源码使回归超时

@@ -46,7 +46,7 @@ def check_cases(root, profile, task, design, group, *, workspace=None):
     else:
         from designs import task_assessments
         require(not any(row['complexity'] == 'complex' for row in task_assessments(design, task['section_ids']).values()),
-                '复杂任务需要测试同事的用例集，用 tw team scenarios import-cases 导入', error_code=Code.TESTER_CASES)
+                '复杂任务需要主流程用例集（测试同事提供，或由未参与实现的测试代理编写），用 tw team scenarios import-cases 导入', error_code=Code.TESTER_CASES)
 
 
 def check(root, profile, task, design, review, group, value, *, workspace=None):
@@ -62,7 +62,8 @@ def check(root, profile, task, design, review, group, value, *, workspace=None):
         if result:
             independent(design, result['executor'], '场景执行者')
         if row['state'] in ('pending', 'failed'):
-            incomplete.append(row['id'] + '：' + row['state'])
+            incomplete.append(row['id'] + '：' + row['state']
+                              + ('（待判定：重跑或用 scenarios carry 沿用）' if row['reason'] == 'undetermined' else ''))
         elif row['state'] == 'blocked':
             finding = findings.get(result['finding'], {})
             if finding.get('state') not in ('accepted', 'deferred'):
@@ -71,26 +72,6 @@ def check(root, profile, task, design, review, group, value, *, workspace=None):
         error = Invalid('场景验收尚待完成：' + '；'.join(incomplete), error_code=Code.SCENARIO_ACCEPTANCE)
         error.scenario_states = states
         raise error
-
-
-def regression(root, profile, task, group, value, findings, *, workspace=None):
-    from validation import Workspace
-    workspace = workspace or Workspace(root, profile)
-    deferred = {row['id'] for row in findings if row['state'] == 'deferred'}
-    status, checks = {'automated': [], 'manual-only': [], 'pending': []}, {}
-    for row in value['scenarios']:
-        declared = row.get('regression', {})
-        category = 'pending'
-        reason = scenario_rounds.regression_reason(root, profile, task, group, row, checks, workspace=workspace)
-        if 'pending' in declared:
-            require(declared['pending'] in deferred, '场景 ' + row['id'] + ' 的 regression.pending 引用评审中 deferred 的问题：'
-                    + declared['pending'], section='问题清单')
-        elif 'manual' in declared:
-            category = 'manual-only'
-        elif reason is None:
-            category = 'automated'
-        status[category].append({'id': row['id'], **declared, **({'reason': reason} if category == 'pending' else {})})
-    return status
 
 
 def unverified_scope(value, findings):

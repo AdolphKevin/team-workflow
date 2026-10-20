@@ -106,7 +106,7 @@ def review_template(root, profile, task, report, *, workspace=None):
 def review_policy(root, profile, task):
     required = task_valid(task, profile, root)
     return {'checks': {key: digest(profile['checks'][key]) for key in required},
-            'risk_checks': {risk: sorted(profile['risk_checks'][risk]) for risk in sorted(task['risks'])}}
+            'risk_checks': {risk: sorted(profile['risk_checks'].get(risk, [])) for risk in sorted(task['risks'])}}
 
 
 def check_review_format(root, profile, task, review, selected, design, *, workspace=None):
@@ -165,11 +165,17 @@ def review_failures(review, required):
 class ReviewBlocked(Invalid):
     error_code = Code.REVIEW_NOT_PASSED
 
-    def __init__(self, task, failures):
+    def __init__(self, task, failures, root=None):
         import shlex
         self.review_failures = failures
-        self.next_action = ('修复所列问题后重跑检查：tw team run --task ' + shlex.quote(task['id'])
-                            + '；再逐项复核：tw team review --task ' + shlex.quote(task['id']))
+        identity = shlex.quote(task['id'])
+        if root is not None and all(row['kind'] == 'issue' for row in failures):
+            # 只有问题待处置时，评审人在问题小节填写处置后重新提交即可。
+            import reviews
+            self.next_action = reviews.submission_action(root, task['id'], disposition=True)
+        else:
+            self.next_action = ('修复所列问题后重跑检查：tw team run --task ' + identity
+                                + '；再逐项复核：tw team review --task ' + identity)
         names = {'standards': '规范 standards', 'spec': '需求 spec', 'acceptance': '验收', 'issue': '问题', 'knowledge': '知识'}
         super().__init__('评审未通过：' + '；'.join(names[row['kind']] + ' ' + row['id'] + '：' + row['reason'] for row in failures))
 
@@ -193,17 +199,17 @@ def review_case_failures(review, execution):
     return failures
 
 
-def require_review_passed(task, review, required):
+def require_review_passed(task, review, required, root=None):
     failures = review_failures(review, required)
     if failures:
-        raise ReviewBlocked(task, failures)
+        raise ReviewBlocked(task, failures, root)
 
 
 def check_review(root, profile, task, review, selected, design, status, execution, run_paths, *, workspace=None):
     check_review_format(root, profile, task, review, selected, design, workspace=workspace)
     from contracts import independent
     independent(design, review['reviewer'], 'Reviewer')
-    require_review_passed(task, review, status['required_sections'])
+    require_review_passed(task, review, status['required_sections'], root)
     for row in review['acceptance']:
         check_observations(root, profile, design, row, execution, run_paths)
         refs = [item for item in row.get('observations', []) if item.get('kind') == 'scenarios']
@@ -221,7 +227,6 @@ def verify(root, profile, task, report, phase='delivery', _seen=None, live=None,
     require(phase in ('acceptance', 'delivery'), 'Unknown verification phase')
     live = phase == 'acceptance' if live is None else live
     tool = tool_gate()
-    require('automation' not in report, '回归状态写在场景文件各场景的 regression', error_code=Code.REPORT_INCOMPLETE)
     obj(report, {'data_version', 'task_id', 'design', 'approvals', 'brief', 'runs', 'review'},
         {'acceptance', 'knowledge', 'design_history', 'close_authorization', 'dependencies'},
         error_code=Code.REPORT_INCOMPLETE)
@@ -288,7 +293,7 @@ def verify(root, profile, task, report, phase='delivery', _seen=None, live=None,
         incomplete.next_action = '重跑检查并复核当前材料：tw team run ' + selected_task + '；tw team review ' + selected_task
         raise incomplete from exc
     else:
-        require_review_passed(task, review, status['required_sections'])
+        require_review_passed(task, review, status['required_sections'], root)
         from contracts import independent
         independent(design, review['reviewer'], 'Reviewer')
     require(status.get('local_review_valid') is True, 'Design coverage/history needs review: ' + design_problem(status),
@@ -321,7 +326,6 @@ def verify(root, profile, task, report, phase='delivery', _seen=None, live=None,
         repair = reviews.case_repair(root, task['id'], artifact(root, inside(root, report['review'])))
         exc.next_action, exc.review_file = repair['next_action'], repair['review_file']
         raise
-    regression = scenario_acceptance.regression(root, profile, task, scenario_group, scenario_state, review['findings'], workspace=workspace)
     from execution import output_excerpt
     materials = [artifact(root, inside(root, report[p])) for p in ('design', 'brief', 'review')]
     materials += [artifact(root, inside(root, p)) for p in report['approvals'] + report['runs'] + report.get('design_history', [])]
@@ -343,7 +347,7 @@ def verify(root, profile, task, report, phase='delivery', _seen=None, live=None,
               'named_cases': named_cases, 'unspecified_cases': [key for key, cases in named_cases.items() if not cases],
               'business_accepted': True, 'delivery_complete': False, 'closable': False,
               'unverified_scope': scenario_acceptance.unverified_scope(scenario_state, review['findings']),
-              'reused_execution': reused, 'automation_status': regression, 'tool': tool,
+              'reused_execution': reused, 'tool': tool,
               'superseded_execution': execution['superseded'],
               're_evaluated': [{'check': key, **row['evaluation']} for key, row in sorted(execution['results'].items())
                                if row.get('evaluation')],
@@ -351,10 +355,8 @@ def verify(root, profile, task, report, phase='delivery', _seen=None, live=None,
                               for key, row in sorted(execution['results'].items())},
               'environment_checked': 'now' if live else 'recorded at acceptance',
               'output_excerpts': {key: output_excerpt(root, row['artifacts']) for key, row in execution['results'].items()},
-              'regression_pending': bool(regression['pending']),
-              'assurance': 'content-bound records and explicit reviews; delivery_complete covers acceptance, knowledge '
-                           'and handoff records, not regression automation (see automation_status); '
-                           'not signed or exhaustive business proof'}
+              'assurance': 'content-bound records and explicit reviews; delivery_complete covers scenario acceptance '
+                           'on the current product, knowledge and handoff records; not signed or exhaustive business proof'}
     if phase == 'delivery':
         publication_verified = platform_state is None
         authorization = report.get('close_authorization')

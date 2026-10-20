@@ -1,9 +1,8 @@
 ---
 title: "完成阶段先读交付事实，再决定是否载入方案"
-scope: ["self:skills/team-knowledge/scripts/tw_runtime/team/**", "self:tests/test_task_phases.py", "self:tests/test_platform_review.py"]
+scope: ["self:skills/team-knowledge/scripts/tw_runtime/team/**"]
 source: ["self:docs/proposals/2026-10-16-scenario-acceptance-and-positive-text.md", "self:skills/team-workflow/references/contracts.md"]
 verified: {"self": {"commit": "6f8cb08f234c5b46478ec0b95175660d019a8cc3", "date": "2026-10-17"}}
-guards: ["self:tests/test_task_phases.py#test_unrelated_commit_keeps_delivered_records_and_reuses_delivery", "self:tests/test_task_phases.py#test_run_reopens_delivered_task_and_uses_current_inputs", "self:tests/test_platform_review.py#test_closed_status_reads_pre_scenario_snapshot_as_records", "self:tests/test_task_phases.py#test_in_progress_legacy_snapshot_directs_to_start"]
 tags: ["任务阶段", "历史记录", "交付", "内部快照"]
 ---
 # 完成阶段先读交付事实，再决定是否载入方案

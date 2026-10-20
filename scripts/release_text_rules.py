@@ -33,7 +33,7 @@ RULES = (
      'source_forbidden': (('skills/team-knowledge/scripts/tw_runtime/team',
           r'http\.server|socketserver|\b(?:HTTPServer|ThreadingHTTPServer|TCPServer|serve_forever|FastAPI|Flask|uvicorn)\b'),),
      'commands': ('skills/team-knowledge/scripts/tw_runtime/team/workflow.py',
-                  r"actions.add_parser\('([^']+)'", ('check', 'import-cases', 'coverage', 'pending', 'submit'))},
+                  r"actions.add_parser\('([^']+)'", ('check', 'import-cases', 'coverage', 'pending', 'submit', 'carry'))},
 )
 
 

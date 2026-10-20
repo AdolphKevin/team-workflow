@@ -1,9 +1,8 @@
 ---
 title: "替换评审后旧合并批准留在材料组"
-scope: ["self:skills/team-knowledge/scripts/tw_runtime/team/materials.py", "self:skills/team-knowledge/scripts/tw_runtime/team/reviews.py", "self:tests/test_trial_rework.py"]
-source: ["self:docs/proposals/2026-10-16-issue5-leftovers.md", "self:tests/test_trial_rework.py"]
+scope: ["self:skills/team-knowledge/scripts/tw_runtime/team/materials.py", "self:skills/team-knowledge/scripts/tw_runtime/team/reviews.py"]
+source: ["self:docs/proposals/2026-10-16-issue5-leftovers.md"]
 verified: {"self": {"commit": "210ad28223bfc2b82dc050950edb57b3e53ba9fb", "date": "2026-10-16"}}
-guards: ["self:tests/test_trial_rework.py#test_t1_replacing_review_replaces_only_its_combined_approval", "self:tests/test_trial_rework.py#test_t1_replacement_without_approval_retires_previous_combined_approval"]
 tags: ["合并批准", "替换评审", "平台评审", "材料组"]
 ---
 # 替换评审后旧合并批准留在材料组

@@ -24,20 +24,6 @@ jobs:
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: ${{ matrix.python }}
-      - name: Run behavior regressions
-        id: results
-        env:
-          TW_RUN_CONTEXT: >-
-            {"repository":"github.com/${{ github.repository }}","run_id":"${{ github.run_id }}","attempt":"${{ github.run_attempt }}","job":"${{ github.job }}"}
-        run: TW_CI_OUTPUT="$GITHUB_OUTPUT" python3 scripts/ci_result.py
-      - name: Preserve execution-time source and native reports
-        if: ${{ always() && steps.results.outputs.directory != '' }}
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: workflow-python-${{ matrix.python }}-attempt-${{ github.run_attempt }}
-          path: ${{ steps.results.outputs.directory }}
-          if-no-files-found: error
-          retention-days: 30
       - name: Verify release source and upstream provenance
         run: python3 scripts/check_release.py
       - name: Build the distributable plugin

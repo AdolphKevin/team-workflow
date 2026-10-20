@@ -200,9 +200,10 @@ def dispatch(args, root, profile, *, workspace=None):
         if args.scenario_action == 'pending':
             import scenario_rounds
             return scenario_rounds.pending(root, str(args.task), profile, workspace=workspace)
-        if args.scenario_action == 'submit':
+        if args.scenario_action in ('submit', 'carry'):
             import scenario_rounds
-            return scenario_rounds.submit(root, str(args.task), profile, root / args.results, workspace=workspace)
+            return scenario_rounds.submit(root, str(args.task), profile, root / args.results,
+                                          carry=args.scenario_action == 'carry', workspace=workspace)
         return coverage(root, str(args.task), root / args.pairs)
     except scenario_files.FileProblems as exc:
         return exc.result()

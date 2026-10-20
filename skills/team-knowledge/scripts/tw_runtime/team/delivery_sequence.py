@@ -126,7 +126,7 @@ def deliver(args, root, profile, task, request, *, workspace=None):
                  'summary_markdown': result.get('summary_markdown', ''),
                  'summary': ('交付停在' + {'review': '平台评审', 'acceptance': '业务验收', 'delivery-report': '交付报告',
                               'delivery': '最终核查'}[stopped] + '。') if stopped else ''}
-        for key in ('ci_verified_checks', 'unverified_scope', 'close_note', 'acceptance_scope', 'scope', 'automation_status', 'regression_pending', 'summary_counts', 'statistics', 'scenario_rounds', 'scenario_files'):
+        for key in ('ci_verified_checks', 'unverified_scope', 'close_note', 'acceptance_scope', 'scope', 'summary_counts', 'statistics', 'scenario_rounds', 'scenario_files'):
             if key in result:
                 value[key] = result[key]
         from summary import delivery_status

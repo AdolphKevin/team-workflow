@@ -1,6 +1,6 @@
 # 团队流程的接入、更新与回退
 
-从 `team-workflow` 开始新任务时使用团队流程。独立 MATT 方法的接入要求见[方法与知识约定](matt-integration.md)。先读取项目约定、真实测试入口和所用环境。下文 `tw` 指 `python3 <team-knowledge 技能目录>/scripts/tw.py`。
+从 `team-workflow` 开始新任务时使用团队流程。独立 MATT 方法的接入要求见[方法与知识约定](matt-integration.md)。先读取项目约定、真实验收入口和所用环境。下文 `tw` 指 `python3 <team-knowledge 技能目录>/scripts/tw.py`。
 
 不接入团队流程的项目可选 praxis-skills 的 `sop-verify` 按同一场景格式验证，轮次与协作在 sop-board。后续接入 tw 时，入口声明可复制进 `acceptance_entries`，看板导出的结果 JSONL 可用 `tw team scenarios submit` 登记，格式见[场景指南](scenarios.md)。
 
@@ -8,7 +8,7 @@
 
 1. 项目还有 `.codestable/` 或 `.team-workflow*` 时，先按 team-knowledge 的迁移指南迁移；全新项目运行 `tw init`（预览）和 `tw init --apply`，再填写 `overview.md`。
 2. 运行 `tw team schema` 取得随技能安装的团队配置、任务和方案模板。按项目实际代码，把 `context`、`checks`、`required_checks`、`risk_checks`、`inputs`、`environment_versions` 等团队字段写进 `.tw/config.json`。业务检查和环境脚本继续由业务仓库维护。
-   项目的真实验证操作手册与本仓专属验收补充登记到 `context`，最低内容见[业务验收与质量改进标准](business-acceptance.md)第 6 节。手册按[项目验收方式与测试能力建设](test-capability.md)第 2 节为本项目设计，使用[项目验收方案](../templates/project-verification.md)模板，经项目开发与测试同事确认；尚无自动化入口的部分按该页记录过渡状态。通用规则通过链接引用。
+   项目的真实验证操作手册与本仓专属验收补充登记到 `context`，最低内容见[业务验收与质量改进标准](business-acceptance.md)第 6 节。手册按[项目验收方式与验收入口建设](test-capability.md)第 2 节为本项目设计，使用[项目验收方案](../templates/project-verification.md)模板，经项目开发与测试同事确认；尚缺验收入口的部分按该页记录过渡状态。通用规则通过链接引用。
 3. 运行 `tw team project` 检查配置、知识和安装，再按[工具约定](contracts.md)准备任务及开工材料。
 4. 运行 `tw init --guidance` 与 `tw team guidance` 预览，确认后加 `--apply`：
    - 项目的 AGENTS.md 写入知识指引块和“团队开发流程、需求完成门槛、安全边界”标记块，项目规则统一维护在 AGENTS.md；
@@ -54,8 +54,10 @@
 
 ## 检查、环境和本机位置
 
-默认检查、任务验收和风险映射取并集。鉴权、持久化、消息、并发及跨服务风险使用能证明
-相关行为的真实入口检查。拆分任务的风险按自身评估声明。
+需求以场景验收为准，`checks` 与 `required_checks` 可以为空；项目已有的构建、静态检查或测试按需登记，作为开发者自检的参考。
+
+默认检查、任务验收和风险映射取并集。鉴权、持久化、消息、并发及跨服务风险由经真实入口
+执行的场景证明。拆分任务的风险按自身评估声明。
 
 每项检查明确声明 `environment`：独立于可变外部状态时使用 `stateless`；依赖测试
 数据库、服务或夹具时使用 `fixture`，由业务仓的只读命令返回可重复核对的身份。身份必须

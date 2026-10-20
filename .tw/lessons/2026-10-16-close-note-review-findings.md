@@ -3,7 +3,6 @@ title: "评审记录过问题的任务，收尾说明永远生成不了"
 scope: ["self:skills/team-knowledge/scripts/tw_runtime/team/coordination.py", "self:skills/team-knowledge/scripts/tw_runtime/team/delivery.py"]
 source: ["https://github.com/AdolphKevin/team-workflow/issues/5", "self:docs/validation.md"]
 verified: {"self": {"commit": "2550d9348ec882080002b5dc9a2371f809bd5194", "date": "2026-10-16"}}
-guards: ["self:tests/test_close_note.py#test_review_findings_are_carried_into_the_close_note"]
 tags: ["收尾说明", "已知问题", "评审", "交付"]
 ---
 # 评审记录过问题的任务，收尾说明永远生成不了

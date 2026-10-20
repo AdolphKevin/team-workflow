@@ -3,7 +3,6 @@ title: "必填字段过多，占位符和机械填写被提交进知识库"
 scope: ["self:skills/team-knowledge/scripts/tw_runtime/entries.py"]
 source: ["self:docs/proposals/2026-10-14-unified-redesign.md"]
 verified: {"self": {"commit": "b0247ca6a68c818c565dbe60fe6c07e18c61ab52", "date": "2026-10-14"}}
-guards: ["self:tests/test_tw_format.py#test_placeholders_are_errors"]
 tags: ["占位符", "形式填充", "必填字段"]
 ---
 # 必填字段过多，占位符和机械填写被提交进知识库

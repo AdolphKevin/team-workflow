@@ -1,6 +1,6 @@
 ---
 title: "浏览器场景验收由独立技能 playwright-acceptance 执行，只消费 tw 的场景与结果契约"
-scope: ["self:skills/playwright-acceptance/**", "self:tests/test_playwright_case_tags.py", "self:tests/test_playwright_to_scenarios.py", "self:tests/fixtures/playwright_acceptance/**"]
+scope: ["self:skills/playwright-acceptance/**"]
 source: ["self:skills/playwright-acceptance/SKILL.md", "self:skills/team-workflow/references/scenarios.md"]
 status: "accepted"
 tags: ["场景验收", "Playwright", "浏览器", "CDP", "录屏", "回归", "上游用例"]
@@ -14,7 +14,7 @@ tags: ["场景验收", "Playwright", "浏览器", "CDP", "录屏", "回归", "�
 - 看板就是 Playwright 自带的 HTML report 与 Trace Viewer（与 D6 一致，tw 不自建看板）；上游用例编号由 `case_tags.py` 从配对文件生成为 report 的 tag，只表示覆盖关系，用例是否通过以 `tw` 按配对与轮次的结论为准。
 - `to_scenarios.py` 把 JSON report 转成 `scenario_results.py` 接受的 `results.jsonl` 并把证据复制到结果目录内；提交仍由执行者运行 `tw team scenarios submit`。
 
-技能的两个脚本只用标准库；夹具与配置模板是 JavaScript，随技能分发，复制到业务仓库的验收目录后使用。它的行为测试放在本仓 `tests/`，纳入 `scripts/test.py` 与 `check_release.py`。
+技能的两个脚本只用标准库；夹具与配置模板是 JavaScript，随技能分发，复制到业务仓库的验收目录后使用。它纳入 `check_release.py`。
 
 ## 备选
 

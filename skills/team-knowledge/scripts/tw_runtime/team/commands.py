@@ -116,12 +116,9 @@ def readable(result):
             lines.append('任务 ' + name + '：' + labels.get(value.get('state'), str(value.get('state'))))
     if result.get('checks'):
         lines += ['检查：', *readable_fields(result['checks'])]
-    for key in ('implementation_ready', 'business_accepted', 'delivery_complete', 'overall_complete', 'regression_pending', 'closable'):
+    for key in ('implementation_ready', 'business_accepted', 'delivery_complete', 'overall_complete', 'closable'):
         if key in result:
             lines.append(key + ': ' + str(result[key]))
-    if isinstance(result.get('automation_status'), dict):
-        from summary import regression_lines
-        lines += ['回归待沉淀：' + line for line in regression_lines(result)]
     return '\n'.join(lines)
 
 
@@ -137,7 +134,7 @@ def report_input(args, root, task, include_knowledge=True):
                              if name == 'design' else None))
     result = {'data_version': RECORD_SCHEMA, 'task_id': task['id'], 'design': local(root, args.design).relative_to(root).as_posix(),
               'approvals': references(root, args.approval), 'design_history': references(root, args.design_history),
-              'brief': local(root, args.brief).relative_to(root).as_posix(), 'runs': references(root, args.run),
+              'brief': local(root, args.brief).relative_to(root).as_posix(), 'runs': references(root, args.run or []),
               'review': local(root, args.review).relative_to(root).as_posix() if args.review else ''}
     if getattr(args, 'acceptance', None):
         result['acceptance'] = local(root, args.acceptance).relative_to(root).as_posix()
@@ -510,7 +507,7 @@ def produce(args, root, profile, task, platform, request, *, workspace=None):
     def emit(value, name):
         return {'ok': value.get('ok', True), 'artifact': request.publish(name, value, args.out),
                 **{k: value[k] for k in ('summary', 'gaps', 'problem', 'next_action', 'implementation_ready',
-                                       'business_accepted', 'delivery_complete', 'overall_complete', 'regression_pending', 'automation_status', 'closable', 'acceptance_scope', 'scope', 'validation_active', 'verification_gaps',
+                                       'business_accepted', 'delivery_complete', 'overall_complete', 'closable', 'acceptance_scope', 'scope', 'validation_active', 'verification_gaps',
                                        'ci_verified_checks', 'unverified_scope', 'summary_counts', 'statistics', 'scenario_rounds', 'scenario_files', 'summary_markdown', 'close_note', 're_evaluated', 'tool', 'environment_checked', 'pending_acceptance', 'pending_sections', 'authorizations_needed') if k in value}}
     if args.command == 'deliver':
         import delivery_sequence
@@ -728,7 +725,7 @@ def produce(args, root, profile, task, platform, request, *, workspace=None):
             if args.review is None:
                 from reviews import ReviewNotSubmitted
                 raise ReviewNotSubmitted(root, task, missing_run=not bool(args.run))
-            require(bool(args.run), 'accept needs --run <run.json>')
+            # 适用检查的运行由 delivery.verify 核对；没有适用检查的任务以场景验收，不要求运行记录。
             report = report_input(args, root, task, include_knowledge=False)
             request.publish('report.json', report)
         issue_history.capture(request, task, read(local(root, report['review'])),
@@ -912,7 +909,7 @@ def status(args, root, profile, task, platform=None, *, workspace=None):
         repair = facts.get('review_case_repair', {}).get('next_action')
         if facts['review_failures'] and not repair:
             from delivery import ReviewBlocked
-            repair = ReviewBlocked(task, facts['review_failures']).next_action  # deliver would only fail again
+            repair = ReviewBlocked(task, facts['review_failures'], root).next_action  # deliver would only fail again
         for row in progress['steps'][3:]:
             if repair or row['state'] != 'failed':
                 row['next_command'] = repair or 'tw team deliver ' + selected + ' --reason <不需要更新知识的理由>'
@@ -935,7 +932,7 @@ def status(args, root, profile, task, platform=None, *, workspace=None):
     value['next_action'] = progress['next_step']['next_command'] if progress['next_step'] else value['summary']
     if facts['review_failures'] and facts['review_current'] and not facts.get('review_case_repair'):
         from delivery import ReviewBlocked
-        blocked = ReviewBlocked(task, facts['review_failures'])
+        blocked = ReviewBlocked(task, facts['review_failures'], root)
         value.update(summary='评审已提交，仍有不通过项或阻塞问题。', review_failures=facts['review_failures'],
                      next_action=blocked.next_action)
     if facts.get('review_case_repair') and facts['review_current']:

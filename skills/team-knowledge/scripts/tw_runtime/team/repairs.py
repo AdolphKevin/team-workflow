@@ -59,8 +59,9 @@ def repeat_command(args):
 CODE_ACTIONS = {
     Code.DESIGN_SNAPSHOT: lambda args, checks: '用当前格式的方案重新开工：' + command(args, 'start', '--design <当前格式方案.md>'),
     Code.SCENARIO_ACCEPTANCE: lambda args, checks: '按清单完成场景验收：' + command(args, 'scenarios pending'),
-    Code.TESTER_CASES: lambda args, checks: '导入测试同事的用例集：' + command(args, 'scenarios import-cases', '<文件>'),
-    Code.SCENARIO_RESULT: lambda args, checks: '修正结果文件中列出的行，再运行 ' + command(args, 'scenarios submit', '--results <文件>'),
+    Code.TESTER_CASES: lambda args, checks: '导入主流程用例集：' + command(args, 'scenarios import-cases', '<文件>'),
+    Code.SCENARIO_RESULT: lambda args, checks: '修正结果文件中列出的行，再运行 ' + command(
+        args, 'scenarios ' + ('carry' if getattr(args, 'scenario_action', None) == 'carry' else 'submit'), '--results <文件>'),
     Code.SCENARIO_RESULTS_INCOMPLETE: lambda args, checks: '按列出的场景补齐结果后重新提交：' + command(args, 'scenarios submit', '--results <文件>'),
     Code.SCENARIO_FILE: lambda args, checks: '修正场景文件中列出的问题后重跑 ' + project_command(args.root, 'scenarios check', '<文件>'),
     Code.CASE_LIST: lambda args, checks: '修正用例文件中列出的问题后重跑 ' + command(args, 'scenarios import-cases', '<文件>'),

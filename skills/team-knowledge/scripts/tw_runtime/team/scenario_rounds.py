@@ -30,26 +30,8 @@ def ratio(numerator, denominator):
 
 
 def round_statistics(rows):
-    return {'executed': len(rows), **{status: sum(row['status'] == status for row in rows)
-                                    for status in scenario_results.STATUSES}}
-
-
-def regression_runs(root, group):
-    """场景复用任务历次运行；显式选用的运行仍由当前材料决定。"""
-    if group.get('selected_runs') is not None:
-        return [ref['path'] for ref in group['selected_runs']]
-    from checklist import records
-    paths = [ref['path'] for ref in group['runs']]
-    for claim, response in records(root, group['task_id']):
-        ref = (response or {}).get('artifact')
-        if claim.get('command') == 'run' and ref:
-            try:
-                path = artifact_valid(root, ref).relative_to(root).as_posix()
-            except (Invalid, OSError, ValueError, TypeError, KeyError):
-                continue
-            if path not in paths:
-                paths.append(path)
-    return paths
+    return {'executed': sum(row['status'] != 'carry' for row in rows),
+            **{status: sum(row['status'] == status for row in rows) for status in scenario_results.STATUSES + ('carry',)}}
 
 
 def statistics(entries, history, states):
@@ -60,7 +42,8 @@ def statistics(entries, history, states):
             key = row['scenario']
             if key not in entries or row['fingerprint'] != entries[key]['fingerprint']:
                 continue
-            first.setdefault(key, row['status'])
+            if row['status'] != 'carry':
+                first.setdefault(key, row['status'])
             from contracts import identity
             executors.setdefault(identity(row['executor']), {})[key] = row
     by_executor = {}
@@ -76,37 +59,10 @@ def statistics(entries, history, states):
                                 sum(status in ('pass', 'fail') for status in first.values())),
             'by_executor': by_executor,
             'agreement': ratio(sum(all(status == 'pass' for status in statuses) for statuses in multiple), len(multiple)),
-            'summary_counts': {state: sum(row['state'] == state for row in states)
-                               for state in ('passed', 'failed', 'blocked', 'pending')}}
-
-
-def regression_reason(root, profile, task, group, entry, checks=None, *, workspace=None):
-    """回归待沉淀原因；None 表示指定用例在当前源码有效运行中通过。"""
-    checks = checks if checks is not None else {}
-    regression = entry.get('regression', {})
-    if 'pending' in regression:
-        return 'deferred'
-    if 'check' not in regression:
-        return 'not-declared'
-    key = regression['check']
-    selection = (key, tuple(regression['cases']))
-    if selection not in checks:
-        try:
-            check = profile['checks'][key]
-            paths = regression_runs(root, group)
-            validation.verify_runs(root, profile, task, paths, checks=[key], workspace=workspace)
-        except (Invalid, OSError, ValueError, TypeError, KeyError):
-            checks[selection] = 'check-not-passed'
-            return checks[selection]
-        # 用例核对复用原始报告解码，包含 Go 父用例的子用例。
-        try:
-            selected_profile = {**profile, 'checks': {**profile['checks'], key: {
-                **check, 'required_cases': list(dict.fromkeys(check['required_cases'] + regression['cases']))}}}
-            validation.verify_runs(root, selected_profile, task, paths, checks=[key], workspace=workspace)
-            checks[selection] = None
-        except (Invalid, OSError, ValueError, TypeError, KeyError):
-            checks[selection] = 'cases-not-passed'
-    return checks[selection]
+            'summary_counts': {**{state: sum(row['state'] == state for row in states)
+                                  for state in ('passed', 'failed', 'blocked', 'pending')},
+                               'carried': sum(row['state'] == 'passed' and row['result']['status'] == 'carry'
+                                              for row in states)}}
 
 
 def current_state(root, profile, group, inputs=None, *, workspace=None):
@@ -122,8 +78,6 @@ def current_state(root, profile, group, inputs=None, *, workspace=None):
             previous.add(key)
             if key in entries and row['fingerprint'] == entries[key]['fingerprint']:
                 latest[key] = (record, row)
-    checks = {}
-
     states = []
     for key, entry in entries.items():
         state, reason = 'pending', 'changed' if key in previous else 'new'
@@ -133,10 +87,11 @@ def current_state(root, profile, group, inputs=None, *, workspace=None):
                 state, reason = 'failed', 'failed'
             elif row['status'] in ('blocked', 'skip'):
                 state, reason = 'blocked', None
-            elif record['product_digest'] == product or regression_reason(root, profile, task, group, entry, checks, workspace=workspace) is None:
+            elif record['product_digest'] == product:
                 state, reason = 'passed', None
             else:
-                reason = 'source-changed'
+                # 产品变化后，已通过或沿用的场景由独立执行者判定重跑或沿用。
+                reason = 'undetermined'
         result = ({'result': latest[key][1], 'round': latest[key][0]['round']} if key in latest else {})
         states.append({**entry, 'state': state, 'reason': reason, **result})
     totals = statistics(entries, history, states)
@@ -154,7 +109,8 @@ def pending_action(root, task_id):
 def pending_lines(rows, counts):
     lines = []
     for row in rows:
-        lines += [row['id'] + ' · ' + row['node'] + ' · ' + row['title'] + '（' + row['reason'] + '）',
+        reason = row['reason'] + ('：待判定，重跑或用 scenarios carry 沿用' if row['reason'] == 'undetermined' else '')
+        lines += [row['id'] + ' · ' + row['node'] + ' · ' + row['title'] + '（' + reason + '）',
                   '内容指纹：' + row['fingerprint'], '验收入口 verify：' + row['verify']]
         from commands import readable_fields
         lines += readable_fields(row['acceptance_entry'], '  ')
@@ -172,7 +128,10 @@ def pending_result(root, task_id, value, *, workspace=None):
             'pending': rows, 'pending_count': len(rows),
             'summary': f'本任务有 {len(rows)} 条待执行场景。',
             'next_action': ('按清单执行场景，然后提交结果：' + repairs.task_command(
-                root, task_id, 'scenarios submit', '--results <文件>')) if rows else current_status(
+                root, task_id, 'scenarios submit', '--results <文件>')
+                + ('；判定不受影响的待判定场景写明理由与改动范围后沿用：' + repairs.task_command(
+                    root, task_id, 'scenarios carry', '--results <文件>')
+                   if any(row['reason'] == 'undetermined' for row in rows) else '')) if rows else current_status(
                     root, task_id, workspace=workspace, scenario_state=value)['next_action']}
 
 
@@ -209,7 +168,8 @@ def task_metrics(root, profile, group, since=None, *, workspace=None):
                        for row in rounds(root, group) if not since or row['submitted_at'] >= since]}
 
 
-def submit(root, task_id, profile, path, *, workspace=None):
+def submit(root, task_id, profile, path, *, carry=False, workspace=None):
+    """登记一轮执行结果；carry 登记待判定场景的沿用，不重新执行。"""
     workspace = workspace or validation.Workspace(root, profile)
     from cleanup import guard
     from contracts import independent
@@ -218,9 +178,17 @@ def submit(root, task_id, profile, path, *, workspace=None):
         inputs = scenarios.task_entries(root, group, profile, workspace=workspace)
         before = current_state(root, profile, group, inputs, workspace=workspace)
         entries = {row['id']: row for row in before['scenarios']}
-        rows = scenario_results.load(path, entries)
-        missing = [key for key, row in entries.items() if row['state'] in ('pending', 'failed')
-                   and key not in {result['scenario'] for result in rows}]
+        rows = scenario_results.load(path, entries, carry=carry)
+        if carry:
+            wrong = [{'line': index + 1, 'problem': '只沿用待判定的场景：' + row['scenario'] + ' 当前为 '
+                      + entries[row['scenario']]['state']
+                      + ('（' + entries[row['scenario']]['reason'] + '）' if entries[row['scenario']]['reason'] else '')}
+                     for index, row in enumerate(rows) if entries[row['scenario']]['reason'] != 'undetermined']
+            if wrong:
+                raise FileProblems(wrong, Code.SCENARIO_RESULT)
+        # 待判定场景可以重跑，也可以沿用，不要求出现在本次结果中。
+        missing = [] if carry else [key for key, row in entries.items() if row['state'] in ('pending', 'failed')
+                                    and row['reason'] != 'undetermined' and key not in {result['scenario'] for result in rows}]
         if missing:
             return {'ok': False, 'error_code': Code.SCENARIO_RESULTS_INCOMPLETE, 'missing': missing,
                     'problem': '补齐待执行场景的结果：' + '、'.join(missing)}
@@ -265,5 +233,5 @@ def submit(root, task_id, profile, path, *, workspace=None):
         group.setdefault('scenario_rounds', []).append(ref)
         write(materials.path(root, task_id), group)
         updated = pending_result(root, task_id, current_state(root, profile, group, inputs, workspace=workspace), workspace=workspace)
-        return {**updated, 'artifact': ref, 'round': number, 'round_statistics': record['statistics'],
-                'summary': f'第 {number} 轮已登记，共执行 {len(rows)} 条场景。'}
+        summary = f'第 {number} 轮已登记，沿用 {len(rows)} 条场景。' if carry else f'第 {number} 轮已登记，共执行 {len(rows)} 条场景。'
+        return {**updated, 'artifact': ref, 'round': number, 'round_statistics': record['statistics'], 'summary': summary}

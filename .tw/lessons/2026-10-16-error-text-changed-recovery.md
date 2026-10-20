@@ -1,9 +1,8 @@
 ---
 title: "报错措辞决定了下一步和问题位置"
-scope: ["self:skills/team-knowledge/scripts/tw_runtime/team/**", "self:tests/test_error_routing.py", "self:tests/test_gap_routing.py", "self:tests/test_error_categories.py", "self:tests/test_trial_rework.py", "self:skills/team-knowledge/scripts/tw_runtime/check.py", "self:skills/team-knowledge/scripts/tw_runtime/project.py"]
+scope: ["self:skills/team-knowledge/scripts/tw_runtime/team/**", "self:skills/team-knowledge/scripts/tw_runtime/check.py", "self:skills/team-knowledge/scripts/tw_runtime/project.py"]
 source: ["self:docs/proposals/2026-10-16-issue5-leftovers.md"]
 verified: {"self": {"commit": "210ad28223bfc2b82dc050950edb57b3e53ba9fb", "date": "2026-10-16"}}
-guards: ["self:tests/test_error_routing.py#test_error_codes_choose_same_repair_for_arbitrary_messages", "self:tests/test_error_routing.py#test_review_format_errors_keep_section_when_reason_changes", "self:tests/test_error_routing.py#test_design_line_uses_structured_key_with_arbitrary_reason", "self:tests/test_gap_routing.py#test_handoff_conflict_and_requirements_use_codes_with_arbitrary_message", "self:tests/test_error_categories.py#test_generic_object_errors_are_independent_of_field_words", "self:tests/test_error_categories.py#test_original_check_report_failure_requires_rerun", "self:tests/test_trial_rework.py#test_t2_unshared_approval_points_to_publishing_the_review", "self:tests/test_trial_rework.py#test_t3_older_platform_draft_uses_binding_recovery", "self:tests/test_trial_rework.py#test_t6_project_text_reports_its_configuration_and_knowledge_errors", "self:tests/test_trial_rework.py#test_t7_internal_recovery_data_stays_out_of_error_json", "self:tests/test_trial_rework.py#test_t8_material_gap_keeps_commands_in_next_action"]
 tags: ["错误代码", "下一步", "问题位置", "报错措辞"]
 ---
 # 报错措辞决定了下一步和问题位置

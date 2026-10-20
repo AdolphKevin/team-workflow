@@ -3,7 +3,6 @@ title: "收尾说明重新核对了验收已经取代的失败运行"
 scope: ["self:skills/team-knowledge/scripts/tw_runtime/team/validation.py", "self:skills/team-knowledge/scripts/tw_runtime/team/coordination.py"]
 source: ["https://github.com/AdolphKevin/team-workflow/issues/5", "self:docs/validation.md"]
 verified: {"self": {"commit": "3cb5efe02b940e97b15781cb085a572185dbf18a", "date": "2026-10-16"}}
-guards: ["self:tests/test_close_note.py#test_superseded_failed_run_does_not_block_the_close_note"]
 tags: ["收尾说明", "运行记录", "取代", "验收", "交付"]
 ---
 # 收尾说明重新核对了验收已经取代的失败运行

@@ -23,7 +23,6 @@ sops:
         steps: [传入合法输入并运行命令]
         expected: [退出码为零, 输出约定结果]
         forbidden_effects: [目录外的文件变化]
-        regression: {pending: ISSUE-EXAMPLE-1}
       - id: SOP-02-N01
         polarity: negative
         negative_type: invalid-input
@@ -35,4 +34,4 @@ sops:
         steps: [传入错误参数并运行命令]
         expected: [退出码为一, 输出修正提示]
         forbidden_effects: [生成业务结果文件]
-        regression: {manual: 核对终端提示, owner: 验收负责人, trigger: 发布前}
+        regression: {manual: 终端颜色与排版由人观察, owner: 验收负责人, trigger: 发布前}

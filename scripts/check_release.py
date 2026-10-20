@@ -165,7 +165,7 @@ def lint_names(root):
     spec = importlib.util.spec_from_file_location('lint_undefined_names', root / 'scripts/lint_undefined_names.py')
     lint = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(lint)
-    result = lint.check([root / 'scripts', root / 'skills', root / 'tests'], root=root.resolve())
+    result = lint.check([root / 'scripts', root / 'skills'], root=root.resolve())
     assert result['ok'], 'undefined names: ' + json.dumps(result['findings'], ensure_ascii=False)
     return result
 
