@@ -15,13 +15,7 @@
 
 方案验收节用 `- 场景：docs/sop/<批次>.yaml#SOP-02、SOP-03` 引用节点。`tw team scenarios check <文件>` 核对结构、来源、正反向规则及入口，问题附行号。
 
-`regression` 记录沉淀后的保护方式，三种形状如下。独立验收后沉淀用例并登记检查。写回 `regression` 会使检查运行过期，在生成评审稿之前写回并重跑 `run`。
-
-| 形状 | 含义 |
-| --- | --- |
-| `{check: unit, cases: [CalcTests::test_add]}` | `check` 引用 `junit` 或 `go-json` 检查，`cases` 填报告中的用例名数组（至少一项）；JUnit 使用 `类名::测试名` |
-| `{manual: 原因, owner: 负责人, trigger: 触发时机}` | 仍需手动 |
-| `{pending: Q1}` 或省略 | 尚待沉淀；显式问题编号引用评审中已延期的事项 |
+回归即按第 6 节重跑受影响的场景。无法经验收入口执行的场景写 `regression: {manual: 原因, owner: 负责人, trigger: 触发时机}`，其余省略。
 
 ## 2. 验收入口
 
@@ -40,7 +34,7 @@
 
 - **Web 应用**：用浏览器工具按场景点击、输入，核对页面、请求、数据与实际接收端。真实账号由用户在真实浏览器登录，随后恢复自动化。
 - **命令行应用**：按安装文档装好交付物，执行用户会运行的命令。使用临时 `HOME` 与工作目录，记录命令、标准输出、错误输出、退出码、文件清单与摘要。负向场景覆盖错误参数、缺文件、权限不足、重复执行、中断续接和并发。
-- **智能体应用**：沿用[第 7.5 节三层验收](test-capability.md#75-模型与智能体输出)。扮演用户的执行者与语义复核者分开；固定源码、配置和场景快照重复运行，分别统计机械失败率与语义偏差率，修复后从首次重新计数。
+- **智能体应用**：沿用[第 5.5 节三层验收](test-capability.md#55-模型与智能体输出)。扮演用户的执行者与语义复核者分开；固定源码、配置和场景快照重复运行，分别统计机械失败率与语义偏差率，修复后从首次重新计数。
 
 其他入口按第 2 节四个问题推导。一个需求可跨多种形态，场景用 `verify` 标明入口。
 
@@ -53,11 +47,11 @@ tw team scenarios import-cases --task <身份> <用例文件>
 tw team scenarios coverage --task <身份> --pairs <配对.json>
 ```
 
-用例文件采用 JSON 或 YAML 子集，顶层 `test_cases` 或 `cases` 数组每项必填 `id`、`title`，其余字段原样保存。代理按业务语义判断覆盖：流程用例由场景覆盖，补齐遗漏场景；细节用例由检查中的测试用例覆盖。预期有分歧时以测试同事的理解为准。
+用例文件采用 JSON 或 YAML 子集，顶层 `test_cases` 或 `cases` 数组每项必填 `id`、`title`，其余字段原样保存。代理按业务语义判断覆盖：流程用例由场景覆盖，补齐遗漏场景；细节用例并入覆盖它的流程场景，写进该场景的 `expected`。预期有分歧时以测试同事的理解为准。
 
 配对文件含三个数组，每条导入用例恰好归一类：
 
-- `covered`：`{case, scenarios, checks, note}`，`scenarios` 引用本任务场景编号；`checks` 每项为 `{check, cases}`，写法同 `regression`；两者至少一项。`accept` 核对所列用例在当前源码的有效运行中通过。
+- `covered`：`{case, scenarios, note}`，`scenarios` 引用本任务场景编号。
 - `conflict`：`{case, scenarios, note}`，预期有分歧。
 - `disposed`：`{case, state, reason, confirmed_by}`，`state` 取 `blocked`、`deferred`、`out-of-scope`，由测试同事确认。
 
@@ -86,9 +80,13 @@ tw team scenarios submit --task <身份> --results <结果.jsonl>
 
 ## 6. 增量验收
 
-`pending` 列出新增、内容变化、上次失败，以及产品源码变化后回归尚未覆盖的场景。场景内容指纹覆盖 `initial_state`、`steps`、`expected`、`forbidden_effects`。同产品指纹上已通过的场景继续有效；产品变化后，已通过场景声明的回归检查及用例在当前源码有效运行中通过，场景继续有效。受阻项通过问题处置跟进。
+`pending` 列出新增、内容变化、上次失败，以及待判定（`undetermined`）的场景。场景内容指纹覆盖 `initial_state`、`steps`、`expected`、`forbidden_effects`。同产品指纹上已通过的场景继续有效；产品变化后，已通过场景进入待判定，由独立执行者按改动范围逐条判定：受影响的重跑后 `submit`；不受影响的写明理由沿用：
 
-回归状态由 `regression` 与当前运行生成，字段见[工具约定](contracts.md#轮次验收与回归)。
+```bash
+tw team scenarios carry --task <身份> --results <沿用.jsonl>
+```
+
+每行 `{"scenario","reason","scope","executor","executed_at"}`，`reason` 写不受影响的理由，`scope` 写依据的改动范围。沿用与重跑分开计数，字段见[工具约定](contracts.md#轮次验收与回归)。受阻项通过问题处置跟进。
 
 ## 7. 复测看板契约与搭建
 

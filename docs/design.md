@@ -35,7 +35,7 @@
 
 ## 验证
 
-首次独立验收、回归层次与检出能力、端到端链路、本机与 CI 入口、交付证据、缺陷关联及每周复盘，由[业务验收与质量改进标准](../skills/team-workflow/references/business-acceptance.md)统一维护。`delivery_complete` 表示验收、知识处置与交接记录齐全，不表示回归已自动化（见 `automation_status`）。
+首次独立验收、产品变化后的场景重跑与沿用、端到端链路、验收入口、交付证据、缺陷关联及每周复盘，由[业务验收与质量改进标准](../skills/team-workflow/references/business-acceptance.md)统一维护。`delivery_complete` 表示场景在当前产品上全部通过或沿用、知识处置与交接记录齐全。
 
 执行结果绑定实际源码、依赖内容、具体检查及环境；评审绑定任务要求、方案和代码。检查环境声明为无可变外部状态，或由业务仓提供可以确认夹具版本的只读命令。运行期间源码或环境变化时，结果不能通过。
 
