@@ -909,7 +909,7 @@ def status(args, root, profile, task, platform=None, *, workspace=None):
         repair = facts.get('review_case_repair', {}).get('next_action')
         if facts['review_failures'] and not repair:
             from delivery import ReviewBlocked
-            repair = ReviewBlocked(task, facts['review_failures']).next_action  # deliver would only fail again
+            repair = ReviewBlocked(task, facts['review_failures'], root).next_action  # deliver would only fail again
         for row in progress['steps'][3:]:
             if repair or row['state'] != 'failed':
                 row['next_command'] = repair or 'tw team deliver ' + selected + ' --reason <不需要更新知识的理由>'
@@ -932,7 +932,7 @@ def status(args, root, profile, task, platform=None, *, workspace=None):
     value['next_action'] = progress['next_step']['next_command'] if progress['next_step'] else value['summary']
     if facts['review_failures'] and facts['review_current'] and not facts.get('review_case_repair'):
         from delivery import ReviewBlocked
-        blocked = ReviewBlocked(task, facts['review_failures'])
+        blocked = ReviewBlocked(task, facts['review_failures'], root)
         value.update(summary='评审已提交，仍有不通过项或阻塞问题。', review_failures=facts['review_failures'],
                      next_action=blocked.next_action)
     if facts.get('review_case_repair') and facts['review_current']:

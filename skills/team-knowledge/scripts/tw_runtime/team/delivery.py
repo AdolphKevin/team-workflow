@@ -165,11 +165,17 @@ def review_failures(review, required):
 class ReviewBlocked(Invalid):
     error_code = Code.REVIEW_NOT_PASSED
 
-    def __init__(self, task, failures):
+    def __init__(self, task, failures, root=None):
         import shlex
         self.review_failures = failures
-        self.next_action = ('修复所列问题后重跑检查：tw team run --task ' + shlex.quote(task['id'])
-                            + '；再逐项复核：tw team review --task ' + shlex.quote(task['id']))
+        identity = shlex.quote(task['id'])
+        if root is not None and all(row['kind'] == 'issue' for row in failures):
+            # 只有问题待处置时，评审人在问题小节填写处置后重新提交即可。
+            import reviews
+            self.next_action = reviews.submission_action(root, task['id'], disposition=True)
+        else:
+            self.next_action = ('修复所列问题后重跑检查：tw team run --task ' + identity
+                                + '；再逐项复核：tw team review --task ' + identity)
         names = {'standards': '规范 standards', 'spec': '需求 spec', 'acceptance': '验收', 'issue': '问题', 'knowledge': '知识'}
         super().__init__('评审未通过：' + '；'.join(names[row['kind']] + ' ' + row['id'] + '：' + row['reason'] for row in failures))
 
@@ -193,17 +199,17 @@ def review_case_failures(review, execution):
     return failures
 
 
-def require_review_passed(task, review, required):
+def require_review_passed(task, review, required, root=None):
     failures = review_failures(review, required)
     if failures:
-        raise ReviewBlocked(task, failures)
+        raise ReviewBlocked(task, failures, root)
 
 
 def check_review(root, profile, task, review, selected, design, status, execution, run_paths, *, workspace=None):
     check_review_format(root, profile, task, review, selected, design, workspace=workspace)
     from contracts import independent
     independent(design, review['reviewer'], 'Reviewer')
-    require_review_passed(task, review, status['required_sections'])
+    require_review_passed(task, review, status['required_sections'], root)
     for row in review['acceptance']:
         check_observations(root, profile, design, row, execution, run_paths)
         refs = [item for item in row.get('observations', []) if item.get('kind') == 'scenarios']
@@ -287,7 +293,7 @@ def verify(root, profile, task, report, phase='delivery', _seen=None, live=None,
         incomplete.next_action = '重跑检查并复核当前材料：tw team run ' + selected_task + '；tw team review ' + selected_task
         raise incomplete from exc
     else:
-        require_review_passed(task, review, status['required_sections'])
+        require_review_passed(task, review, status['required_sections'], root)
         from contracts import independent
         independent(design, review['reviewer'], 'Reviewer')
     require(status.get('local_review_valid') is True, 'Design coverage/history needs review: ' + design_problem(status),
