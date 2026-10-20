@@ -76,5 +76,5 @@ SOP-04 节点全部场景通过。
 2. 文字（起点：方案作者读团队入口；终点：写出十几条业务流程场景、沿链路分段、不要求写测试的方案）：按 D1 修改，随后验收 SOP-03、SOP-04。
 
 - 验收：A1、A2、A3、A4
-- 范围：skills/team-workflow、skills/team-knowledge/scripts/tw_runtime/team、scripts、docs/sop/tw-tier-1.yaml、docs/sop/fixtures/tw-tier-1、docs/proposals/2026-10-20-tw-tier-1-design.md、docs/proposals/2026-10-16-scenario-acceptance-and-positive-text.md、.tw、CHANGELOG.md
+- 范围：skills/team-workflow、skills/team-knowledge、scripts、tests、docs、.tw、.github、AGENTS.md、README.md、CHANGELOG.md
 - 前置任务：无
