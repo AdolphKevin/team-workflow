@@ -100,7 +100,7 @@ def run(project, base=None):
                     if gitutil.run(root, 'cat-file', '-e', f'{info["commit"]}^{{commit}}', check=False).returncode != 0:
                         warn(entry.path, '核实基线提交不在当前历史中（浅克隆或历史被改写），变化情况无法计算')
         if entry.kind == 'lesson' and not entry.values('guards'):
-            warn(entry.path, '没有守护测试；能写测试时请补上，并填写 guards')
+            warn(entry.path, '没有守护场景；用 guards 引用能发现该问题的 SOP 场景（仓库:场景文件#场景编号）')
     titles = defaultdict(list)
     for entry in loaded:
         if entry.kind in KNOWLEDGE and entry.title:
@@ -153,20 +153,20 @@ def guard_problem(value, root, source, declared, shared, checks, entry, error, w
         repo = shared[alias]
         names, read = repo.names, lambda n: (repo.root / n).read_text(encoding='utf-8')
     elif alias in declared:
-        warn(entry.path, f'无法读取仓库 {alias}，守护测试 {value} 未核对')
+        warn(entry.path, f'无法读取仓库 {alias}，guards {value} 未核对')
         return
     else:
         error(entry.path, f'guards 使用了未声明的仓库：{alias}')
         return
     if path not in names:
-        error(entry.path, f'守护测试文件不存在：{alias}:{path}')
+        error(entry.path, f'guards 引用的文件不存在：{alias}:{path}')
         return
     try:
         found = name in read(path)
     except (OSError, UnicodeDecodeError):
         found = False
     if not found:
-        error(entry.path, f'守护测试 {name} 不在 {alias}:{path} 中')
+        error(entry.path, f'guards 引用的 {name} 不在 {alias}:{path} 中')
 
 
 def documents(config, code, declared, shared, error, warn, self_source):

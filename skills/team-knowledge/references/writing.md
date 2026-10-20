@@ -11,7 +11,7 @@
 | `source` | 必填：Issue、PR、提交链接或 `仓库:原文路径` |
 | `verified` | rule、lesson 必填：`{"self": {"commit": "<实际核对时的完整提交>", "date": "YYYY-MM-DD"}}`，日期填实际核对的那天 |
 | `status` | decision 必填：`accepted` 或 `rejected` |
-| `guards` | 可选：`self:测试路径#测试名` 或 `check:检查名` |
+| `guards` | 可选：能发现该问题的 SOP 场景 `self:场景文件#场景编号`，或 `check:检查名` |
 | `tags`、`symbols`、`related`、`owner` | 可选。`tags` 写任务描述里会出现的业务词，brief 靠它匹配中文 |
 
 文件名：`rules/<slug>.md`，`decisions/` 和 `lessons/` 用 `YYYY-MM-DD-<slug>.md`，slug 只用小写字母、数字和连字符。

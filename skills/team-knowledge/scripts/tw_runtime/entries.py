@@ -201,7 +201,7 @@ def validate(entry):
             warnings.append(f'scope {value} 覆盖整个仓库，范围过宽')
     for value in entry.values('guards'):
         if not GUARD.match(value):
-            errors.append(f'guards {value} 应写成 `仓库:测试路径#测试名` 或 `check:检查名`')
+            errors.append(f'guards {value} 应写成 `仓库:场景文件#场景编号` 或 `check:检查名`')
     errors.extend(name_problems(entry))
     first = next((line for line in entry.body.split('\n') if line.strip()), '')
     if entry.title and first.strip() != f'# {entry.title}':

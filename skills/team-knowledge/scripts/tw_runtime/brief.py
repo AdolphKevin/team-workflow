@@ -96,7 +96,7 @@ def select(project, task, paths, symbols, refs, tags):
                     or globs.WILDCARDS & set(path) or (project.root / path).is_dir()):
                 continue
             if applies_here(project, repo, alias) and path in scoped_paths and path not in directories:
-                add(entry, root, SCOPE, f'守护测试 {path}', globs.specificity(path))
+                add(entry, root, SCOPE, f'守护场景 {path}', globs.specificity(path))
         for tag in entry.values('tags'):
             if textmatch.normalize(tag) in wanted_tags:
                 add(entry, root, SCOPE, f'标签 {tag}')

@@ -113,7 +113,7 @@ def render(report):
     if report['without_baseline']:
         lines += ['## 变化情况无法计算', *[f'- {x["path"]}：{x["status"]}' for x in report['without_baseline']], '']
     if report['lessons_without_guards']:
-        lines += ['## 没有守护测试的教训', *[f'- {p}' for p in report['lessons_without_guards']], '']
+        lines += ['## 没有守护场景的教训', *[f'- {p}' for p in report['lessons_without_guards']], '']
     if report['similar_titles']:
         lines += ['## 标题相近，可能重复', *[f'- {a} ↔ {b}' for a, b in report['similar_titles']], '']
     if report['near_size_limit']:
