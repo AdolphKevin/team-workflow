@@ -11,7 +11,7 @@
 - 顶层为 `metadata` 与 `sops`。`metadata` 必填 `requirement`、`batch`、`version`、`owner`、非空 `sources`；每项来源含 `ref`、`version`、`confirmed_by`，可选 `tags`。
 - 节点必填 `id`、`title`、`actor`、`entry`、`scenarios`，可选 `must`、`negative_exempt`。每个节点至少一条正向 `positive` 和一条反向 `negative` 场景；反向豁免理由写入 `negative_exempt`。
 - 场景必填 `id`、`polarity`、`title`、`actor`、`priority`、`verify`、`initial_state`、`steps`、`expected`、`forbidden_effects`。后四项为字符串数组：前三项非空，副作用数组可空。可选 `refs`、`evidence_hints`、`tags`、`regression`。节点编号在文件内唯一，场景编号在任务内唯一。
-- 反向场景另填 `negative_type`：`empty-input`、`over-length`、`not-found`、`permission`、`cross-tenant`、`duplicate`、`concurrency`、`disconnect`、`timeout`、`archived`、`invalid-input`、`incomplete-input`、`interrupted`、`stale-input`、`tampered-input`、`other`。
+- 反向场景写业务上的失败，输入校验写进所属流程场景的 `expected`。反向场景另填 `negative_type`：`empty-input`、`over-length`、`not-found`、`permission`、`cross-tenant`、`duplicate`、`concurrency`、`disconnect`、`timeout`、`archived`、`invalid-input`、`incomplete-input`、`interrupted`、`stale-input`、`tampered-input`、`other`。
 
 方案验收节用 `- 场景：docs/sop/<批次>.yaml#SOP-02、SOP-03` 引用节点。`tw team scenarios check <文件>` 核对结构、来源、正反向规则及入口，问题附行号。
 
