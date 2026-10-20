@@ -3,7 +3,6 @@ title: "按格式版本分流，让新任务用旧格式绕过了方案批准"
 scope: ["self:skills/team-knowledge/scripts/tw_runtime/team/common.py"]
 source: ["https://github.com/AdolphKevin/team-workflow/commit/73afafd", "https://github.com/AdolphKevin/team-workflow/commit/d55d892"]
 verified: {"self": {"commit": "b0247ca6a68c818c565dbe60fe6c07e18c61ab52", "date": "2026-10-14"}}
-guards: ["self:tests/test_unified_team.py#test_team_config_adapts_project_name_and_rejects_missing_or_old_fields"]
 tags: ["方案批准", "格式版本", "旧格式", "兼容分支"]
 ---
 # 按格式版本分流，让新任务用旧格式绕过了方案批准

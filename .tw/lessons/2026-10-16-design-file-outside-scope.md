@@ -3,7 +3,6 @@ title: "方案文件随任务提交，却被算成越界改动"
 scope: ["self:skills/team-knowledge/scripts/tw_runtime/team/validation.py", "self:skills/team-knowledge/scripts/tw_runtime/team/design_files.py", "self:skills/team-knowledge/scripts/tw_runtime/team/delivery.py"]
 source: ["https://github.com/AdolphKevin/team-workflow/issues/5", "self:docs/validation.md"]
 verified: {"self": {"commit": "84aa206ff361d4673e0d2919a21b73bb7318b43f", "date": "2026-10-16"}}
-guards: ["self:tests/test_design_file_scope.py#DesignFileScope"]
 tags: ["方案", "任务范围", "改动范围", "验收", "交付"]
 ---
 # 方案文件随任务提交，却被算成越界改动

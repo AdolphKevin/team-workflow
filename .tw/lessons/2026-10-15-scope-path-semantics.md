@@ -1,9 +1,8 @@
 ---
 title: "方案范围与简报路径语义不同，开工失败或漏读知识"
-scope: ["self:skills/team-knowledge/scripts/tw_runtime/repo_paths.py", "self:skills/team-knowledge/scripts/tw_runtime/globs.py", "self:skills/team-knowledge/scripts/tw_runtime/brief.py", "self:skills/team-knowledge/scripts/tw_runtime/team/commands.py", "self:skills/team-knowledge/scripts/tw_runtime/team/coordination.py", "self:skills/team-knowledge/scripts/tw_runtime/team/designs.py", "self:scripts/replay_brief.py", "self:tests/test_scope_paths.py"]
+scope: ["self:skills/team-knowledge/scripts/tw_runtime/repo_paths.py", "self:skills/team-knowledge/scripts/tw_runtime/globs.py", "self:skills/team-knowledge/scripts/tw_runtime/brief.py", "self:skills/team-knowledge/scripts/tw_runtime/team/commands.py", "self:skills/team-knowledge/scripts/tw_runtime/team/coordination.py", "self:skills/team-knowledge/scripts/tw_runtime/team/designs.py", "self:scripts/replay_brief.py"]
 source: ["self:docs/validation.md", "self:docs/proposals/2026-10-14-unified-redesign.md", "self:skills/team-workflow/references/designs.md"]
 verified: {"self": {"commit": "550f4c9ace5ed9580d65f17c17514a0bd8f5fd78", "date": "2026-10-15"}}
-guards: ["self:tests/test_scope_paths.py#LocalScopeStart", "self:tests/test_scope_paths.py#PlatformScopeStart", "self:tests/test_scope_paths.py#RepositoryPaths", "self:tests/test_scope_paths.py#DirectoryBrief", "self:tests/test_tw_brief.py#test_guard_file_matches_at_scope_tier_with_path_specificity", "self:tests/test_relocation.py#test_absolute_query_path_request_can_be_retried_after_move"]
 tags: ["scope", "路径", "目录", "仓库根", "start", "接续", "简报", "漏读"]
 ---
 # 方案范围与简报路径语义不同，开工失败或漏读知识

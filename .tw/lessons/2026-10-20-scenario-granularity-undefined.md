@@ -3,7 +3,6 @@ title: "场景粒度没有定义，细节用例都成了经真实入口执行的
 scope: ["self:skills/team-workflow/SKILL.md", "self:skills/team-workflow/references/business-acceptance.md", "self:skills/team-workflow/references/scenarios.md", "self:skills/team-workflow/references/team-delivery.md", "self:skills/team-workflow/references/onboarding.md", "self:skills/team-knowledge/scripts/tw_runtime/team/scenarios.py", "self:skills/team-knowledge/scripts/tw_runtime/team/scenario_acceptance.py"]
 source: ["self:docs/proposals/2026-10-20-verification-tiers.md"]
 verified: {"self": {"commit": "e22349cf2024ec9c9ce7cf60b819ffb4842a4c00", "date": "2026-10-20"}}
-guards: ["self:tests/test_scenario_cases.py#test_coverage_accepts_checks_and_counts_mixed_cases_without_running", "self:tests/test_scenario_acceptance.py#test_accept_names_missing_covered_test_and_imported_case", "self:tests/test_scenarios.py#test_check_reports_total_and_node_counts_in_file_order_and_text"]
 tags: ["场景粒度", "用例集", "分段验收", "快速检查", "文档膨胀"]
 ---
 # 场景粒度没有定义，细节用例都成了经真实入口执行的场景

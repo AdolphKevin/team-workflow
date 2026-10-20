@@ -1,9 +1,8 @@
 ---
 title: "场景校验、交付判定与证据显示各守一个入口"
-scope: ["self:skills/team-knowledge/scripts/tw_runtime/team/**", "self:tests/test_scenarios.py", "self:tests/test_scenario_rounds.py", "self:tests/test_scenario_acceptance.py", "self:tests/test_scenario_batch2.py", "self:tests/test_raw_output.py", "self:tests/test_checklist_records.py"]
-source: ["self:skills/team-workflow/references/contracts.md", "self:tests/test_scenarios.py", "self:tests/test_raw_output.py"]
+scope: ["self:skills/team-knowledge/scripts/tw_runtime/team/**"]
+source: ["self:skills/team-workflow/references/contracts.md"]
 verified: {"self": {"commit": "6a1390ab33a5e57abe1ab0b6e918fd3c8b093315", "date": "2026-10-17"}}
-guards: ["self:tests/test_scenarios.py#test_regression_command_check_is_rejected_at_its_line", "self:tests/test_scenario_rounds.py#test_command_check_without_case_report_is_rejected_before_submission", "self:tests/test_scenario_batch2.py#test_delivery_lists_three_pending_regressions_and_one_automated", "self:tests/test_raw_output.py#test_empty_stdout_and_stderr_bytes_survive_capture_and_delivery", "self:tests/test_checklist_records.py#test_text_labels_follow_their_own_fields", "self:tests/test_checklist_records.py#test_empty_files_are_content_bound_artifacts"]
 tags: ["回归登记", "交付状态", "原始输出", "结构化原因", "字段含义", "空文件证据"]
 ---
 # 场景校验、交付判定与证据显示各守一个入口

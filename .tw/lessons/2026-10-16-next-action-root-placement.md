@@ -1,9 +1,8 @@
 ---
 title: "下一步中的项目参数被知识命令拒绝"
-scope: ["self:skills/team-knowledge/scripts/tw_runtime/cli.py", "self:skills/team-knowledge/scripts/tw_runtime/team/repairs.py", "self:tests/test_recheck.py"]
-source: ["self:skills/team-workflow/references/contracts.md", "self:tests/test_recheck.py"]
+scope: ["self:skills/team-knowledge/scripts/tw_runtime/cli.py", "self:skills/team-knowledge/scripts/tw_runtime/team/repairs.py"]
+source: ["self:skills/team-workflow/references/contracts.md"]
 verified: {"self": {"commit": "ffc8fdcc8d590d18242e77bd0bb2917c3cbd17ba", "date": "2026-10-16"}}
-guards: ["self:tests/test_recheck.py#test_u1_all_knowledge_commands_accept_root_after_subcommand", "self:tests/test_recheck.py#test_u1_subcommand_root_takes_precedence_like_team_root"]
 tags: ["下一步", "初始化", "root", "命令参数"]
 ---
 # 下一步中的项目参数被知识命令拒绝

@@ -3,7 +3,6 @@ title: "改变仓库身份格式后，已迁移项目的配置失效而检查没
 scope: ["self:skills/team-knowledge/scripts/tw_runtime/team/commands.py", "self:skills/team-knowledge/scripts/tw_runtime/team/common.py", "self:skills/team-knowledge/scripts/tw_runtime/team/portable.py"]
 source: ["https://github.com/AdolphKevin/team-workflow/issues/5", "self:docs/validation.md"]
 verified: {"self": {"commit": "ac3be9083919f45fb2a2dcb979a99efdbc5cc3fb", "date": "2026-10-15"}}
-guards: ["self:tests/test_unified_team.py#test_project_checks_external_repository_identities_against_local_checkouts"]
 tags: ["仓库身份", "external_inputs", "迁移", "配置", "回归", "project"]
 ---
 # 改变仓库身份格式后，已迁移项目的配置失效而检查没有报

@@ -1,9 +1,8 @@
 ---
 title: "任务分支合并默认分支后，别人的改动被算成本任务的改动"
 scope: ["self:skills/team-knowledge/scripts/tw_runtime/team/validation.py", "self:skills/team-knowledge/scripts/tw_runtime/team/knowledge.py"]
-source: ["https://github.com/AdolphKevin/team-workflow/issues/5", "self:tests/test_task_base.py"]
+source: ["https://github.com/AdolphKevin/team-workflow/issues/5"]
 verified: {"self": {"commit": "ebcc0f402744ddf13681fdb5651b92af5903300f", "date": "2026-10-15"}}
-guards: ["self:tests/test_task_base.py#TaskBase"]
 tags: ["base", "合并", "默认分支", "改动范围", "知识处置", "验收"]
 ---
 # 任务分支合并默认分支后，别人的改动被算成本任务的改动

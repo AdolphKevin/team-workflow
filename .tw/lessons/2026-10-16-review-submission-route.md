@@ -1,9 +1,8 @@
 ---
 title: "平台任务的下一步仍指向本地评审提交"
-scope: ["self:skills/team-knowledge/scripts/tw_runtime/team/**", "self:tests/test_recheck.py"]
-source: ["self:skills/team-workflow/references/contracts.md", "self:tests/test_recheck.py"]
+scope: ["self:skills/team-knowledge/scripts/tw_runtime/team/**"]
+source: ["self:skills/team-workflow/references/contracts.md"]
 verified: {"self": {"commit": "ffc8fdcc8d590d18242e77bd0bb2917c3cbd17ba", "date": "2026-10-16"}}
-guards: ["self:tests/test_recheck.py#test_u2_run_and_status_choose_platform_publication", "self:tests/test_recheck.py#test_u2_missing_approval_uses_publication_and_keeps_plan_approval_path", "self:tests/test_recheck.py#test_u2_status_recomputes_prior_repair_from_its_error_code", "self:tests/test_recheck.py#test_u2_local_task_keeps_local_submission"]
 tags: ["平台评审", "提交方式", "下一步", "合并批准", "历史修复指引"]
 ---
 # 平台任务的下一步仍指向本地评审提交

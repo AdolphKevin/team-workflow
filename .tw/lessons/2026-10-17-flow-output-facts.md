@@ -1,9 +1,8 @@
 ---
 title: "开工、状态与摘要应读取同一份事实"
-scope: ["self:skills/team-knowledge/scripts/tw_runtime/team/**", "self:tests/test_four_command_delivery.py", "self:tests/test_ci_summary.py", "self:tests/test_scenario_acceptance.py", "self:tests/test_error_categories.py"]
+scope: ["self:skills/team-knowledge/scripts/tw_runtime/team/**"]
 source: ["self:docs/proposals/2026-10-16-scenario-acceptance-and-positive-text.md"]
 verified: {"self": {"commit": "3cab1d3b07e003e639767befad3a1380ec4d8786", "date": "2026-10-17"}}
-guards: ["self:tests/test_four_command_delivery.py#test_simple_start_and_status_share_steps_and_next_command", "self:tests/test_four_command_delivery.py#test_medium_start_and_status_share_steps_and_next_command", "self:tests/test_ci_summary.py#test_accept_summary_lists_only_selected_imported_checks", "self:tests/test_error_categories.py#test_scenario_repair_uses_states_with_arbitrary_problem_text"]
 tags: ["下一步", "开工", "摘要", "CI", "场景处置"]
 ---
 # 开工、状态与摘要应读取同一份事实

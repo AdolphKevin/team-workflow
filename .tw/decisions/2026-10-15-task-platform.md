@@ -1,7 +1,7 @@
 ---
 title: "本仓通过只读项目脚本接入 GitHub"
-scope: ["self:.tw/platform.py", "self:.tw/config.json", "self:tests/test_project_platform.py"]
-source: ["用户确认：AdolphKevin，2026-10-15，会话中确认需求在 Issue、方案与批准在 PR 描述与评审、从 GitHub Actions 导入检查结果", "self:tests/fixtures/project_platform/issue-2-comments.json", "self:tests/fixtures/project_platform/pull-3.json", "self:.github/workflows/validate.yml", "self:skills/team-workflow/references/platform.md"]
+scope: ["self:.tw/platform.py", "self:.tw/config.json"]
+source: ["用户确认：AdolphKevin，2026-10-15，会话中确认需求在 Issue、方案与批准在 PR 描述与评审、从 GitHub Actions 导入检查结果", "self:.github/workflows/validate.yml", "self:skills/team-workflow/references/platform.md"]
 status: "accepted"
 tags: ["平台", "GitHub", "Issue", "PR", "持续集成", "项目脚本", "接入"]
 ---
@@ -53,7 +53,7 @@ validate.yml 的 `TW_RUN_CONTEXT.job` 使用 `github.job`，即 `validate`；保
 ## 后果
 
 平台调用仍是只读，安装和登录由用户维护 gh；全量扫描 PR 和逐条查询评审可能耗时，配置超时为 120 秒。
-离线输入、合成部分和真实平台待核对范围见[测试说明](../../tests/fixtures/project_platform/README.md)。
+离线输入、合成部分和真实平台待核对范围见提交 5313562 中的 `tests/fixtures/project_platform/README.md`（本仓测试于 2026-10-20 删除）。
 真实分页、下载重定向、产物摘要及有评审 PR 的编辑时间仍由沙箱外验收，离线通过不代表这些已经完成。
 
 ## 接入指引问题与处理

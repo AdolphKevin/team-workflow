@@ -1,6 +1,6 @@
 ---
 title: "SOP 独立验证、看板与团队流程通过场景文件和结果格式协作"
-scope: ["self:skills/playwright-acceptance/**", "self:skills/team-workflow/references/scenarios.md", "self:skills/team-workflow/references/onboarding.md", "self:tests/test_playwright_to_scenarios.py"]
+scope: ["self:skills/playwright-acceptance/**", "self:skills/team-workflow/references/scenarios.md", "self:skills/team-workflow/references/onboarding.md"]
 source: ["self:docs/proposals/2026-10-19-tw-sop-1-design.md"]
 status: "accepted"
 tags: ["SOP", "独立验证", "sop-verify", "sop-board", "praxis-skills", "采用方式"]

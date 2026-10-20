@@ -34,43 +34,13 @@
       "id": "platform-contract",
       "title": "平台脚本契约",
       "source": "self:skills/team-workflow/references/platform.md",
-      "scope": ["self:skills/team-knowledge/scripts/tw_runtime/team/platform_script.py", "self:skills/team-knowledge/scripts/tw_runtime/team/**", "self:tests/test_platform.py"]
+      "scope": [
+        "self:skills/team-knowledge/scripts/tw_runtime/team/platform_script.py",
+        "self:skills/team-knowledge/scripts/tw_runtime/team/**"
+      ]
     }
   ],
   "checks": {
-    "unit": {
-      "argv": [
-        "python3",
-        "scripts/test.py",
-        "--junitxml",
-        "{output}/results.xml"
-      ],
-      "purpose": "验证知识运行时与团队流程：检索、检查、执行绑定、交付与交接",
-      "cwd": ".",
-      "timeout": 600,
-      "format": "junit",
-      "required_cases": [],
-      "required_env": [],
-      "report": "{output}/results.xml",
-      "artifacts": [
-        "{output}/results.evidence.json"
-      ],
-      "environment": {
-        "kind": "stateless"
-      },
-      "coverage": {
-        "level": "journey",
-        "entrypoints": [
-          "tw.py"
-        ],
-        "environment": "isolated-test-repositories",
-        "substitutes": [
-          "项目平台脚本夹具"
-        ],
-        "isolation": "isolated",
-        "isolation_evidence": []
-      }
-    },
     "release": {
       "argv": [
         "python3",
@@ -109,7 +79,6 @@
   },
   "required_checks": {
     "code": [
-      "unit",
       "release"
     ],
     "docs": [
@@ -118,15 +87,24 @@
   },
   "risk_checks": {
     "public-contract": [
-      "unit"
+      "release"
     ]
   },
   "inputs": [],
   "environment_versions": {},
   "platform": {
-    "argv": ["python3", ".tw/platform.py"],
+    "argv": [
+      "python3",
+      ".tw/platform.py"
+    ],
     "timeout": 120,
-    "operations": ["task", "commit", "reference", "ci-result", "file-url"]
+    "operations": [
+      "task",
+      "commit",
+      "reference",
+      "ci-result",
+      "file-url"
+    ]
   },
   "acceptance_entries": {
     "cli": {

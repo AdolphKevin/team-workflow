@@ -3,7 +3,6 @@ title: "工作区指纹随运行环境变化"
 scope: ["self:skills/team-knowledge/scripts/tw_runtime/gitutil.py", "self:skills/team-knowledge/scripts/tw_runtime/team/common.py", "self:skills/team-knowledge/scripts/tw_runtime/team/validation.py", "self:skills/team-knowledge/scripts/tw_runtime/team/portable.py", "self:skills/team-knowledge/scripts/tw_runtime/team/knowledge.py"]
 source: ["https://github.com/AdolphKevin/team-workflow/issues/5", "self:docs/proposals/2026-10-16-issue5-leftovers.md"]
 verified: {"self": {"commit": "ab02c838dd106c02a262ab19790b49dc5f02eb5b", "date": "2026-10-16"}}
-guards: ["self:tests/test_issue5_workspace.py#test_inventory_and_changed_paths_follow_checkout_rules_across_xdg_environments", "self:tests/test_task_progress.py#test_scope_problem_names_globally_ignored_file_and_both_resolutions"]
 tags: ["源码指纹", "工作区", "改动范围", "全局忽略", "XDG_CONFIG_HOME", "本机文件"]
 ---
 # 工作区指纹随运行环境变化

@@ -1,9 +1,8 @@
 ---
 title: "解决标准库重名时仍须保留内部模块的导入优先级"
-scope: ["self:skills/team-knowledge/scripts/tw_runtime/cli.py", "self:skills/team-knowledge/scripts/tw_runtime/team/**", "self:scripts/check_release.py", "self:scripts/ci_result.py"]
-source: ["self:tests/test_team_imports.py", "self:AGENTS.md"]
+scope: ["self:skills/team-knowledge/scripts/tw_runtime/cli.py", "self:skills/team-knowledge/scripts/tw_runtime/team/**", "self:scripts/check_release.py"]
+source: ["self:AGENTS.md"]
 verified: {"self": {"commit": "8b536d5c3fa7cd8ce0100f47d1bc3d86618394ac", "date": "2026-10-15"}}
-guards: ["self:tests/test_team_imports.py#test_team_modules_take_priority_and_validation_uses_stdlib_platform"]
 tags: ["导入", "标准库", "模块重名", "环境"]
 ---
 # 解决标准库重名时仍须保留内部模块的导入优先级

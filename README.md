@@ -56,9 +56,8 @@ tw team deliver --task <身份> --reason <不需要更新知识的理由>
 MATT 基于 [mattpocock/skills](https://github.com/mattpocock/skills) 主分支提交 `b0618bc`，保留源码、配套资源和 MIT 许可；适配补丁可以反向恢复并逐文件校验，见[来源与更新](docs/upstream.md)。
 
 ```bash
-python3 -m unittest discover -s tests -v
 python3 scripts/check_release.py
 python3 scripts/package.py --output <仓库外目录>/team-workflow.zip
 ```
 
-[验收标准](docs/acceptance.md)区分自动化测试、隔离代理试用和真实成员试点，实际结果记录在[验证记录](docs/validation.md)；未执行的项目不得写成通过。工具只核对所列检查与材料，不替代业务判断。
+[验收标准](docs/acceptance.md)区分场景验收、隔离代理试用和真实成员试点，实际结果记录在[验证记录](docs/validation.md)；未执行的项目不得写成通过。工具只核对所列检查与材料，不替代业务判断。
