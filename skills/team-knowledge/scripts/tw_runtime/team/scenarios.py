@@ -128,7 +128,7 @@ def task_scenarios(root, group):
     return set(task_entries(root, group, load_profile(root))[2])
 
 
-def check_coverage(document, cases, identifiers):
+def check_coverage(document, cases, identifiers, profile):
     v, pairs, categories = scenario_files.Validation(document), document.value, {}
     if not v.shape(pairs, (), {'covered', 'conflict', 'disposed'}, pairs.keys() if isinstance(pairs, dict) else ()):
         raise scenario_files.FileProblems(v.errors, Code.SCENARIO_COVERAGE)
@@ -136,6 +136,8 @@ def check_coverage(document, cases, identifiers):
         for index, row in enumerate(v.array(pairs.get(category), (category,))):
             p = (category, index)
             required = {'case', 'state', 'reason', 'confirmed_by'} if category == 'disposed' else {'case', 'scenarios', 'note'}
+            if category == 'covered':
+                required = {'case', 'note'}
             if not v.shape(row, p, required, row.keys() if isinstance(row, dict) else ()):
                 continue
             key = row.get('case')
@@ -149,9 +151,19 @@ def check_coverage(document, cases, identifiers):
                 for field in ('reason', 'confirmed_by'):
                     v.text(row.get(field), p + (field,))
             else:
-                for ordinal, scenario in enumerate(v.array(row.get('scenarios'), p + ('scenarios',))):
-                    if not isinstance(scenario, str) or scenario not in identifiers:
-                        v.add(p + ('scenarios', ordinal), 'scenarios 引用本任务的场景编号：' + str(scenario))
+                if category == 'covered' and not {'scenarios', 'checks'} & row.keys():
+                    v.add(p, 'covered 至少包含 scenarios 或 checks')
+                if category == 'conflict' or 'scenarios' in row:
+                    for ordinal, scenario in enumerate(v.array(row.get('scenarios'), p + ('scenarios',), category == 'covered')):
+                        if not isinstance(scenario, str) or scenario not in identifiers:
+                            v.add(p + ('scenarios', ordinal), 'scenarios 引用本任务的场景编号：' + str(scenario))
+                if category == 'covered' and 'checks' in row:
+                    for ordinal, check in enumerate(v.array(row['checks'], p + ('checks',), True)):
+                        start = len(v.errors)
+                        scenario_files.validate_check(v, check, p + ('checks', ordinal), profile)
+                        if isinstance(check, dict):
+                            for error in v.errors[start:]:
+                                error.update(case=key, check=check.get('check'), test_cases=check.get('cases'))
                 if not isinstance(row.get('note'), str):
                     v.add(p + ('note',), 'note 应为字符串')
     incomplete = []
@@ -165,10 +177,11 @@ def check_coverage(document, cases, identifiers):
         result = scenario_files.FileProblems(v.errors, Code.SCENARIO_COVERAGE).result()
         result['cases'] = incomplete
         return result
-    return {'ok': True}
+    return {'ok': True, 'covered_by_scenarios': sum('scenarios' in row for row in pairs['covered']),
+            'covered_by_checks': sum('checks' in row for row in pairs['covered'])}
 
 
-def coverage(root, task_id, path):
+def coverage(root, task_id, path, profile, *, workspace=None):
     try:
         raw = path.read_text(encoding='utf-8')
         document = scenario_yaml.loads(raw, '.json')
@@ -177,15 +190,16 @@ def coverage(root, task_id, path):
     from cleanup import guard
     with guard(root):
         group = current(root, task_id)
-        cases, identifiers = imported_cases(root, group), task_scenarios(root, group)
-        result = check_coverage(document, cases, identifiers)
+        cases = imported_cases(root, group)
+        identifiers = set(task_entries(root, group, profile, workspace=workspace)[2])
+        result = check_coverage(document, cases, identifiers, profile)
         if not result['ok']:
             return result
         pairs = document.value
         ref = snapshot(root, group, 'coverage.json', raw)
         group['case_coverage'] = ref
         write(materials.path(root, task_id), group)
-    return {'ok': True, 'total': len(cases), 'covered': len(pairs['covered']), 'disposed': len(pairs['disposed']),
+    return {**result, 'total': len(cases), 'covered': len(pairs['covered']), 'disposed': len(pairs['disposed']),
             'artifact': ref, 'summary': '全部导入用例已覆盖或已处置。'}
 
 
@@ -203,6 +217,6 @@ def dispatch(args, root, profile, *, workspace=None):
         if args.scenario_action == 'submit':
             import scenario_rounds
             return scenario_rounds.submit(root, str(args.task), profile, root / args.results, workspace=workspace)
-        return coverage(root, str(args.task), root / args.pairs)
+        return coverage(root, str(args.task), root / args.pairs, profile, workspace=workspace)
     except scenario_files.FileProblems as exc:
         return exc.result()

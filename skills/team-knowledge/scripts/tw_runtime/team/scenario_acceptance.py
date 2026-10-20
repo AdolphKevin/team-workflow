@@ -41,12 +41,29 @@ def check_cases(root, profile, task, design, group, *, workspace=None):
         else:
             document = scenario_yaml.loads('{"covered": [], "conflict": [], "disposed": []}', '.json')
         entries = current(root, profile, task, design, workspace=workspace)[1]['scenarios']
-        result = scenarios.check_coverage(document, cases, {row['id'] for row in entries})
-        require(result['ok'], result.get('problem', '补齐当前用例的场景覆盖'), error_code=Code.SCENARIO_COVERAGE)
+        result = scenarios.check_coverage(document, cases, {row['id'] for row in entries}, profile)
+        problem = result.get('problem', '补齐当前用例的场景覆盖')
+        for error in result.get('errors', []):
+            if 'check' in error:
+                problem += '；导入用例 ' + str(error['case']) + '：检查 ' + str(error['check']) + '，测试用例 ' + str(error['test_cases'])
+        require(result['ok'], problem, error_code=Code.SCENARIO_COVERAGE)
+        checks, incomplete = {}, []
+        for row in document.value['covered']:
+            for check in row.get('checks', []):
+                # 整组通过时不再逐个核对；未通过时逐个用例定位，以便点名。
+                if scenario_rounds.regression_reason(root, profile, task, group, {'regression': check}, checks, workspace=workspace) is None:
+                    continue
+                for case in check['cases']:
+                    entry = {'regression': {'check': check['check'], 'cases': [case]}}
+                    reason = scenario_rounds.regression_reason(root, profile, task, group, entry, checks, workspace=workspace)
+                    if reason is not None:
+                        message = '检查未通过' if reason == 'check-not-passed' else '用例缺失或失败'
+                        incomplete.append('导入用例 ' + row['case'] + '：检查 ' + check['check'] + '，测试用例 ' + case + '：' + message)
+        require(not incomplete, '；'.join(incomplete), error_code=Code.SCENARIO_COVERAGE)
     else:
         from designs import task_assessments
         require(not any(row['complexity'] == 'complex' for row in task_assessments(design, task['section_ids']).values()),
-                '复杂任务需要测试同事的用例集，用 tw team scenarios import-cases 导入', error_code=Code.TESTER_CASES)
+                '复杂任务需要主流程用例集（测试同事提供，或由未参与实现的测试代理编写），用 tw team scenarios import-cases 导入', error_code=Code.TESTER_CASES)
 
 
 def check(root, profile, task, design, review, group, value, *, workspace=None):

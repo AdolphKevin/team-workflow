@@ -287,7 +287,7 @@ tw team metrics --root "$PROJECT" [--task "$TASK"] [--since 2026-10-01] [--forma
 
 ### 场景与入口
 
-`scenarios check <文件>` 核对 `metadata.sources`、编号唯一、每节点正向场景及反向场景或 `negative_exempt` 理由、反向 `negative_type`、场景的 `verify` 入口。场景内容指纹覆盖 `initial_state`、`steps`、`expected`、`forbidden_effects`，错误给原文行号。
+`scenarios check <文件>` 核对 `metadata.sources`、编号唯一、每节点正向场景及反向场景或 `negative_exempt` 理由、反向 `negative_type`、场景的 `verify` 入口。场景内容指纹覆盖 `initial_state`、`steps`、`expected`、`forbidden_effects`，错误给原文行号。成功返回 `scenario_count`（总数）、`node_counts`（按文件顺序的 `{node, count}` 数组）；`summary` 与文本输出呈现总数和各节点数。
 
 `.tw/config.json` 的 `acceptance_entries` 以入口名映射 `surface`、`operate`、非空 `observe`、非空 `evidence`、`isolation`；可选 `address_env` 为环境变量名，`accounts` 引用已声明账号编号。每条场景用 `verify` 选择入口；纯文档也声明自己的入口。
 
@@ -299,7 +299,7 @@ tw team metrics --root "$PROJECT" [--task "$TASK"] [--since 2026-10-01] [--forma
 
 `scenarios import-cases --task <身份> <文件>` 读取 YAML 子集或 JSON，顶层 `test_cases` 或 `cases` 数组中每条含 `id`、`title`，其余字段原样保存在快照。`case_imports` 按导入顺序累积，同编号采用最后一次完整内容。
 
-代理按业务语义把用例转换为团队场景，写配对文件后运行 `scenarios coverage --task <身份> --pairs <文件>`。每条已导入用例恰好归入 `covered` 或 `disposed`；`conflict`、缺归类、重复归类或引用未知编号时报 `scenario-coverage-incomplete`。`covered`、`conflict` 含 `case`、`scenarios`、`note`；`disposed` 含 `case`、`state`（`blocked/deferred/out-of-scope`）、`reason`、`confirmed_by`。通过后保存 `case_coverage`。覆盖的语义及充分性由评审确认。
+按业务语义写配对文件后运行 `scenarios coverage --task <身份> --pairs <文件>`，核对结构。每条已导入用例恰好归入 `covered` 或 `disposed`。`covered` 必填 `case`、`note`，另含 `scenarios`（场景编号数组）、`checks` 至少一项，可同时填写，出现的数组均非空。`checks` 每项为 `{check, cases}`：`check` 引用已登记的 junit 或 go-json 检查，`cases` 为非空字符串数组，JUnit 用例名为 `类名::测试名`。`conflict` 含 `case`、`scenarios`、`note`；`disposed` 含 `case`、`state`（`blocked/deferred/out-of-scope`）、`reason`、`confirmed_by`。结构或归类问题报 `scenario-coverage-incomplete`，结构问题附原文行号。通过后保存 `case_coverage`，返回 `covered_by_scenarios`、`covered_by_checks` 两类覆盖的用例数，同时声明两种形式的用例在两类中各计一次。`accept`、`deliver` 按场景回归规则逐项核对检查已登记、所列测试用例在当前源码的有效运行中出现并通过；失败报 `scenario-coverage-incomplete`，点名导入用例、检查、测试用例及原因。覆盖的语义及充分性由评审确认。
 
 ### 待执行清单与结果
 
@@ -320,7 +320,7 @@ tw team metrics --root "$PROJECT" [--task "$TASK"] [--since 2026-10-01] [--forma
 
 轮次保存逐场景结果与通过、失败、受阻、跳过数；`metrics` 的每轮通过率为通过数除以本轮结果数。`first_pass` 按登记轮次取当前场景内容的首次结果，通过数除以首次为 `pass` 或 `fail` 的场景数，空分母返回 null。`by_executor` 按规范化执行者身份取当前场景内容的最新结果；`agreement` 在至少两位执行者有通过或失败结果的场景中，统计所有结果均通过的比例。
 
-`accept` 要求检查通过、场景均为 `passed` 或受阻已处置；`blocked`、`skip` 对应问题在评审中为 `accepted` 或 `deferred`，按[问题处置](#问题处置与交接)填写确认人及依据。复杂任务需导入测试同事的用例；任务有导入时，`accept` 用当前用例并集重新核对覆盖；没有导入的中等、简单任务按自写场景验收。
+`accept` 要求检查通过、场景均为 `passed` 或受阻已处置；`blocked`、`skip` 对应问题在评审中为 `accepted` 或 `deferred`，按[问题处置](#问题处置与交接)填写确认人及依据。复杂任务需导入主流程用例集；任务有导入时，`accept` 用当前用例并集重新核对覆盖及检查形式的配对；没有导入的中等、简单任务按自写场景验收。
 
 评审观察种类为 `execution` 和 `scenarios`：前者含 `{run:{path,sha256}, check, cases}`，运行属于本任务且为选中的有效结果；后者含本任务轮次引用 `rounds`。评审稿预填场景状态、实际结果、执行者、轮次和证据；受阻场景的问题按验收负责人及受影响验收节补入清单。`reviewer` 与场景 `executor` 均独立于 `roles.implementation_owner`，姓名比较折叠大小写和多余空格，实施负责人必填。成员和代理使用稳定、可区分的身份。
 

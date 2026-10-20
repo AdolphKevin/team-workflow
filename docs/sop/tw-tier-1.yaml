@@ -1,0 +1,137 @@
+# TW-TIER-1：验证规格分级与分段验收的验收场景
+# 预期只依据 docs/proposals/2026-10-20-verification-tiers.md（已批准）第 2、4 节，不依据当前实现的输出。
+# 版本 1（2026-10-20）：Claude 依据方案第 4 节编写，AdolphKevin 于 2026-10-20 批准方案全文。
+#
+# "候选技能"指本仓工作区中的 skills/team-workflow 与 skills/team-knowledge；cli 场景把它们复制到临时目录，在临时项目中运行候选 tw。
+# 技能场景的新会话以 claude -p 加 --setting-sources project,local 与 --strict-mcp-config 启动，候选技能放在临时项目的 .claude/skills/。
+# "在线客服需求"指 docs/sop/fixtures/tw-tier-1/requirement.md，"李娜的用例"指同目录 cases.yaml（30 条，其中 TC_LC_101–112 为字段、格式、时限与文案等细节）。
+# "临时客服项目"指一个临时 Git 仓库：已运行 tw init --apply；acceptance_entries 声明 web 与 api 入口；checks 登记 fast（purpose 写"快速检查：单元测试，约 1 分钟"）与 full（purpose 写"完整检查：数据库与浏览器测试，约 20 分钟"）。
+
+metadata:
+  requirement: "验证规格分级：场景只写业务流程，用例集只覆盖主流程，细节用例由检查覆盖，沿业务链路分段验收，检查分快慢两组"
+  batch: "tw-tier-1"
+  version: 1
+  owner: "AdolphKevin"
+  sources:
+    - ref: "docs/proposals/2026-10-20-verification-tiers.md 第 2、4 节"
+      version: "v1（2026-10-20 批准）"
+      confirmed_by: "AdolphKevin"
+  tags: ["tw", "场景粒度", "分段验收", "快速检查"]
+
+sops:
+
+  - id: SOP-01
+    title: 用例覆盖的检查形式
+    actor: "复杂任务的实施代理"
+    entry: "tw team scenarios coverage、tw team accept"
+    must:
+      - "细节用例可由登记检查中的测试用例覆盖"
+      - "accept 按场景回归的同一规则核对这些测试用例"
+    scenarios:
+
+      - id: SOP-01-P01
+        polarity: positive
+        title: 流程用例由场景覆盖、细节用例由检查覆盖，业务验收通过
+        actor: 复杂任务的实施代理
+        priority: P0
+        refs: ["2.3"]
+        verify: cli
+        initial_state: ["一个用候选技能接入的临时项目，登记 junit 格式的检查 unit", "一个已批准并开工的复杂任务，场景文件含 8 条场景且已由独立执行者全部通过", "一份 12 条用例的用例文件：8 条流程用例、4 条细节用例", "unit 的测试中含 4 个对应细节用例的测试"]
+        steps: ["运行 tw team scenarios import-cases --task <身份> <用例文件>", "写配对文件：8 条流程用例在 covered 中引用场景，4 条细节用例在 covered 中用 checks 引用 unit 的测试用例名", "运行 tw team scenarios coverage --task <身份> --pairs <配对文件>", "运行 tw team run --task <身份>，提交独立评审", "运行 tw team accept --task <身份>"]
+        expected: ["coverage 退出码为 0，输出 12 条用例全部覆盖，并分别给出由场景与由检查覆盖的数量", "accept 通过，业务验收记录生成"]
+        forbidden_effects: ["coverage 或 accept 报 scenario-coverage-incomplete"]
+        evidence_hints: ["命令原文与完整输出", "配对文件", "用例文件"]
+
+      - id: SOP-01-N01
+        polarity: negative
+        negative_type: not-found
+        title: 检查形式引用的测试用例缺失或失败时 accept 拒绝
+        actor: 复杂任务的实施代理
+        priority: P0
+        refs: ["2.3"]
+        verify: cli
+        initial_state: ["同 SOP-01-P01，coverage 已通过"]
+        steps: ["删除一个细节用例对应的测试，把另一个改为断言失败", "运行 tw team run --task <身份> 并重新提交评审", "运行 tw team accept --task <身份>"]
+        expected: ["accept 拒绝，错误码为 scenario-coverage-incomplete", "错误信息点名两个导入用例的编号、检查 unit 与缺失和失败的测试用例名"]
+        forbidden_effects: ["生成业务验收通过的记录"]
+        evidence_hints: ["命令原文与完整输出"]
+
+  - id: SOP-02
+    title: 场景数
+    actor: "方案作者与评审人"
+    entry: "tw team scenarios check"
+    negative_exempt: "场景数只作为事实输出，不设阈值；结构错误的反向场景沿用 tw-scenario-acceptance 的 SOP-01"
+    must:
+      - "check 输出场景总数与各节点场景数，不据此拒绝"
+    scenarios:
+
+      - id: SOP-02-P01
+        polarity: positive
+        title: check 输出场景总数与各节点场景数
+        actor: 方案作者
+        priority: P1
+        refs: ["2.2"]
+        verify: cli
+        initial_state: ["用候选技能接入的临时项目", "一份合格的场景文件：节点 SOP-01 有 3 条场景，SOP-02 有 22 条"]
+        steps: ["运行 tw team scenarios check <场景文件>"]
+        expected: ["退出码为 0", "输出场景总数 25，以及 SOP-01 为 3、SOP-02 为 22"]
+        forbidden_effects: ["因数量超过 20 而失败或报警告"]
+        evidence_hints: ["命令原文与完整输出"]
+
+  - id: SOP-03
+    title: 代理按分级标准写方案并分段实施
+    actor: "使用 team-workflow 的代理"
+    entry: "只装候选技能的新会话"
+    negative_exempt: "本节点验证代理按指引做事，反向情形由 SOP-01、SOP-02 的命令行场景覆盖"
+    must:
+      - "场景只写业务流程，十几条；细节交给测试"
+      - "实施沿业务链路分段，每段完成即验收；每段交回运行相关测试与快速检查"
+    scenarios:
+
+      - id: SOP-03-P01
+        polarity: positive
+        title: 跨 5 个仓库的需求写出十几条场景、细节归入检查、沿链路分段
+        actor: 使用 team-workflow 的代理
+        priority: P0
+        refs: ["2.1", "2.2", "2.3", "2.4"]
+        verify: skill
+        initial_state: ["临时客服项目，docs/ 下放有在线客服需求与李娜的用例", "新会话只装候选技能"]
+        steps: ["对新会话说：/team-workflow 按团队流程为 docs/requirement.md 的在线客服需求写方案和场景文件，测试同事李娜的用例在 docs/cases.yaml，这是复杂任务；只写方案、场景文件和用例配对，不实现，不运行 start"]
+        expected: ["场景文件通过 tw team scenarios check，场景总数在 10 到 20 条之间，每条是角色经入口完成的一件业务事", "配对文件中流程用例引用场景；消息长度、空白、时间格式、签名格式、请求体字段、重试间隔、截断、超时、排序、未读数等细节用例用 checks 形式引用测试用例，或写明在实施中补测试", "方案的实施任务沿业务链路分段，第一段为访客消息经网关到达主服务、客服在工作台收到并回复这条最薄的端到端路径，后续段各写明接通的起点与终点", "方案写明每段实现完成后验收本段场景"]
+        forbidden_effects: ["按技术层拆分任务（例如网关一段、存储一段、页面一段）", "为每条细节用例各写一条经真实入口执行的场景", "修改 docs/ 以外的业务代码"]
+        evidence_hints: ["会话记录", "方案、场景文件与配对文件", "scenarios check 输出"]
+
+      - id: SOP-03-P02
+        polarity: positive
+        title: 每段交回运行相关测试与快速检查，场景验收前运行全部检查
+        actor: 使用 team-workflow 的代理
+        priority: P0
+        refs: ["2.5"]
+        verify: skill
+        initial_state: ["临时客服项目中一个已开工的任务，方案分两段，第 1 段的实现已在工作区", "新会话只装候选技能"]
+        steps: ["对新会话说：/team-workflow 实现者交回了任务 <身份> 第 1 段的实现，请复核", "复核结束后对同一会话说：第 1 段复核通过，准备第 1 段的场景验收"]
+        expected: ["第一句之后，会话运行与改动相关的测试，并以 tw team run --task <身份> --check fast 或项目的快速测试命令运行快速检查", "第二句之后，会话在取待执行场景之前运行 tw team run --task <身份>，执行全部登记检查"]
+        forbidden_effects: ["第一句之后运行 full 检查或不带 --check 的 tw team run"]
+        evidence_hints: ["会话记录", "命令记录"]
+
+  - id: SOP-04
+    title: 发行
+    actor: "维护者"
+    entry: "python3 scripts/check_release.py"
+    negative_exempt: "发行检查自身的反向由其单元测试覆盖"
+    must:
+      - "指令文本在篇幅预算内"
+    scenarios:
+
+      - id: SOP-04-P01
+        polarity: positive
+        title: 发行检查与篇幅预算通过
+        actor: 维护者
+        priority: P0
+        refs: ["3"]
+        verify: cli
+        initial_state: ["本仓工作区为本任务的候选版"]
+        steps: ["运行 python3 scripts/check_release.py"]
+        expected: ["退出码为 0", "team-workflow 的 SKILL.md、scenarios.md、onboarding.md 均在预算内"]
+        forbidden_effects: ["提高任何篇幅预算"]
+        evidence_hints: ["命令原文与完整输出"]

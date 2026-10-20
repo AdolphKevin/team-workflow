@@ -4,14 +4,14 @@
 
 ## 1. 场景文件
 
-场景放在业务仓库，推荐 `docs/sop/<批次>.yaml`，按原文登记。采用 JSON 或 YAML 子集（对象、数组、字符串、数字、布尔值、空值），空格缩进，字符串按需加引号，示例见[场景模板](../templates/scenarios.yaml)。
+场景放在业务仓库，推荐 `docs/sop/<批次>.yaml`，按原文登记，只写业务流程，粒度与数量见[场景粒度](business-acceptance.md#场景粒度)。采用 JSON 或 YAML 子集（对象、数组、字符串、数字、布尔值、空值），空格缩进，字符串按需加引号，示例见[场景模板](../templates/scenarios.yaml)。
 
 `sources.confirmed_by` 填原文的实际确认人。代理推断的预期先写方案问题清单，阻塞 `acceptance`；确认后并入场景并补确认人。
 
 - 顶层为 `metadata` 与 `sops`。`metadata` 必填 `requirement`、`batch`、`version`、`owner`、非空 `sources`；每项来源含 `ref`、`version`、`confirmed_by`，可选 `tags`。
 - 节点必填 `id`、`title`、`actor`、`entry`、`scenarios`，可选 `must`、`negative_exempt`。每个节点至少一条正向 `positive` 和一条反向 `negative` 场景；反向豁免理由写入 `negative_exempt`。
 - 场景必填 `id`、`polarity`、`title`、`actor`、`priority`、`verify`、`initial_state`、`steps`、`expected`、`forbidden_effects`。后四项为字符串数组：前三项非空，副作用数组可空。可选 `refs`、`evidence_hints`、`tags`、`regression`。节点编号在文件内唯一，场景编号在任务内唯一。
-- 反向场景另填 `negative_type`：`empty-input`、`over-length`、`not-found`、`permission`、`cross-tenant`、`duplicate`、`concurrency`、`disconnect`、`timeout`、`archived`、`invalid-input`、`incomplete-input`、`interrupted`、`stale-input`、`tampered-input`、`other`，分别对应空输入、超长、对象缺失、权限、跨租户、重复、并发、断线、超时、归档、输入错误、输入缺漏、中断、过期输入、篡改及其他。
+- 反向场景另填 `negative_type`：`empty-input`、`over-length`、`not-found`、`permission`、`cross-tenant`、`duplicate`、`concurrency`、`disconnect`、`timeout`、`archived`、`invalid-input`、`incomplete-input`、`interrupted`、`stale-input`、`tampered-input`、`other`。
 
 方案验收节用 `- 场景：docs/sop/<批次>.yaml#SOP-02、SOP-03` 引用节点。`tw team scenarios check <文件>` 核对结构、来源、正反向规则及入口，问题附行号。
 
@@ -46,16 +46,22 @@
 
 ## 4. 用例导入与覆盖
 
-测试同事的用例集随需求增长，历次导入的并集都要覆盖；同一编号采用最后一次导入的完整内容。
+复杂需求导入主流程用例集，历次导入的并集都要覆盖，同一编号取最后一次导入的内容。
 
 ```bash
 tw team scenarios import-cases --task <身份> <用例文件>
 tw team scenarios coverage --task <身份> --pairs <配对.json>
 ```
 
-用例文件采用 JSON 或 YAML 子集，顶层 `test_cases` 或 `cases` 数组每项必填 `id`、`title`，其余字段原样保存。代理阅读用例并转换为场景，按业务语义判断覆盖，补齐遗漏场景后写配对文件；预期有分歧时以测试同事的理解为准。
+用例文件采用 JSON 或 YAML 子集，顶层 `test_cases` 或 `cases` 数组每项必填 `id`、`title`，其余字段原样保存。代理按业务语义判断覆盖：流程用例由场景覆盖，补齐遗漏场景；细节用例由检查中的测试用例覆盖。预期有分歧时以测试同事的理解为准。
 
-配对文件含三个数组：`covered`、`conflict` 每项为 `{case, scenarios, note}`；`disposed` 每项为 `{case, state, reason, confirmed_by}`，`state` 取 `blocked`、`deferred`、`out-of-scope`。每条导入用例恰好归一类，引用本任务场景编号。工具核对结构；存在分歧、缺归类或重复归类时返回 `scenario-coverage-incomplete`。处置由测试同事确认；预期仍待确认的部分在首轮后交其确认。
+配对文件含三个数组，每条导入用例恰好归一类：
+
+- `covered`：`{case, scenarios, checks, note}`，`scenarios` 引用本任务场景编号；`checks` 每项为 `{check, cases}`，写法同 `regression`；两者至少一项。`accept` 核对所列用例在当前源码的有效运行中通过。
+- `conflict`：`{case, scenarios, note}`，预期有分歧。
+- `disposed`：`{case, state, reason, confirmed_by}`，`state` 取 `blocked`、`deferred`、`out-of-scope`，由测试同事确认。
+
+存在分歧、缺归类或重复归类时返回 `scenario-coverage-incomplete`。预期仍待确认的部分在首轮后交测试同事确认。
 
 ## 5. 执行与提交
 
@@ -74,15 +80,15 @@ tw team scenarios pending --task <身份> --format json
 tw team scenarios submit --task <身份> --results <结果.jsonl>
 ```
 
-提交覆盖清单的全部场景，执行者与实施负责人独立。`submit` 核对证据、复制到本轮目录并保存摘要，绑定当前场景与产品指纹；登记成功后可清理原证据。结果由人、代理、看板或转换脚本产生，均使用同一契约。
+提交覆盖清单的全部场景，执行者与实施负责人独立。`submit` 核对证据、复制到本轮目录并保存摘要，绑定当前场景与产品指纹；登记成功后可清理原证据。
 
-轮次统计含执行数与四种结果数；本轮通过率为通过数除以执行数。`first_pass` 按当前场景内容的首次结果统计，通过数除以通过与失败之和；受阻、跳过分别保留。`metrics` 展示轮次、执行者统计与同场景多执行者均通过的比例，比较时保留分子、分母及轮次。
+轮次统计与 `metrics` 口径见[工具约定](contracts.md#轮次验收与回归)，比较时保留分子、分母及轮次。
 
 ## 6. 增量验收
 
 `pending` 列出新增、内容变化、上次失败，以及产品源码变化后回归尚未覆盖的场景。场景内容指纹覆盖 `initial_state`、`steps`、`expected`、`forbidden_effects`。同产品指纹上已通过的场景继续有效；产品变化后，已通过场景声明的回归检查及用例在当前源码有效运行中通过，场景继续有效。受阻项通过问题处置跟进。
 
-补写遗漏场景后按新清单执行并提交；已通过场景复用有效结果或沉淀的回归。回归状态由 `regression` 与当前运行生成，字段见[工具约定](contracts.md#轮次验收与回归)。
+回归状态由 `regression` 与当前运行生成，字段见[工具约定](contracts.md#轮次验收与回归)。
 
 ## 7. 复测看板契约与搭建
 

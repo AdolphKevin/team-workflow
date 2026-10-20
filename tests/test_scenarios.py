@@ -70,6 +70,27 @@ class ScenarioCases(unittest.TestCase):
         value['sops'][0]['negative_exempt'] = '本节点由另一组反向场景覆盖'
         self.assertEqual(self.call('scenarios', 'check', self.save(value))[0], 0)
 
+    def test_check_reports_total_and_node_counts_in_file_order_and_text(self):
+        value = scenario_file()
+        first = value['sops'][0]
+        first['id'] = 'SOP-02'
+        second = copy.deepcopy(first)
+        second['id'] = 'SOP-01'
+        second['scenarios'] = [{**second['scenarios'][0], 'id': 'T-P'}]
+        second['negative_exempt'] = '反向规则由检查覆盖'
+        value['sops'].append(second)
+        path = self.save(value)
+        code, result = self.call('scenarios', 'check', path)
+        self.assertEqual(code, 0, result)
+        self.assertEqual(result.get('scenario_count'), 3, result)
+        self.assertEqual(result['node_counts'], [{'node': 'SOP-02', 'count': 2}, {'node': 'SOP-01', 'count': 1}])
+        self.assertEqual(result['summary'], '场景文件已通过结构核对：共 3 条场景，SOP-02 2 条、SOP-01 1 条。')
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            code = workflow.main(['--root', str(self.root), 'scenarios', 'check', str(path), '--format', 'text'])
+        self.assertEqual(code, 0, output.getvalue())
+        self.assertIn(result['summary'], output.getvalue())
+
     def test_undeclared_entry_names_scenario_value_and_source_line(self):
         value = scenario_file()
         value['sops'][0]['scenarios'][0]['verify'] = 'web'

@@ -31,6 +31,79 @@ class ScenarioAcceptance(unittest.TestCase):
         self.assertEqual(code, 0, submitted)
         return value, submitted
 
+    def checked_coverage(self, outcome='pass'):
+        self.prepare()
+        import sys
+        from test_workflow import write_config
+        xml = '<testsuite><testcase classname="chat.Message" name="test_trim"/>'
+        if outcome != 'missing':
+            detail = '<failure message="wrong format"/>' if outcome == 'fail' else ''
+            xml += '<testcase classname="chat.Message" name="test_format">' + detail + '</testcase>'
+        xml += '</testsuite>'
+        self.profile['checks']['details'] = {
+            **self.profile['checks']['unit'], 'format': 'junit', 'report': '{output}/results.xml',
+            'argv': [sys.executable, '-c', 'from pathlib import Path; import sys; Path(sys.argv[1]).write_text(' + repr(xml) + ')',
+                     '{output}/results.xml']}
+        write_config(self.root, self.profile)
+        self.approve_start()
+        path = self.root / '.tw/local/cases.json'
+        path.write_text(json.dumps({'cases': [{'id': 'TC_CHAT_FMT_003', 'title': '格式用例'}]}))
+        self.assertEqual(self.call('scenarios', 'import-cases', '--task', self.task['id'], path)[0], 0)
+        pairs = self.root / '.tw/local/pairs.json'
+        pairs.write_text(json.dumps({'covered': [{'case': 'TC_CHAT_FMT_003', 'note': '',
+            **({'scenarios': ['S-P']} if outcome == 'missing' else {}),
+            'checks': [{'check': 'details', 'cases': ['chat.Message::test_trim', 'chat.Message::test_format']}]}],
+            'conflict': [], 'disposed': []}))
+        code, result = self.call('scenarios', 'coverage', '--task', self.task['id'], '--pairs', pairs)
+        self.assertEqual(code, 0, result)
+        code, result = self.call('run', '--task', self.task['id'], '--check', 'details')
+        self.assertEqual(code, 1 if outcome == 'fail' else 0, result)
+        if outcome == 'stale':
+            (self.root / 'app.py').write_text('def add(a, b):\n    return a + b + 0\n')
+        if outcome == 'unregistered':
+            del self.profile['checks']['details']
+            write_config(self.root, self.profile)
+        self.assertEqual(self.call('run', '--task', self.task['id'], '--check', 'unit')[0], 0)
+        self.assertEqual(self.submit(self.all_results())[0], 0)
+        self.reviewed()
+
+    def test_accept_and_deliver_require_passing_covered_checks(self):
+        self.checked_coverage()
+        for command, extra in (('accept', []), ('deliver', ['--reason', '现有知识已覆盖'])):
+            code, result = self.call(command, '--task', self.task['id'], *extra)
+            self.assertEqual(code, 0, result)
+            self.assertTrue(result['business_accepted'])
+
+    def test_accept_names_missing_covered_test_and_imported_case(self):
+        self.checked_coverage('missing')
+        for command, extra in (('accept', []), ('deliver', ['--reason', '现有知识已覆盖'])):
+            code, result = self.call(command, '--task', self.task['id'], *extra)
+            self.assertEqual((code, result.get('error_code')), (1, 'scenario-coverage-incomplete'), result)
+            for token in ('TC_CHAT_FMT_003', 'details', 'chat.Message::test_format', '用例缺失或失败'):
+                self.assertIn(token, result['problem'])
+            self.assertNotIn('chat.Message::test_trim', result['problem'])
+
+    def test_accept_names_failed_covered_test_and_imported_case(self):
+        self.checked_coverage('fail')
+        code, result = self.call('accept', '--task', self.task['id'])
+        self.assertEqual((code, result.get('error_code')), (1, 'scenario-coverage-incomplete'), result)
+        for token in ('TC_CHAT_FMT_003', 'details', 'chat.Message::test_format', '检查未通过'):
+            self.assertIn(token, result['problem'])
+
+    def test_accept_rejects_covered_checks_from_stale_source(self):
+        self.checked_coverage('stale')
+        code, result = self.call('accept', '--task', self.task['id'])
+        self.assertEqual((code, result.get('error_code')), (1, 'scenario-coverage-incomplete'), result)
+        for token in ('TC_CHAT_FMT_003', 'details', 'chat.Message::test_format', '检查未通过'):
+            self.assertIn(token, result['problem'])
+
+    def test_accept_names_covered_check_removed_from_config(self):
+        self.checked_coverage('unregistered')
+        code, result = self.call('accept', '--task', self.task['id'])
+        self.assertEqual((code, result.get('error_code')), (1, 'scenario-coverage-incomplete'), result)
+        for token in ('TC_CHAT_FMT_003', 'details', 'chat.Message::test_format', '已登记的检查'):
+            self.assertIn(token, result['problem'])
+
     def test_run_waits_for_scenarios_and_pending_points_to_submit_with_root(self):
         self.prepare()
         additional = copy.deepcopy(self.design['sections'][1])
@@ -115,7 +188,7 @@ class ScenarioAcceptance(unittest.TestCase):
         self.reviewed()
         code, refused = self.call('accept', '--task', self.task['id'])
         self.assertEqual((code, refused.get('error_code')), (1, 'tester-cases-missing'))
-        self.assertIn('测试同事的用例集', refused['problem'])
+        self.assertIn('主流程用例集', refused['problem'])
         self.assertIn('scenarios import-cases', refused['next_action'])
         path = self.root / '.tw/local/cases.json'
         path.write_text(json.dumps({'cases': [{'id': 'C1', 'title': '合成用例'}]}))

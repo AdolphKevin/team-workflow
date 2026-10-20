@@ -71,6 +71,19 @@ class Validation:
             self.text(item, path + (index,))
 
 
+def validate_check(v, value, path, profile):
+    """场景回归与用例配对共用逐项报告的结构核对。"""
+    if not v.shape(value, path, {'check', 'cases'}):
+        return
+    key = value.get('check')
+    if not isinstance(key, str) or key not in profile.get('checks', {}):
+        v.add(path + ('check',), 'regression.check 引用 checks 已登记的检查')
+    elif profile['checks'][key]['format'] not in ('junit', 'go-json'):
+        v.add(path + ('check',), 'regression 指向的检查需要逐项用例报告（junit 或 go-json），当前 '
+              + key + ' 为 ' + profile['checks'][key]['format'])
+    v.texts(value.get('cases'), path + ('cases',), True)
+
+
 def validate(document, profile):
     v, value = Validation(document), document.value
     if not v.shape(value, (), {'metadata', 'sops'}):
@@ -136,12 +149,7 @@ def validate(document, profile):
                 if not isinstance(r, dict) or set(r) not in shapes:
                     v.add(rp, 'regression 使用 {check, cases}、{manual, owner, trigger} 或 {pending}')
                 elif 'check' in r:
-                    if not isinstance(r['check'], str) or r['check'] not in profile.get('checks', {}):
-                        v.add(rp + ('check',), 'regression.check 引用 checks 已登记的检查')
-                    elif profile['checks'][r['check']]['format'] not in ('junit', 'go-json'):
-                        v.add(rp + ('check',), 'regression 指向的检查需要逐项用例报告（junit 或 go-json），当前 '
-                              + r['check'] + ' 为 ' + profile['checks'][r['check']]['format'])
-                    v.texts(r['cases'], rp + ('cases',), True)
+                    validate_check(v, r, rp, profile)
                 else:
                     for key in r:
                         v.text(r[key], rp + (key,))
@@ -177,9 +185,12 @@ def check(path, profile):
         value, sha256 = read(path, profile)
     except FileProblems as exc:
         return exc.result()
-    return {'ok': True, 'sha256': sha256,
+    node_counts = [{'node': node['id'], 'count': len(node['scenarios'])} for node in value['sops']]
+    total = sum(row['count'] for row in node_counts)
+    counts_text = '、'.join(f'{row["node"]} {row["count"]} 条' for row in node_counts)
+    return {'ok': True, 'sha256': sha256, 'scenario_count': total, 'node_counts': node_counts,
             'fingerprints': {row['id']: fingerprint(row) for node in value['sops'] for row in node['scenarios']},
-            'summary': '场景文件已通过结构核对。'}
+            'summary': f'场景文件已通过结构核对：共 {total} 条场景' + ('，' + counts_text if counts_text else '') + '。'}
 
 
 def reference(path, nodes, reader):
