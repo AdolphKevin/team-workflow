@@ -181,7 +181,8 @@ def submit(root, task_id, profile, path, *, carry=False, workspace=None):
         rows = scenario_results.load(path, entries, carry=carry)
         if carry:
             wrong = [{'line': index + 1, 'problem': '只沿用待判定的场景：' + row['scenario'] + ' 当前为 '
-                      + entries[row['scenario']]['state'] + '（' + str(entries[row['scenario']]['reason']) + '）'}
+                      + entries[row['scenario']]['state']
+                      + ('（' + entries[row['scenario']]['reason'] + '）' if entries[row['scenario']]['reason'] else '')}
                      for index, row in enumerate(rows) if entries[row['scenario']]['reason'] != 'undetermined']
             if wrong:
                 raise FileProblems(wrong, Code.SCENARIO_RESULT)

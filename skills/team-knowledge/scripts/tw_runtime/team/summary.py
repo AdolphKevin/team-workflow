@@ -48,7 +48,8 @@ def render(result, task, profile=None):
     if environment:
         lines.append(f'- 运行环境：{"本次实际核对" if environment == "now" else "沿用业务验收当时记录的环境"}')
     ci_checks = result.get('ci_verified_checks', [])
-    open_items = ['导入的 CI 检查：' + '、'.join(ci_checks)] if ci_checks else ['检查只在本机运行，CI 未验证']
+    open_items = (['导入的 CI 检查：' + '、'.join(ci_checks)] if ci_checks else
+                  ['检查只在本机运行，CI 未验证'] if result.get('checks') else [])
     if result.get('superseded_execution'):
         open_items.append(f'{len(result["superseded_execution"])} 份较早或已过期的运行记录未被采用，仅作历史保留')
     if result.get('tool', {}).get('override'):

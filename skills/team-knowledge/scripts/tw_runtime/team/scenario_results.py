@@ -41,7 +41,9 @@ def load(path, identifiers, carry=False):
             add('格式外字段：' + key)
         texts = ('scenario', 'reason', 'scope', 'executor') if carry else ('scenario', 'actual', 'executor')
         for key in (*texts, *sorted(optional & row.keys())):
-            if not isinstance(row.get(key), str) or (key != 'note' and not row[key].strip()):
+            if key not in row:
+                continue
+            if not isinstance(row[key], str) or (key != 'note' and not row[key].strip()):
                 add(key + ' 填写非空字符串' if key != 'note' else 'note 填写字符串')
         key = row.get('scenario')
         if isinstance(key, str):

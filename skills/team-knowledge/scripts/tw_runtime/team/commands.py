@@ -134,7 +134,7 @@ def report_input(args, root, task, include_knowledge=True):
                              if name == 'design' else None))
     result = {'data_version': RECORD_SCHEMA, 'task_id': task['id'], 'design': local(root, args.design).relative_to(root).as_posix(),
               'approvals': references(root, args.approval), 'design_history': references(root, args.design_history),
-              'brief': local(root, args.brief).relative_to(root).as_posix(), 'runs': references(root, args.run),
+              'brief': local(root, args.brief).relative_to(root).as_posix(), 'runs': references(root, args.run or []),
               'review': local(root, args.review).relative_to(root).as_posix() if args.review else ''}
     if getattr(args, 'acceptance', None):
         result['acceptance'] = local(root, args.acceptance).relative_to(root).as_posix()
@@ -725,7 +725,7 @@ def produce(args, root, profile, task, platform, request, *, workspace=None):
             if args.review is None:
                 from reviews import ReviewNotSubmitted
                 raise ReviewNotSubmitted(root, task, missing_run=not bool(args.run))
-            require(bool(args.run), 'accept needs --run <run.json>')
+            # 适用检查的运行由 delivery.verify 核对；没有适用检查的任务以场景验收，不要求运行记录。
             report = report_input(args, root, task, include_knowledge=False)
             request.publish('report.json', report)
         issue_history.capture(request, task, read(local(root, report['review'])),

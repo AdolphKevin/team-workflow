@@ -65,5 +65,6 @@ def render(value):
         for row in scenarios['rounds']:
             count = row['statistics']
             lines.append(f'- 第 {row["round"]} 轮：执行 {count["executed"]}，pass {count["pass"]}，fail {count["fail"]}，'
-                         f'blocked {count["blocked"]}，skip {count["skip"]}；通过率 {row["pass_rate"]["numerator"]}/{row["pass_rate"]["denominator"]}')
+                         f'blocked {count["blocked"]}，skip {count["skip"]}，沿用 {count.get("carry", 0)}；'
+                         f'通过率 {row["pass_rate"]["numerator"]}/{row["pass_rate"]["denominator"]}')
     return lines
