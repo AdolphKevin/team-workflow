@@ -116,12 +116,9 @@ def readable(result):
             lines.append('任务 ' + name + '：' + labels.get(value.get('state'), str(value.get('state'))))
     if result.get('checks'):
         lines += ['检查：', *readable_fields(result['checks'])]
-    for key in ('implementation_ready', 'business_accepted', 'delivery_complete', 'overall_complete', 'regression_pending', 'closable'):
+    for key in ('implementation_ready', 'business_accepted', 'delivery_complete', 'overall_complete', 'closable'):
         if key in result:
             lines.append(key + ': ' + str(result[key]))
-    if isinstance(result.get('automation_status'), dict):
-        from summary import regression_lines
-        lines += ['回归待沉淀：' + line for line in regression_lines(result)]
     return '\n'.join(lines)
 
 
@@ -510,7 +507,7 @@ def produce(args, root, profile, task, platform, request, *, workspace=None):
     def emit(value, name):
         return {'ok': value.get('ok', True), 'artifact': request.publish(name, value, args.out),
                 **{k: value[k] for k in ('summary', 'gaps', 'problem', 'next_action', 'implementation_ready',
-                                       'business_accepted', 'delivery_complete', 'overall_complete', 'regression_pending', 'automation_status', 'closable', 'acceptance_scope', 'scope', 'validation_active', 'verification_gaps',
+                                       'business_accepted', 'delivery_complete', 'overall_complete', 'closable', 'acceptance_scope', 'scope', 'validation_active', 'verification_gaps',
                                        'ci_verified_checks', 'unverified_scope', 'summary_counts', 'statistics', 'scenario_rounds', 'scenario_files', 'summary_markdown', 'close_note', 're_evaluated', 'tool', 'environment_checked', 'pending_acceptance', 'pending_sections', 'authorizations_needed') if k in value}}
     if args.command == 'deliver':
         import delivery_sequence

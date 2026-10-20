@@ -31,8 +31,8 @@ tw team guidance --root "$PROJECT" [--scope project|global|all] [--file AGENTS.m
 | `context` | 必须读取的现有仓内文件 |
 | `shared`、`documents` | 共享知识仓与原文登记，见[知识写作规范](../../team-knowledge/references/writing.md) |
 | `checks` | 检查编号到命令、报告格式、用例及环境要求的映射 |
-| `required_checks` | 为 `code`、`docs` 指定默认检查 |
-| `risk_checks` | 风险到非空检查集合；缺少风险映射时报错 |
+| `required_checks` | 为 `code`、`docs` 指定默认检查，可为空数组；`checks` 可为空对象 |
+| `risk_checks` | 风险到检查集合，可省略或为空；没有适用检查的任务以场景验收交付 |
 | `inputs` | 参与结果但被 Git 忽略的文件或目录 |
 | `external_inputs` | 逻辑依赖及用途，本机位置另行提供 |
 | `environment_versions` | 名称到只读版本查询命令数组 |
@@ -299,7 +299,7 @@ tw team metrics --root "$PROJECT" [--task "$TASK"] [--since 2026-10-01] [--forma
 
 `scenarios import-cases --task <身份> <文件>` 读取 YAML 子集或 JSON，顶层 `test_cases` 或 `cases` 数组中每条含 `id`、`title`，其余字段原样保存在快照。`case_imports` 按导入顺序累积，同编号采用最后一次完整内容。
 
-按业务语义写配对文件后运行 `scenarios coverage --task <身份> --pairs <文件>`，核对结构。每条已导入用例恰好归入 `covered` 或 `disposed`。`covered` 必填 `case`、`note`，另含 `scenarios`（场景编号数组）、`checks` 至少一项，可同时填写，出现的数组均非空。`checks` 每项为 `{check, cases}`：`check` 引用已登记的 junit 或 go-json 检查，`cases` 为非空字符串数组，JUnit 用例名为 `类名::测试名`。`conflict` 含 `case`、`scenarios`、`note`；`disposed` 含 `case`、`state`（`blocked/deferred/out-of-scope`）、`reason`、`confirmed_by`。结构或归类问题报 `scenario-coverage-incomplete`，结构问题附原文行号。通过后保存 `case_coverage`，返回 `covered_by_scenarios`、`covered_by_checks` 两类覆盖的用例数，同时声明两种形式的用例在两类中各计一次。`accept`、`deliver` 按场景回归规则逐项核对检查已登记、所列测试用例在当前源码的有效运行中出现并通过；失败报 `scenario-coverage-incomplete`，点名导入用例、检查、测试用例及原因。覆盖的语义及充分性由评审确认。
+代理按业务语义把用例归入场景，写配对文件后运行 `scenarios coverage --task <身份> --pairs <文件>`。每条已导入用例恰好归入 `covered` 或 `disposed`；`conflict`、缺归类、重复归类或引用未知编号时报 `scenario-coverage-incomplete`。`covered`、`conflict` 含 `case`、`scenarios`、`note`，细节用例归入覆盖它的流程场景；`disposed` 含 `case`、`state`（`blocked/deferred/out-of-scope`）、`reason`、`confirmed_by`。通过后保存 `case_coverage`。覆盖的语义及充分性由评审确认。
 
 ### 待执行清单与结果
 
@@ -307,26 +307,29 @@ tw team metrics --root "$PROJECT" [--task "$TASK"] [--since 2026-10-01] [--forma
 
 | 输入 | 当前状态与处理 |
 | --- | --- |
-| 当前产品上的 `pass`，或此前 `pass` 且 `regression` 指定检查和用例在当前源码有效运行中通过 | `passed` |
+| 当前产品上的 `pass`，或当前产品上的沿用 | `passed` |
 | 最近结果为 `fail` | `failed`，进入待执行清单 |
 | 最近结果为 `blocked` 或 `skip` | `blocked`，交验收核对问题处置 |
-| 新场景、内容指纹变化，或此前通过但产品变化且回归尚未通过 | `pending`，进入待执行清单 |
+| 新场景或内容指纹变化 | `pending`（`new`、`changed`），进入待执行清单 |
+| 此前通过或沿用、内容未变而产品变化 | `pending`（`undetermined`，待判定），重跑后提交，或用 `scenarios carry` 沿用 |
 
 清单给场景内容、入口声明、内容指纹、原因、当前 `source_digest` 和 `product_digest`。独立执行者经声明入口执行，按行写 JSON 对象，再运行 `scenarios submit --task <身份> --results <文件>`。必填 `scenario`、`status`、`actual`、`executed_at`、`executor`、`evidence`；可选 `session`、`finding`、`note`。每个场景每文件一条结果；状态为 `pass/fail/blocked/skip`，`blocked`、`skip` 填 `finding`，时间为带时区且截至当前的 ISO 时间。证据路径相对结果文件目录，`pass`、`fail` 至少一份。
 
-提交须覆盖全部待执行及失败场景，也可包含本任务其他场景。工具核对执行者独立性、证据文件与复制期间指纹、提交期间源码及场景内容稳定，将证据复制到本轮目录并登记轮次。结果文件和原始证据放在仓库外或 `.tw/local/` 下；仓内普通未跟踪文件参与产品指纹。代理、人和项目看板均通过同一契约登记。
+提交须覆盖待判定以外的全部待执行及失败场景，也可包含本任务其他场景。
+
+独立执行者判定待判定场景不受改动影响时，运行 `scenarios carry --task <身份> --results <文件>`：每行必填 `scenario`、`reason`（不受影响的理由）、`scope`（依据的改动范围）、`executor`、`executed_at`，可选 `session`、`note`。只接受待判定的场景；登记为本轮 `status: carry` 的结果，`actual` 写明范围与理由，在当前产品上视为通过，产品再变化时重新待判定。执行者独立性与时间规则同 `submit`。工具核对执行者独立性、证据文件与复制期间指纹、提交期间源码及场景内容稳定，将证据复制到本轮目录并登记轮次。结果文件和原始证据放在仓库外或 `.tw/local/` 下；仓内普通未跟踪文件参与产品指纹。代理、人和项目看板均通过同一契约登记。
 
 ### 轮次、验收与回归
 
-轮次保存逐场景结果与通过、失败、受阻、跳过数；`metrics` 的每轮通过率为通过数除以本轮结果数。`first_pass` 按登记轮次取当前场景内容的首次结果，通过数除以首次为 `pass` 或 `fail` 的场景数，空分母返回 null。`by_executor` 按规范化执行者身份取当前场景内容的最新结果；`agreement` 在至少两位执行者有通过或失败结果的场景中，统计所有结果均通过的比例。
+轮次保存逐场景结果与通过、失败、受阻、跳过、沿用（`carry`）数，`executed` 不含沿用；`metrics` 的每轮通过率为通过数除以 `executed`。`summary_counts` 另列 `carried`（当前通过中的沿用数）。`first_pass` 按登记轮次取当前场景内容的首次执行结果（不含沿用），通过数除以首次为 `pass` 或 `fail` 的场景数，空分母返回 null。`by_executor` 按规范化执行者身份取当前场景内容的最新结果；`agreement` 在至少两位执行者有通过或失败结果的场景中，统计所有结果均通过的比例。
 
-`accept` 要求检查通过、场景均为 `passed` 或受阻已处置；`blocked`、`skip` 对应问题在评审中为 `accepted` 或 `deferred`，按[问题处置](#问题处置与交接)填写确认人及依据。复杂任务需导入主流程用例集；任务有导入时，`accept` 用当前用例并集重新核对覆盖及检查形式的配对；没有导入的中等、简单任务按自写场景验收。
+`accept` 要求适用检查通过（没有适用检查时不要求运行结果）、场景均为 `passed` 或受阻已处置；`blocked`、`skip` 对应问题在评审中为 `accepted` 或 `deferred`，按[问题处置](#问题处置与交接)填写确认人及依据。复杂任务需导入主流程用例集；任务有导入时，`accept` 用当前用例并集重新核对覆盖；没有导入的中等、简单任务按自写场景验收。
 
 评审观察种类为 `execution` 和 `scenarios`：前者含 `{run:{path,sha256}, check, cases}`，运行属于本任务且为选中的有效结果；后者含本任务轮次引用 `rounds`。评审稿预填场景状态、实际结果、执行者、轮次和证据；受阻场景的问题按验收负责人及受影响验收节补入清单。`reviewer` 与场景 `executor` 均独立于 `roles.implementation_owner`，姓名比较折叠大小写和多余空格，实施负责人必填。成员和代理使用稳定、可区分的身份。
 
-每条场景的 `regression` 写 `{check, cases}`、`{manual, owner, trigger}` 或 `{pending}`，分别表示仓内回归、保留人工责任、待沉淀的问题编号；缺省表示待沉淀。`check` 引用 `junit` 或 `go-json` 检查，场景读取统一核对格式并报行号。工具生成 `automation_status`：检查及指定用例在当前源码有效运行中通过时归入 `automated`；人工责任归入 `manual-only`；其他归入 `pending`，每项含 `reason`：`not-declared`（缺省）、`deferred`（引用已延期问题）、`check-not-passed`（当前源码缺有效通过运行）、`cases-not-passed`（指定用例缺失或尚待通过）。`regression.pending` 引用评审中 `deferred` 的问题。
+回归是重跑受影响的场景：产品变化后场景进入待判定，由独立执行者重跑或沿用。场景的 `regression` 可写 `{manual, owner, trigger}` 记录人工说明，或省略；旧文件中的 `{check, cases}`、`{pending}` 照常读取，不产生效果。
 
-`delivery_complete` 表示验收、知识处置和交接记录齐全；`regression_pending` 表示存在待沉淀场景；`overall_complete` 为前者成立且后者为假。概要、摘要与交付步骤共用该判定：条件齐全写“交付完成”；材料齐全且回归待沉淀写“交付材料齐全；整体交付未完成：N 条场景的回归待沉淀”，逐条显示场景与原因；材料待补时报告停止步骤。整体交付依据见[业务验收标准](business-acceptance.md#5-交付报告)。
+`delivery_complete` 表示业务验收、知识处置和交接记录齐全，`overall_complete` 与之相同；业务验收要求场景在当前产品上全部通过或沿用、受阻已处置。概要、摘要与交付步骤共用该判定：条件齐全写“交付完成”；材料待补时报告停止步骤及缺项。整体交付依据见[业务验收标准](business-acceptance.md#5-交付报告)。
 
 ## 问题处置与交接
 

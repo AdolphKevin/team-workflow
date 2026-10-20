@@ -41,25 +41,8 @@ def check_cases(root, profile, task, design, group, *, workspace=None):
         else:
             document = scenario_yaml.loads('{"covered": [], "conflict": [], "disposed": []}', '.json')
         entries = current(root, profile, task, design, workspace=workspace)[1]['scenarios']
-        result = scenarios.check_coverage(document, cases, {row['id'] for row in entries}, profile)
-        problem = result.get('problem', '补齐当前用例的场景覆盖')
-        for error in result.get('errors', []):
-            if 'check' in error:
-                problem += '；导入用例 ' + str(error['case']) + '：检查 ' + str(error['check']) + '，测试用例 ' + str(error['test_cases'])
-        require(result['ok'], problem, error_code=Code.SCENARIO_COVERAGE)
-        checks, incomplete = {}, []
-        for row in document.value['covered']:
-            for check in row.get('checks', []):
-                # 整组通过时不再逐个核对；未通过时逐个用例定位，以便点名。
-                if scenario_rounds.regression_reason(root, profile, task, group, {'regression': check}, checks, workspace=workspace) is None:
-                    continue
-                for case in check['cases']:
-                    entry = {'regression': {'check': check['check'], 'cases': [case]}}
-                    reason = scenario_rounds.regression_reason(root, profile, task, group, entry, checks, workspace=workspace)
-                    if reason is not None:
-                        message = '检查未通过' if reason == 'check-not-passed' else '用例缺失或失败'
-                        incomplete.append('导入用例 ' + row['case'] + '：检查 ' + check['check'] + '，测试用例 ' + case + '：' + message)
-        require(not incomplete, '；'.join(incomplete), error_code=Code.SCENARIO_COVERAGE)
+        result = scenarios.check_coverage(document, cases, {row['id'] for row in entries})
+        require(result['ok'], result.get('problem', '补齐当前用例的场景覆盖'), error_code=Code.SCENARIO_COVERAGE)
     else:
         from designs import task_assessments
         require(not any(row['complexity'] == 'complex' for row in task_assessments(design, task['section_ids']).values()),
@@ -79,7 +62,8 @@ def check(root, profile, task, design, review, group, value, *, workspace=None):
         if result:
             independent(design, result['executor'], '场景执行者')
         if row['state'] in ('pending', 'failed'):
-            incomplete.append(row['id'] + '：' + row['state'])
+            incomplete.append(row['id'] + '：' + row['state']
+                              + ('（待判定：重跑或用 scenarios carry 沿用）' if row['reason'] == 'undetermined' else ''))
         elif row['state'] == 'blocked':
             finding = findings.get(result['finding'], {})
             if finding.get('state') not in ('accepted', 'deferred'):
@@ -88,26 +72,6 @@ def check(root, profile, task, design, review, group, value, *, workspace=None):
         error = Invalid('场景验收尚待完成：' + '；'.join(incomplete), error_code=Code.SCENARIO_ACCEPTANCE)
         error.scenario_states = states
         raise error
-
-
-def regression(root, profile, task, group, value, findings, *, workspace=None):
-    from validation import Workspace
-    workspace = workspace or Workspace(root, profile)
-    deferred = {row['id'] for row in findings if row['state'] == 'deferred'}
-    status, checks = {'automated': [], 'manual-only': [], 'pending': []}, {}
-    for row in value['scenarios']:
-        declared = row.get('regression', {})
-        category = 'pending'
-        reason = scenario_rounds.regression_reason(root, profile, task, group, row, checks, workspace=workspace)
-        if 'pending' in declared:
-            require(declared['pending'] in deferred, '场景 ' + row['id'] + ' 的 regression.pending 引用评审中 deferred 的问题：'
-                    + declared['pending'], section='问题清单')
-        elif 'manual' in declared:
-            category = 'manual-only'
-        elif reason is None:
-            category = 'automated'
-        status[category].append({'id': row['id'], **declared, **({'reason': reason} if category == 'pending' else {})})
-    return status
 
 
 def unverified_scope(value, findings):

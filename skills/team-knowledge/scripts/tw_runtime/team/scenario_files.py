@@ -71,19 +71,6 @@ class Validation:
             self.text(item, path + (index,))
 
 
-def validate_check(v, value, path, profile):
-    """场景回归与用例配对共用逐项报告的结构核对。"""
-    if not v.shape(value, path, {'check', 'cases'}):
-        return
-    key = value.get('check')
-    if not isinstance(key, str) or key not in profile.get('checks', {}):
-        v.add(path + ('check',), 'regression.check 引用 checks 已登记的检查')
-    elif profile['checks'][key]['format'] not in ('junit', 'go-json'):
-        v.add(path + ('check',), 'regression 指向的检查需要逐项用例报告（junit 或 go-json），当前 '
-              + key + ' 为 ' + profile['checks'][key]['format'])
-    v.texts(value.get('cases'), path + ('cases',), True)
-
-
 def validate(document, profile):
     v, value = Validation(document), document.value
     if not v.shape(value, (), {'metadata', 'sops'}):
@@ -144,13 +131,12 @@ def validate(document, profile):
                 if key in required or key in row:
                     v.texts(row.get(key), p + (key,), nonempty=key in NONEMPTY_CONTENT_FIELDS)
             if 'regression' in row:
+                # 回归即重跑受影响的场景；{manual, owner, trigger} 记人工说明。
+                # 旧文件中的 {check, cases}、{pending} 照常读取，不产生效果。
                 r, rp = row['regression'], p + ('regression',)
-                shapes = ({'check', 'cases'}, {'manual', 'owner', 'trigger'}, {'pending'})
-                if not isinstance(r, dict) or set(r) not in shapes:
-                    v.add(rp, 'regression 使用 {check, cases}、{manual, owner, trigger} 或 {pending}')
-                elif 'check' in r:
-                    validate_check(v, r, rp, profile)
-                else:
+                if not isinstance(r, dict) or set(r) not in ({'manual', 'owner', 'trigger'}, {'check', 'cases'}, {'pending'}):
+                    v.add(rp, 'regression 写 {manual, owner, trigger}，或省略')
+                elif 'manual' in r:
                     for key in r:
                         v.text(r[key], rp + (key,))
         if 'positive' not in polarities:

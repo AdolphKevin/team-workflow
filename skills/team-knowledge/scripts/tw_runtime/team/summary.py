@@ -15,17 +15,9 @@ def _lines(items, empty):
 
 
 def delivery_status(result):
-    complete = bool(result.get('delivery_complete')) and not result.get('regression_pending', False)
-    headline = result.get('summary', '交付材料待齐全')
-    if result.get('delivery_complete'):
-        count = len(result.get('automation_status', {}).get('pending', []))
-        headline = '交付完成' if complete else f'交付材料齐全；整体交付未完成：{count} 条场景的回归待沉淀'
-    return {'overall_complete': complete, 'summary': headline}
-
-
-def regression_lines(result):
-    return [row['id'] + ('：' + row['reason'] if row.get('reason') else '')
-            for row in result.get('automation_status', {}).get('pending', [])]
+    """整体交付：场景在当前产品上全部通过或沿用、受阻已处置，知识与交接记录齐全。"""
+    complete = bool(result.get('delivery_complete'))
+    return {'overall_complete': complete, 'summary': '交付完成' if complete else result.get('summary', '交付材料待齐全')}
 
 
 def render(result, task, profile=None):
@@ -57,8 +49,6 @@ def render(result, task, profile=None):
         lines.append(f'- 运行环境：{"本次实际核对" if environment == "now" else "沿用业务验收当时记录的环境"}')
     ci_checks = result.get('ci_verified_checks', [])
     open_items = ['导入的 CI 检查：' + '、'.join(ci_checks)] if ci_checks else ['检查只在本机运行，CI 未验证']
-    if result.get('regression_pending'):
-        open_items += regression_lines(result)
     if result.get('superseded_execution'):
         open_items.append(f'{len(result["superseded_execution"])} 份较早或已过期的运行记录未被采用，仅作历史保留')
     if result.get('tool', {}).get('override'):

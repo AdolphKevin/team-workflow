@@ -297,7 +297,7 @@ def snapshot(args, root, profile, task, draft_id, allow_incomplete=False, *, wor
             for check in section['data']['checks']}}
         observations, evidence = [], []
         lines = ['- ' + gap for gap in execution_environment(profile, {**task, 'acceptance': [row]}, design)]
-        if not requirement['cases']:
+        if section['data']['checks'] and not requirement['cases']:
             lines.append('- 未指明用例，证据为整项检查通过')
         for check in section['data']['checks']:
             coverage = profile['checks'][check].get('coverage')

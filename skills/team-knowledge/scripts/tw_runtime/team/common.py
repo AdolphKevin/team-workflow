@@ -449,7 +449,7 @@ def profile_valid(profile, root, check_context=True):
     require(isinstance(profile['risk_checks'], dict), 'risk_checks must be an object')
     for risk, ids in profile['risk_checks'].items():
         require(risk in RISKS, f'Unknown risk: {risk}')
-        strings(ids, True)
+        strings(ids)
         require(set(ids) <= profile['checks'].keys(), 'Unknown risk check')
     require(isinstance(profile['environment_versions'], dict), 'environment_versions must be an object')
     for name, argv in profile['environment_versions'].items():
@@ -482,8 +482,7 @@ def task_valid(task, profile, root, *, written=False):
     require(set(task['risks']) <= RISKS, 'Unknown task risk')
     required = set(profile['required_checks'][task['kind']])
     for risk in task['risks']:
-        require(bool(profile['risk_checks'].get(risk)), f'No validation configured for risk: {risk}')
-        required.update(profile['risk_checks'][risk])
+        required.update(profile['risk_checks'].get(risk, []))
     require(isinstance(task['acceptance'], list) and bool(task['acceptance']), 'Acceptance cannot be empty')
     seen = set()
     for row in task['acceptance']:

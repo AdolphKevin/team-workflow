@@ -169,7 +169,7 @@ def recorded(root, task_id, phase, group, platform):
     delivery_fields = {}
     if proof:
         from summary import delivery_status
-        delivery_fields = {key: proof[key] for key in ('delivery_complete', 'regression_pending', 'automation_status',
+        delivery_fields = {key: proof[key] for key in ('delivery_complete',
             'summary_counts', 'statistics', 'scenario_rounds', 'scenario_files') if key in proof}
         state = delivery_status(proof)
         delivery_fields['overall_complete'] = state['overall_complete']
