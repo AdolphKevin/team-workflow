@@ -3,7 +3,7 @@ title: "SOP 验收与回归沉淀由 sop-board 发行"
 scope: ["self:docs/design.md", "self:docs/install.md", "self:docs/acceptance.md"]
 source: ["self:docs/proposals/2026-10-22-knowledge-only.md", "self:docs/proposals/2026-10-19-tw-sop-1-design.md"]
 status: "accepted"
-tags: ["SOP", "独立验证", "sop-verify", "sop-board", "praxis-skills", "采用方式"]
+tags: ["SOP", "独立验证", "example-verify", "sop-board", "外部验证技能仓库", "采用方式"]
 ---
 # SOP 验收与回归沉淀由 sop-board 发行
 

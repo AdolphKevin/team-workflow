@@ -5,7 +5,7 @@
     "agents/openai.yaml": "d660ec45c2b67e9aeb482b06764b44c03503913ad2756ffbac8b0d68a7992121",
     "references/lessons-from-history.md": "0002f9365a561779587cf8d4d4949a3c7489f2c75da6b062752ceaaf666855ca",
     "references/migration.md": "b4b015fa11621353f464aac02806539dc78ec86dc2417647809b9b778a02d3e5",
-    "references/writing.md": "3ddb3f39246a2a6aa3245099a7683761f559a07cf190854e28c30b82deab6be1",
+    "references/writing.md": "a3a0ff23d99046f72f6107cd232c3b3659cedb78f11dd9dc1ffed9ded4a30d9a",
     "scripts/tw.py": "4e5aeff6ce3aec67fc8f78c82040b583fa8af732aa6da75e4ef76c869a15e61b",
     "scripts/tw_runtime/__init__.py": "889a6d8e7d1300edcf4f07d301da77d87b4b34ef54f65a32b4f1b82ba0f28ae6",
     "scripts/tw_runtime/audit.py": "9e9396b7f319044fdfeeb104bf2b1bd76a507f796c91883bab0e58b7f1ac403c",

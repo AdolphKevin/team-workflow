@@ -18,7 +18,7 @@ roles: {"design_owner":"Claude","implementation_owner":"Claude","acceptance_owne
 <!-- tw-section id=scope-global type=global-scope -->
 按已批准方案修订 2 第 2、3 节修改运行时与团队技能文本：需求完成以独立执行者经真实入口执行的场景为准；没有登记检查的任务以场景验收交付；产品变化后已通过场景待判定，受影响的重跑，不受影响的写明理由沿用；撤回修订 1 的检查形式与快速检查；本仓自身测试删除。
 
-非目标：playwright-acceptance 与 sop-verify；sop-board 的代码。
+非目标：playwright-acceptance 与 example-verify；sop-board 的代码。
 
 - 需求级验收：A1、A2、A3、A4
 

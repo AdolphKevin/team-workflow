@@ -135,7 +135,7 @@
    → W、K3
 2. **最有价值的教训没有沉淀**。
    - 用户原话：“cs 这个项目最大的价值就是沉淀历史遇到的错误”。
-   - 9 月 5 日重建时丢弃了约 547 张旧卡，只有 example-assistant 用 history-review 保留了 27 组教训。
+   - 9 月 5 日重建时丢弃了约 547 张旧卡，只有 example-assistant 用历史复盘保留了 27 组教训。
    
    → K1 lesson、K3、B5
 3. **工具状态互相作废**。
@@ -177,7 +177,7 @@
 11. **跨仓知识重复，原文登记几乎没人用**。595 个范围项中只有 17 个跨仓；depends_on 的使用次数为 0；所有项目的 documents 登记加起来只有 1 条。→ K4、K5
 12. **本地证据膨胀**。
     - TW 的 `.team-workflow/` 5 天积累了 571 个文件。
-    - core 的 `.team-workflow/` 有 2,402 个文件、646MiB，其中 delivery-followup* 一项就有 318 个文件、583MiB。
+    - core 的 `.team-workflow/` 有 2,402 个文件、646MiB，其中一组交付跟进材料就有 318 个文件、583MiB。
     - TW 仓忽略了自己的 `.codestable/`，它的知识只存在本机。
     
     → L2
@@ -205,7 +205,7 @@
 - **现行在前，放弃过的保留**：
   - 条目存在即有效。decision 只有 `accepted` 和 `rejected` 两种状态；rule 和 lesson 不设状态字段。
   - **决定改变时**：正文改写为现行结论；旧做法移入同一文件的 `## 放弃过的做法` 一节，不删除。该节每项写：做法；放弃原因（失败机制或证据）；什么条件下可以重新考虑；来源（提交、Issue）；关键词（任务描述里可能出现的说法，brief 用它提醒）。三种条目都可以有这一节。
-    - 这样不会出现 MATT#822 那种失效文件和现行文件混在一起的情况，也不会出现 #1114 那种只追加修订、原结论却不变的矛盾。
+    - 这样不会出现 MATT#822 那种失效文件和现行文件混在一起的情况，也不会出现 MATT#1114 那种只追加修订、原结论却不变的矛盾。
     - 作用与 MATT 的 `superseded by`、“被否决的备选”和 ECC 的 delete-zone 相同：防止被放弃的方案再次被提出。
   - **rule 失效时**：如果失效原因值得记住（例如曾因某种故障被废除），把它写进相关 decision 的“放弃过的做法”或写成 lesson；否则删除。
   - **lesson 不随代码变化删除**：代码重写后同样的错误还会再犯。实现位置变了，就更新 scope。只有整类错误已经不可能发生（例如相关技术栈被整体移除），并经评审确认，才删除。
@@ -221,7 +221,7 @@
 | 字段 | 适用 | 含义 |
 | --- | --- | --- |
 | `title` | 全部，必填 | 与一级标题一致 |
-| `scope` | rule、decision、lesson，必填 | 路径 glob 数组，如 `self:internal/**`、`common:protos/brand/**`，语法见 R2 |
+| `scope` | rule、decision、lesson，必填 | 路径 glob 数组，如 `self:internal/**`、`common:protos/example/**`，语法见 R2 |
 | `source` | 全部，必填 | Issue、PR、提交链接、`仓库:原文路径`，或用户确认记录的链接 |
 | `verified` | rule、lesson 必填；其余可选 | 按仓库记录 `{"self":{"commit":完整哈希,"date":日期}}`，表示作者实际核对时的基线，不代表测试通过；工具不会自动填写 |
 | `status` | decision 必填 | `accepted` 或 `rejected` |
@@ -231,79 +231,79 @@
 
 **删除的字段**：`future_use`、`confidence`、结构化证据四元组、`knowledge_use`、`fingerprint`、`revision`、`supersedes`、`superseded_by`、`applies_to`、`depends_on`、`pinned`、`topics`，以及与 `scope` 重复的 `paths` 和 `scopes`。
 
-**示例 1：决策**（由 core 的会话语言卡改写，`decisions/2026-10-13-conversation-language.md`）
+**示例 1：决策**（通用业务示例，`decisions/YYYY-MM-DD-order-region.md`）
 
 ```markdown
 ---
-title: "建会话前确定语言，并使用独立字段保存"
+title: "创建订单前确定处理区域，并使用独立字段保存"
 scope: ["self:internal/biz/example_biz.go", "self:internal/data/example_repository.go"]
 source: ["https://github.com/acme/example-service/issues/1"]
-verified: {"self":{"commit":"108e82b5a2dd56ef8ef2f370259810de9c653bf6","date":"2026-10-14"}}
+verified: {"self":{"commit":"<实际核对时的完整提交>","date":"YYYY-MM-DD"}}
 status: "accepted"
 ---
-# 建会话前确定语言，并使用独立字段保存
+# 创建订单前确定处理区域，并使用独立字段保存
 
-创建会话时，路由先于消息交给代理；如果等代理逐轮回写，首次路由就拿不到语言。
-因此在创建事务前判定语言，随会话一起写入。
+创建订单时，首次分配需要处理区域；如果等后续流程补写，首次分配就拿不到该信息。
+因此在创建事务前确定处理区域，随订单一起写入。
 
-语言使用独立字段，之后只接受代理依据更新的买家消息回写。
+处理区域使用独立字段，后续只依据已确认的地址更新。
 
 ## 备选
 - metadata：整体覆盖更新，会增加并发覆盖的风险。
-- 只靠代理后续判定：首次路由拿不到结果。
+- 只靠后续流程判定：首次分配拿不到结果。
 
 ## 后果
-符合付费条件的组织会多一次有截止时间的同步调用，失败时必须回退。阈值与套餐条件由相关 rule 和测试维护。
+需要外部判定的订单会多一次有截止时间的同步调用，失败时必须回退。阈值与适用条件由相关 rule 和测试维护。
 ```
 
 **示例 2：已被代码否定的旧卡**
 
-common 里有两张旧卡：“满 30 天由 Owner 永久删除”和“异步清理任务”。迁移时写成一份现行决策，旧做法放进“放弃过的做法”：
+以共享仓的两张旧卡为例：“归档到期后永久删除示例记录”和“异步清理任务”。迁移时写成一份现行决策，旧做法放进“放弃过的做法”：
 
 ```markdown
 ---
-title: "归档超期后保留品牌及历史，不提供永久删除"
-scope: ["self:protos/brand/**"]
-source: ["self:docs/refactor-baseline/exceptions.md", "<迁移 PR 中的用户确认记录>"]
-verified: {"self":{"commit":"b7a00482c7648a6ce982bf2fbdb8507bed0fdc67","date":"2026-10-14"}}
+title: "归档超期后保留示例记录及历史，不提供永久删除"
+scope: ["self:protos/example/**"]
+source: ["self:docs/example/exceptions.md", "<迁移 PR 中的用户确认记录>"]
+verified: {"self":{"commit":"<实际核对时的完整提交>","date":"YYYY-MM-DD"}}
 status: "accepted"
 ---
-# 归档超期后保留品牌及历史，不提供永久删除
+# 归档超期后保留示例记录及历史，不提供永久删除
 
-归档后只能在恢复截止时间之前恢复；超期后作为不可恢复的归档永久保留。
-不提供人工删除、自动删除或清理任务。协议中保留原清理状态的编号和名称，防止被再次复用。
+在这个示例中，记录可在归档保留期内恢复；超期后保留为不可恢复的历史记录。
+不提供人工删除、自动删除或清理任务。示例协议保留原清理状态的编号和名称，防止被再次复用。
 
 ## 放弃过的做法
-- 满 30 天由 Owner 显式永久删除，再由不可恢复的异步任务清理（2026-08 设计，曾为现行决定）。
-  放弃原因：（迁移时从 EXC-018 原文摘录，不能只写引用）。
+- 归档到期后由管理员永久删除示例记录，再由异步任务清理（示例中的旧设计，曾为现行决定）。
+  放弃原因：（迁移时从例外说明 EXC-001 原文摘录，不能只写引用；此处编号为示例）。
   重新考虑的条件：（同上，例如出现合规删除要求时）。
-  来源：common 旧卡 k-20260821-192858-03、k-20260824-115521-07；protos/brand/brand.proto 中的保留项（dedeca5）。
-  关键词：永久删除、清理任务、彻底删除品牌
+  来源：共享仓的两张旧知识条目；protos/example/example.proto 中的保留项（相关提交）。
+  关键词：永久删除、清理任务、彻底删除记录
 ```
 
 括号中的内容在迁移时据原文填写，这里只示意格式。
 
-**示例 3：教训**（来自 example-assistant 的 history-review H06，`lessons/2026-09-05-operation-reaffirmation.md`）
+**示例 3：教训**（通用业务示例，`lessons/YYYY-MM-DD-repeated-request.md`）
 
 ```markdown
 ---
-title: "重复表达操作不能制造新案件或丢失原案件"
-scope: ["self:packages/order_graph/**"]
-source: ["https://github.com/acme/example-assistant/commit/0123456789abcdef"]
-verified: {"self":{"commit":"b4d0aa0647e2483d2816cbc817b8c8ab1e72f328","date":"2026-10-14"}}
-guards: ["self:tests/order_graph/test_evidence_boundary.py#test_new_task_frame_does_not_project_host_route_as_active_operation"]
+title: "重复提交同一申请不能新建记录或丢失原记录"
+scope: ["self:packages/example/**"]
+source: ["https://github.com/acme/example-assistant/commit/<提交>"]
+verified: {"self":{"commit":"<实际核对时的完整提交>","date":"YYYY-MM-DD"}}
+guards: ["self:tests/example/test_request_state.py#test_new_request_has_no_active_state"]
 ---
-# 重复表达操作不能制造新案件或丢失原案件
+# 重复提交同一申请不能新建记录或丢失原记录
 
-现象：路由参数被当成已有案件的事实；用户再次表达同一操作时，原案件可能被替换。
+现象：入口参数被当成已有申请的事实；用户重复提交同一申请时，原记录可能被替换。
 根因：混淆了入口选择与业务状态。
-修复与防护：入口参数只用于选择处理入口。版本匹配、且仍在收集信息的案件收到纯重申时，
-只重新提示缺失的信息，保持案件引用、版本和加密内容不变，不查询订单，也不创建动作。
-适用条件：没有有效的新字段，也没有新订单或操作切换。
-发现方法：检查新任务是否被错误地赋予了活动操作。守护测试只覆盖这一半，续接行为仍缺测试。
+修复与防护：入口参数只用于选择处理入口。版本匹配、且仍待补齐信息的申请收到重复提交时，
+只提示缺失的信息，保持记录引用、版本和已有内容不变，不额外读取业务数据，也不创建新操作。
+适用条件：没有有效的新字段，也没有申请对象或操作类型的变化。
+发现方法：检查新申请是否被错误地赋予了已有状态。守护测试只覆盖这一半，续接行为仍缺测试。
 ```
 
-示例中的提交哈希和测试名来自 Codex 的只读核对，正式写入前还要再核实一次。
+示例中的提交、路径与测试名均为通用写法，正式写入前须替换为实际核对的值。
 
 ### K3 写入时机与门槛
 
@@ -325,7 +325,7 @@ guards: ["self:tests/order_graph/test_evidence_boundary.py#test_new_task_frame_d
 
 ### K4 跨仓知识归属
 
-- 事实写在契约提供方的仓库中。消费方用 `related: ["common:rules/brand-recovery.md"]` 引用，不复制正文。
+- 事实写在契约提供方的仓库中。消费方用 `related: ["common:rules/example-recovery.md"]` 引用，不复制正文。
 - 团队通用的流程规则，例如“单测不等于数据库或端到端验收”，写进技能的业务验收标准，不在各业务仓重复。
 - 共享仓需要在 `config.json` 的 `shared` 中显式声明。brief 只读这一层，不递归。
   - 读取时会展示实际的检出目录、HEAD 和未提交状态。
@@ -445,21 +445,21 @@ guards: ["self:tests/order_graph/test_evidence_boundary.py#test_new_task_frame_d
 ### R4 输出示例
 
 ```markdown
-# 任务：修改新会话语言路由
+# 任务：修改订单处理区域的选择
 
 项目：核心服务管理业务状态，与 common 共用协议。
 
-## 建会话前确定语言
-创建事务前判定，随会话写入独立字段……
+## 创建订单前确定处理区域
+创建事务前判定，随订单写入独立字段……
 来源：https://github.com/acme/example-service/issues/1 等 3 项 · 核实于 2026-10-14，之后 scope 内有 2 个提交，另有未提交修改
-→ decisions/2026-10-13-conversation-language.md
+→ decisions/YYYY-MM-DD-order-region.md
 
 ## 继续阅读
-- 语言回写规则 → rules/conversation-language-update.md（守护测试 tests/test_language.py）
-- 代理侧弱输入边界 → example-assistant:rules/language-evidence.md（与 decisions/2026-10-13-conversation-language.md 关联）
+- 区域更新规则 → rules/order-region-update.md（守护测试 tests/example/test_region.py）
+- 外部输入核实规则 → example-assistant:rules/example-input.md（与 decisions/YYYY-MM-DD-order-region.md 关联）
 
 ## 共享仓
-- example-assistant：../example-assistant @ 4f2c123，无未提交修改
+- example-assistant：../example-assistant @ <提交>，无未提交修改
 
 ## 未找到的条目
 - rules/missing.md
@@ -530,7 +530,7 @@ guards: ["self:tests/order_graph/test_evidence_boundary.py#test_new_task_frame_d
 - `consolidate`、`receipt-check`、`task-files`；
 - 主题治理（`topics list/suggest/update`）；
 - 跨文件的取代链；被取代的内容改为写进现行决策的“放弃过的做法”（K1）；
-- `learning.schema.json`，以及复制到每个项目的 schema。
+- 旧知识工具的条目格式定义文件，以及复制到每个项目的格式定义。
 
 ---
 
@@ -696,7 +696,7 @@ guards: ["self:tests/order_graph/test_evidence_boundary.py#test_new_task_frame_d
    - 代理直接阅读旧知识：当前卡片、PROJECT.md、分类摘要、documents 登记。旧格式都是 Markdown 或 JSON，可以直接读。
    - 只保留现在仍然成立、对未来有用的内容。逐条按 B3 核实后，用新格式和新的表述写成 rule、decision、lesson、glossary、overview。
    - 历史决策按现行设计重新组织语言。
-   - 旧库中被取代的卡片及其取代理由，以及与现行代码矛盾、但曾经被接受过的结论（例如 brand purge），整理进对应决策的“放弃过的做法”，不丢弃。
+   - 旧库中被取代的卡片及其取代理由，以及与现行代码矛盾、但曾经被接受过的结论（例如记录清理策略），整理进对应决策的“放弃过的做法”，不丢弃。
    - 跨仓重复的内容，归到契约提供方的仓库。
 4. **清理旧内容**：
    - 已跟踪的 `.codestable/` 和 `.team-workflow.json` 直接删除。
@@ -749,10 +749,10 @@ guards: ["self:tests/order_graph/test_evidence_boundary.py#test_new_task_frame_d
 
 - 目标：写入 example-assistant 的 `.tw/lessons/`。
 - 来源：
-  - example-assistant 自己的 `.codestable/wiki/history-review/`：从 337 条记录中归纳出 27 组；
-  - example-assistant 9 月 5 日重建前的知识（`334cc9d^`）；
-  - agent 仓 9 月 5 日重建前的知识（`cc2278f8^`）；
-  - agent 仓已删除的 Trellis spec（在 `ef6f3e3a` 中删除，其中 graph-patterns.md 有 19 个场景小节）。
+  - example-assistant 自己的历史复盘目录（如 `.codestable/wiki/example-review/`）：从 337 条记录中归纳出 27 组；
+  - example-assistant 9 月 5 日重建前的知识（`<重建提交>^`）；
+  - agent 仓 9 月 5 日重建前的知识（`<重建提交>^`）；
+  - agent 仓已删除的 Trellis 规范文件（在相关提交中删除，其中一份规范有 19 个场景小节）。
 - 迁移规则：agent 仓的教训如果适用于 example-assistant 的实现，就迁入 example-assistant，并在正文中写明适用条件。不适用的内容不迁入。
 - 作为阶段 3 中 example-assistant 迁移之后的一项独立任务，由你指挥执行。
 
@@ -760,7 +760,7 @@ guards: ["self:tests/order_graph/test_evidence_boundary.py#test_new_task_frame_d
 
 1. `tw check` 没有错误，旧目录已全部移除。
 2. 用最近的真实任务回放 brief（例如某个项目最近的二十多个任务）。预期条目由独立代理事先确定，回放时这些条目要出现。
-3. 已知冲突已经处置，例如 common 的 brand purge。
+3. 已知冲突已经处置，例如共享仓的记录清理策略。
 4. 迁移说明完整：未迁入的内容都已列出，用户确认的问题都有记录。
 5. 高风险结论已经通过真实入口核对；无法运行的场景明确保留为未完成。
 
@@ -807,11 +807,11 @@ plugin.json、.claude-plugin/、LICENSE、licenses/
 
 **CS 中不迁入的部分**：
 
-- `scripts/build_runtime.py`、`skills/cs/runtime_src/`，以及生成的 `skills/cs/scripts/cs_knowledge.py`（这三者构成了双份源码）；
-- `bootstrap.py` 的重建功能；
-- `skills/cs-analysis/`；
-- 项目脚手架资产（`assets/project/.codestable` 下 11 类的 README/INDEX、`learning.schema.json` 等）；
-- `docs/rebuild.md`、`storage.md`、`parallel-development.md`、`drift.md`、`governance-acceptance.md`。其中仍需要的内容写进新文档。
+- 运行时构建脚本、模块源码目录及其生成的运行时脚本（这三者构成了双份源码）；
+- 启动脚本的重建功能；
+- 旧知识分析技能目录；
+- 项目脚手架资产（11 类说明与索引、条目格式定义等）；
+- 重建、存储、并行开发、漂移检测和治理验收的旧设计文档。其中仍需要的内容写进新文档。
 
 **TW 中删除的部分**：
 
@@ -828,7 +828,7 @@ plugin.json、.claude-plugin/、LICENSE、licenses/
 ### M3 测试与 CI
 
 - 统一使用 unittest。
-- 保留检索评测和失真反例，例如 brand purge 这类“路径存在、结论却已被否定”的情况。
+- 保留检索评测和失真反例，例如记录清理策略这类“路径存在、结论却已被否定”的情况。
 - 新增用例：
   - `init` 与托管指引块；
   - `check` 识别旧目录残留和忽略规则问题；
@@ -924,7 +924,7 @@ plugin.json、.claude-plugin/、LICENSE、licenses/
 | 1 知识运行时 | `init/brief/read/new/check/audit/cache/version`；格式与预算；写作规范与正反例；成员操作说明；迁移指南与找回教训要点；真实查询回放集与召回基线；三个客户端的调用实测 | 在 gateway 和 core 的副本上读写，能发现占位符和失效引用；查询不写入任何文件 | 未参与实现的代理在隔离工作区试用 | 0 |
 | 2 合并与团队衔接 | 合仓；把 TW 脚本迁入运行时；删除桥接；合并配置；建立 `local/` 布局；落实 T3 的执行绑定契约；稳定的任务身份（v4.1：任务编号加可读目录）；适配 示例客服项目 的 worktree 依赖工具（`script/worktree/skills/example-worktree-dependency/scripts/worktree.py`，目前只处理两份旧映射路径） | 在本仓用新流程完成一个真实任务；只提交知识时，按内容绑定的检查不失效；新布局下 worktree 依赖解析正确 | 独立验收者核对原始结果 | 1 |
 | T7 流程简化（v4.2 提前） | 按[流程简化方案](2026-10-15-process-simplification.md)：固定材料组与 `start`、评审 Markdown 与逐项复核、`deliver` 顺序封装、参数归位、status 与关闭规则 | 本仓真实任务从 `start` 走到 `deliver`；中途改源码触发逐项复核 | 未参与实现的验收者按批次 1 场景执行 | 2 |
-| 3 迁移试点 | 按 B 由代理迁移 example-assistant、core、common；example-assistant 迁移之后，由你指挥找回历史教训（B5） | brand purge 冲突被识别并改写；brief 回放能取到预期条目；迁移说明完整 | 按 B3 独立复核；用户确认语义 | 1、2、T7、候选发行包 |
+| 3 迁移试点 | 按 B 由代理迁移 example-assistant、core、common；example-assistant 迁移之后，由你指挥找回历史教训（B5） | 记录清理策略的冲突被识别并改写；brief 回放能取到预期条目；迁移说明完整 | 按 B3 独立复核；用户确认语义 | 1、2、T7、候选发行包 |
 | 4 成员试点与发行 | tag 发行；安装、升级、回退 | 两位成员在同一任务中双向接续、检索和交付；实测阅读量、命令数和耗时 | 两位真实成员 | 3 |
 | 5 推广 | 其余仓按组由代理迁移 | 每组按 B6 验收 | 用户与团队的业务验收 | 4 |
 
@@ -959,12 +959,12 @@ plugin.json、.claude-plugin/、LICENSE、licenses/
 | GLOSSARY 格式、ADR 三条件、记录被拒的需求 | MATT | K1、K5 |
 | 用规范化的 git remote 作为项目身份 | ECC | L1 `project.id` |
 | **改进而非照搬** | | |
-| ADR 顺序编号改为日期加 slug | MATT 现行做法是取最大号加 1，#799 中并行分支撞号 | K2 |
-| 被取代的决策不单独成文件，而是移入现行决策的“放弃过的做法”，保留原因和重新考虑的条件 | MATT 用 `superseded by` 和被否决的备选防止方案被重复提出，但 #822 中失效与现行的 ADR 混在一起，#1114 只追加修订导致原文结论过时；ECC 用 delete-zone 防止删除的内容复活 | K1、R2 第 6 步、W2 |
-| 教训持续保留，用 break-loop 式的缺陷复盘写入 | Trellis `break-loop` 在调试后把教训写回 spec，但缺少状态与整理，矛盾不断累积（讨论 #371） | K1、K3、T5 |
+| ADR 顺序编号改为日期加 slug | MATT 现行做法是取最大号加 1，MATT#799 中并行分支撞号 | K2 |
+| 被取代的决策不单独成文件，而是移入现行决策的“放弃过的做法”，保留原因和重新考虑的条件 | MATT 用 `superseded by` 和被否决的备选防止方案被重复提出，但 MATT#822 中失效与现行的 ADR 混在一起，MATT#1114 只追加修订导致原文结论过时；ECC 用 delete-zone 防止删除的内容复活 | K1、R2 第 6 步、W2 |
+| 教训持续保留，用 break-loop 式的缺陷复盘写入 | Trellis `break-loop` 在调试后把教训写回 spec，但缺少状态与整理，矛盾不断累积（Trellis #371） | K1、K3、T5 |
 | **不借鉴** | | |
 | 按主题的大文件只增不减、行号锚点、整文件注入 | Trellis（单个文件 3,993 行，一次注入 455KB） | K1 原子条目、P2 |
-| 按开发者分的 journal、入库的共享索引 | Trellis #284、#415 | 任务记录不入库，索引放 local |
+| 按开发者分的 journal、入库的共享索引 | Trellis #284、Trellis #415 | 任务记录不入库，索引放 local |
 | 钩子自动观察、后台模型自动写入、数值置信度与衰减 | ECC | 非目标 |
 | 在个人目录中保存项目知识；按 TTL 删除已评审的知识 | ECC | 知识入库，失效时改写或删除 |
 | MATT 分散在根目录的文件布局 | MATT | 单一根目录、原文优先，路径交给知识技能 |
