@@ -592,7 +592,7 @@ sops:
         initial_state:
           - "示例客服项目 仓库已按新布局初始化，并有一个 worktree"
         steps:
-          - "在 worktree 中运行 example-worktree-dependency 的 worktree.py"
+          - "在 worktree 中运行示例客服项目的 worktree 依赖工具脚本"
         expected:
           - "依赖映射从 .tw/local/repositories.json 解析，结果指向正确的路径"
         forbidden_effects:

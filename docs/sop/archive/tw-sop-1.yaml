@@ -238,6 +238,6 @@ sops:
         verify: doc
         initial_state: ["本仓工作区"]
         steps: ["检索 README.md、onboarding.md 与 team-workflow 技能的安装步骤"]
-        expected: ["安装步骤只要求安装本仓发行的技能，外部验证技能仓库 与 sop-board 只作为可选采用方式出现"]
-        forbidden_effects: ["新增对 外部验证技能仓库 或 sop-board 的安装或运行依赖"]
+        expected: ["安装步骤只要求安装本仓发行的技能，外部验证技能仓库与 sop-board 只作为可选采用方式出现"]
+        forbidden_effects: ["新增对外部验证技能仓库或 sop-board 的安装或运行依赖"]
         evidence_hints: ["检索命令与结果"]

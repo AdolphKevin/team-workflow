@@ -225,7 +225,7 @@ E2 只经离线夹具与代理试用验证；真实平台上的重审留到下�
 
 **示例客服项目 的 worktree 依赖工具**
 
-- `example-worktree-dependency` 优先读取 `.tw/local/repositories.json`，34 项测试通过。批次 0 的 SOP-07-P02 在真实 示例客服项目 克隆中确认依赖解析正确。
+- 示例客服项目的 worktree 依赖工具优先读取 `.tw/local/repositories.json`，34 项测试通过。批次 0 的 SOP-07-P02 在示例客服项目的真实克隆中确认依赖解析正确。
 - 该工具位于 示例客服项目 工作区，不在本仓提交。
 
 **本仓的旧目录**

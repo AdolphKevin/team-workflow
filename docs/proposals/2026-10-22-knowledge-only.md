@@ -1,6 +1,6 @@
 # 本仓收缩为项目知识库，SOP 验收与回归沉淀归 sop-board（草案修订 1）
 
-> 状态：已批准，实施中。日期：2026-10-22。批准：AdolphKevin 2026-10-22 会话中答复“批准”（修订 1 全文）。
+> 状态：已批准，已实施（1.0.0）。日期：2026-10-22。批准：AdolphKevin 2026-10-22 会话中答复“批准”（修订 1 全文）。
 > 配套方案：sop-board 仓库 `docs/proposals/2026-10-22-acceptance-standard-and-distill.md`。
 > 调查基线：本仓 `8be02e4`，sop-board `436d1ab`；对照的上游为 mattpocock/skills `5beb35b`、affaan-m/ECC（原 everything-claude-code）`90606c8`，均为 2026-10-22 调查时的提交。
 > 修订 1：按用户 2026-10-22 的四项决定（第 8 节）与两轮独立审查修改。
