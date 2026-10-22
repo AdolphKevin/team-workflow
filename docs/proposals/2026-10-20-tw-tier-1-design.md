@@ -6,9 +6,11 @@ assessment: {"complexity":"medium","risks":["public-contract"],"effort":"约一�
 roles: {"design_owner":"Claude","implementation_owner":"Claude","acceptance_owner":"AdolphKevin"}
 ---
 
+> 历史文档：保留当时的方案或验证记录；现行能力与使用方式见 [README](../../README.md)。
+
 # TW-TIER-1：以 SOP 场景验收最终交付
 
-> 本文件是任务 TW-TIER-1 的 tw 方案原文。依据与正文见[以 SOP 场景验收最终交付（修订 2）](2026-10-20-verification-tiers.md)，AdolphKevin 于 2026-10-20 批准；验收场景见 [docs/sop/tw-tier-1.yaml](../sop/tw-tier-1.yaml)。
+> 本文件是任务 TW-TIER-1 的 tw 方案原文。依据与正文见[以 SOP 场景验收最终交付（修订 2）](2026-10-20-verification-tiers.md)，AdolphKevin 于 2026-10-20 批准；验收场景见 [docs/sop/archive/tw-tier-1.yaml](https://github.com/AdolphKevin/team-workflow/blob/8be02e4/docs/sop/tw-tier-1.yaml)。
 >
 > 状态：修订 2，按已批准方案修订 2 改写；修订 1 依据方案修订 1。
 
@@ -16,7 +18,7 @@ roles: {"design_owner":"Claude","implementation_owner":"Claude","acceptance_owne
 <!-- tw-section id=scope-global type=global-scope -->
 按已批准方案修订 2 第 2、3 节修改运行时与团队技能文本：需求完成以独立执行者经真实入口执行的场景为准；没有登记检查的任务以场景验收交付；产品变化后已通过场景待判定，受影响的重跑，不受影响的写明理由沿用；撤回修订 1 的检查形式与快速检查；本仓自身测试删除。
 
-非目标：playwright-acceptance 与 sop-verify；sop-board 的代码。
+非目标：playwright-acceptance 与 example-verify；sop-board 的代码。
 
 - 需求级验收：A1、A2、A3、A4
 
@@ -39,7 +41,7 @@ roles: {"design_owner":"Claude","implementation_owner":"Claude","acceptance_owne
 <!-- tw-section id=A1 type=acceptance depends=scope-global,I1 -->
 SOP-01 节点全部场景通过。
 
-- 场景：docs/sop/tw-tier-1.yaml#SOP-01
+- 场景：docs/sop/archive/tw-tier-1.yaml#SOP-01
 - 依据：位置 docs/proposals/2026-10-20-verification-tiers.md 第 2.5 节与第 4 节；版本 修订 2（2026-10-20）；确认人 AdolphKevin
 - 检查：无
 
@@ -47,7 +49,7 @@ SOP-01 节点全部场景通过。
 <!-- tw-section id=A2 type=acceptance depends=scope-global,I1 -->
 SOP-02 节点全部场景通过。
 
-- 场景：docs/sop/tw-tier-1.yaml#SOP-02
+- 场景：docs/sop/archive/tw-tier-1.yaml#SOP-02
 - 依据：位置 docs/proposals/2026-10-20-verification-tiers.md 第 2.4 节与第 4 节；版本 修订 2（2026-10-20）；确认人 AdolphKevin
 - 检查：无
 
@@ -55,7 +57,7 @@ SOP-02 节点全部场景通过。
 <!-- tw-section id=A3 type=acceptance depends=scope-global,D1 -->
 SOP-03 节点全部场景通过。技能场景由只装候选技能的新会话执行。
 
-- 场景：docs/sop/tw-tier-1.yaml#SOP-03
+- 场景：docs/sop/archive/tw-tier-1.yaml#SOP-03
 - 依据：位置 docs/proposals/2026-10-20-verification-tiers.md 第 2.1–2.3 节与第 4 节；版本 修订 2（2026-10-20）；确认人 AdolphKevin
 - 检查：无
 
@@ -63,7 +65,7 @@ SOP-03 节点全部场景通过。技能场景由只装候选技能的新会话�
 <!-- tw-section id=A4 type=acceptance depends=scope-global,D1 -->
 SOP-04 节点全部场景通过。
 
-- 场景：docs/sop/tw-tier-1.yaml#SOP-04
+- 场景：docs/sop/archive/tw-tier-1.yaml#SOP-04
 - 依据：位置 docs/proposals/2026-10-20-verification-tiers.md 第 3 节；版本 修订 2（2026-10-20）；确认人 AdolphKevin
 - 检查：release
 - 验证：自动

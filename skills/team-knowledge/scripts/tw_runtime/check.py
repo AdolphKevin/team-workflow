@@ -7,6 +7,18 @@ from . import KB, Invalid, entries, files, gitutil, globs, project as projects, 
 KNOWLEDGE = ('rule', 'decision', 'lesson')
 LOCAL_MANAGED = {'tasks', 'batches', 'imports', 'validation-active', 'agents', 'cache', 'repositories.json'}
 LOCAL_REFERENCE = re.compile(r'''\.tw/local/([^\s/`<>"'\[\](){}*?，。；：、]+)''')
+CHECKS_DESTINATION = ('旧团队字段：运行命令与必跑用例移入产品仓库脚本与 CI；'
+                      'CI 需发现用例被跳过、数量为零或声明的必跑用例未执行；'
+                      '覆盖说明留在对应规则或验证手册，之后删除此字段')
+ENTRY_DESTINATION = ('旧团队字段：操作、账号类别、隔离与清理移入产品仓库的真实验证手册；'
+                     'sop-board 工作区 entries 按其契约重新填写（surface 使用其取值），'
+                     '长篇说明放手册并引用章节')
+LEGACY_DESTINATIONS = {
+    **{key: CHECKS_DESTINATION for key in ('checks', 'required_checks', 'risk_checks')},
+    **{key: '旧团队字段：只服务于已移除的团队流程，可删除'
+       for key in ('platform', 'inputs', 'external_inputs', 'environment_versions')},
+    **{key: ENTRY_DESTINATION for key in ('acceptance_entries', 'accounts')},
+}
 
 
 def local_reference_problems(text):
@@ -49,7 +61,11 @@ def run(project, base=None):
     shared = project.shared()
     config = project.config or {}
     declared = config.get('shared', {}) if isinstance(config.get('shared'), dict) else {}
-    checks = config.get('checks', {}) if isinstance(config.get('checks'), dict) else {}
+    for key, destination in LEGACY_DESTINATIONS.items():
+        if key in config:
+            warn(projects.CONFIG, f'{key}：{destination}')
+    if f'{KB}/platform.py' in names or (root / KB / 'platform.py').exists():
+        warn(f'{KB}/platform.py', '旧团队平台脚本：只服务于已移除的团队流程，可删除')
     code = [n for n in names if scope_target(n)]
     labels = {e.label for e in loaded}
     for entry in loaded:
@@ -77,7 +93,7 @@ def run(project, base=None):
             elif not any(globs.matches(pattern, f) for f in files):
                 (warn if entry.kind == 'decision' else error)(entry.path, f'scope {alias}:{pattern} 匹配不到任何文件')
         for value in entry.values('guards'):
-            guard_problem(value, root, project.source, declared, shared, checks, entry, error, warn)
+            guard_problem(value, project.source, declared, shared, entry, error, warn)
         for value in entry.values('related'):
             repo, sep, ref = value.partition(':')
             if not sep:
@@ -100,7 +116,7 @@ def run(project, base=None):
                     if gitutil.run(root, 'cat-file', '-e', f'{info["commit"]}^{{commit}}', check=False).returncode != 0:
                         warn(entry.path, '核实基线提交不在当前历史中（浅克隆或历史被改写），变化情况无法计算')
         if entry.kind == 'lesson' and not entry.values('guards'):
-            warn(entry.path, '没有守护场景；用 guards 引用能发现该问题的 SOP 场景（仓库:场景文件#场景编号）')
+            warn(entry.path, '没有防护引用；用 guards 引用能发现该问题的测试或场景（仓库:文件#名称）；引用只表示可追溯，运行由 CI 证明')
     titles = defaultdict(list)
     for entry in loaded:
         if entry.kind in KNOWLEDGE and entry.title:
@@ -140,10 +156,9 @@ def scope_files(alias, code, declared, shared):
     return [n for n in repo.names if scope_target(n)]
 
 
-def guard_problem(value, root, source, declared, shared, checks, entry, error, warn):
+def guard_problem(value, source, declared, shared, entry, error, warn):
     if value.startswith('check:'):
-        if value[6:] not in checks:
-            error(entry.path, f'guards 引用了未配置的检查：{value[6:]}')
+        warn(entry.path, f'guards {value} 是旧检查引用，请改写为 仓库:文件#测试名；引用只表示可追溯，运行由 CI 证明')
         return
     alias, _, rest = value.partition(':')
     path, _, name = rest.partition('#')

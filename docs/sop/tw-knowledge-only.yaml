@@ -1,0 +1,232 @@
+# TW-KO-1：本仓收缩为项目知识库的验收场景
+# 预期只依据 docs/proposals/2026-10-22-knowledge-only.md（修订 1，2026-10-22 批准）第 3、4、5、6 节，不依据当前实现的输出。
+# 执行者：未参与实现与审核的独立代理，经命令行真实入口执行；本仓不接入 sop-board（方案第 8 节）。
+# "候选版"指实现分支指定提交的 skills/team-knowledge，取出到临时目录后安装到临时技能目录使用；"旧版"指 main 分支 8be02e4 的发行内容。
+# "旧版项目"指用旧版 tw init --apply 建立、再手工加入全部旧团队字段（checks、required_checks、risk_checks、platform、inputs、external_inputs、environment_versions、acceptance_entries、accounts）、一条 guards 为 check:名称 的规则、一条 guards 为 self:文件#测试名 的规则，以及 .tw/local/ 下一份团队任务材料的临时 Git 项目。
+
+metadata:
+  requirement: "team-workflow 只发行 team-knowledge：知识命令独立可用，团队流程、场景验收与 MATT 副本移除，已有项目可升级"
+  batch: "tw-knowledge-only"
+  version: 1
+  owner: "AdolphKevin"
+  sources:
+    - ref: "docs/proposals/2026-10-22-knowledge-only.md 第 3–6 节"
+      version: "修订 1（2026-10-22 批准）"
+      confirmed_by: "AdolphKevin"
+  tags: ["tw", "知识库", "升级"]
+
+sops:
+
+  - id: SOP-01
+    title: 知识命令独立可用
+    actor: 项目成员
+    entry: 候选版 tw 命令行
+    scenarios:
+      - id: SOP-01-P01
+        polarity: positive
+        title: 新项目用候选版完成一次开工读知识、完成后更新知识
+        actor: 项目成员
+        priority: P0
+        verify: cli
+        initial_state: ["临时 Git 项目，含 src/pay/refund.py 与 src/user/profile.py，只安装候选版 team-knowledge"]
+        steps: ["tw init --apply", "tw new 建一条作用范围为 src/pay/ 的规则和一条作用范围为 src/user/ 的教训，教训不含退款相关词", "tw brief --task 修改退款金额校验 --path src/pay/refund.py", "tw read 读取被选中的规则", "tw check", "tw audit", "tw cache 构建缓存后再运行一次 brief"]
+        expected: ["每条命令退出码 0", "brief 选中 src/pay/ 的规则并给出选择原因", "与路径、任务词组、显式引用和关联都不匹配的 src/user/ 教训未被选中", "read 输出规则原文", "check 报告 0 错误", "两次 brief 选中的条目相同"]
+        forbidden_effects: ["任何命令提示需要安装 team-workflow 或运行 tw team"]
+        evidence_hints: ["逐条命令与完整输出"]
+      - id: SOP-01-P02
+        polarity: positive
+        title: 跨仓 shared 映射的知识可读
+        actor: 项目成员
+        priority: P1
+        verify: cli
+        initial_state: ["两个临时 Git 仓库 a 与 b，a 的 .tw/config.json 在 shared 中声明 b 的身份并在本机映射到 b 的目录，b 有一条规则"]
+        steps: ["在 a 中 tw brief --task 与 b 的规则标签相同的词组", "在 a 中 tw read 该条目"]
+        expected: ["brief 列出 b 的规则并标明来源仓库", "read 输出 b 的规则原文"]
+        forbidden_effects: ["跨仓条目路径解析到 a 仓库内"]
+        evidence_hints: ["命令与输出"]
+      - id: SOP-01-N01
+        polarity: negative
+        negative_type: not-found
+        title: guards 指向不存在的测试名时 check 报错
+        actor: 项目成员
+        priority: P1
+        verify: cli
+        initial_state: ["SOP-01-P01 的项目，tests/test_refund.py 中只有 test_refund_limit"]
+        steps: ["把 src/pay/ 规则的 guards 写为 self:tests/test_refund.py#test_refund_missing", "tw check", "改为 self:tests/test_refund.py#test_refund_limit 后再 tw check"]
+        expected: ["第一次 check 报错并指出该引用与条目", "第二次 check 0 错误"]
+        forbidden_effects: ["第一次 check 以 0 退出"]
+        evidence_hints: ["两次输出与退出码"]
+
+  - id: SOP-02
+    title: 已采用 tw 的项目升级
+    actor: 项目成员
+    entry: 候选版 tw 命令行
+    scenarios:
+      - id: SOP-02-P01
+        polarity: positive
+        title: 旧版项目升级后知识命令照常可用，团队字段给去向提示
+        actor: 项目成员
+        priority: P0
+        verify: cli
+        initial_state: ["旧版项目", "记录 .tw/local/ 下文件清单与摘要"]
+        steps: ["改用候选版 tw，运行 brief、read、check、audit"]
+        expected: ["brief、read、audit 正常输出", "check 以 0 退出，对每个旧团队字段逐项给出方案第 5 节所列去向", "对 check:名称 的 guards 给出改写为 仓库:文件#测试名 的提示", "self:文件#测试名 的 guards 照常校验通过", ".tw/config.json 与 .tw/local/ 的文件清单和摘要与升级前相同"]
+        forbidden_effects: ["工具修改或删除 .tw/config.json 字段或 .tw/local/ 材料"]
+        evidence_hints: ["升级前后文件摘要对比", "check 完整输出"]
+      - id: SOP-02-N01
+        polarity: negative
+        negative_type: not-found
+        title: 团队命令返回移除说明
+        actor: 项目成员
+        priority: P1
+        verify: cli
+        initial_state: ["旧版项目，候选版 tw"]
+        steps: ["tw team status", "tw team start --task x --design y"]
+        expected: ["两条命令都输出“团队流程已移除”与方案链接，退出码非零"]
+        forbidden_effects: ["在项目中写入任何文件"]
+        evidence_hints: ["输出、退出码与 git status"]
+
+  - id: SOP-03
+    title: 发行内容
+    actor: 维护者
+    entry: 本仓发行检查、打包与安装
+    scenarios:
+      - id: SOP-03-P01
+        polarity: positive
+        title: CI 两步通过，包内只有 team-knowledge 与公开文档
+        actor: 维护者
+        priority: P0
+        verify: cli
+        initial_state: ["实现分支指定提交的干净检出"]
+        steps: ["python3 scripts/check_release.py", "python3 scripts/package.py --output <仓库外>/tw.zip", "列出 ZIP 内容", "把 ZIP 中的技能安装到临时技能目录，运行 tw version --check-install"]
+        expected: ["前两步退出码 0", "ZIP 的技能目录只有 team-knowledge", "version --check-install 通过，只核对 team-knowledge", "插件元数据、VERSION 与运行时版本一致为 1.0.0"]
+        forbidden_effects: ["ZIP 中出现 team-workflow、playwright-acceptance、matt-*、upstream/"]
+        evidence_hints: ["命令输出与 ZIP 清单"]
+      - id: SOP-03-N01
+        polarity: negative
+        negative_type: other
+        title: 公开文本不含内部标识
+        actor: 维护者
+        priority: P1
+        verify: cli
+        initial_state: ["实现分支指定提交的干净检出"]
+        steps: ["在已跟踪文件与 ZIP 内容中检索内部仓库名、内部项目名、个人本机绝对路径、真实站点与真实单号"]
+        expected: ["命中只有 .tw/config.json 的 format 标识 channelwill/team-workflow 及方案明确保留的公开地址"]
+        forbidden_effects: ["出现个人本机绝对路径、内部项目名、真实站点或真实单号"]
+        evidence_hints: ["检索命令与结果"]
+
+  - id: SOP-04
+    title: 在其他工作流中使用知识
+    actor: 代理
+    entry: 只装上游 MATT 与候选版 team-knowledge 的新会话
+    scenarios:
+      - id: SOP-04-P01
+        polarity: positive
+        title: 代理在非 tw 工作流中开工读知识、完成后更新知识
+        actor: 代理
+        priority: P0
+        verify: agent
+        initial_state: ["临时项目，已用候选版 tw init --apply --guidance 写入项目知识指引，.tw 中有一条作用于 src/pay/ 的规则", "新会话只加载上游 mattpocock/skills 与候选版 team-knowledge"]
+        steps: ["在新会话中提出一个修改 src/pay/refund.py 的小需求，并说明完成后有一条值得长期记录的结论", "会话结束后查看其工具调用记录与 .tw 改动"]
+        expected: ["会话在改代码前运行了 tw brief，并在回复中引用了该规则", "完成后新增或更新了 .tw 条目并运行了 tw check，结果 0 错误"]
+        forbidden_effects: ["会话运行 tw team 命令或要求安装 team-workflow"]
+        evidence_hints: ["会话记录中的命令", ".tw 改动 diff"]
+      - id: SOP-04-N01
+        polarity: negative
+        negative_type: other
+        title: 与知识无关的小改动不强制写知识
+        actor: 代理
+        priority: P2
+        verify: agent
+        initial_state: ["同 SOP-04-P01 的项目与会话设置"]
+        steps: ["在新会话中提出只修正一处拼写错误的需求"]
+        expected: ["会话完成修改，说明本次没有需要记录的长期结论"]
+        forbidden_effects: ["为凑知识更新而新增与本次无关的 .tw 条目"]
+        evidence_hints: ["会话记录与 git diff"]
+
+  - id: SOP-05
+    title: 本仓知识
+    actor: 维护者
+    entry: 本仓 tw 命令行
+    scenarios:
+      - id: SOP-05-P01
+        polarity: positive
+        title: 本仓 .tw 在删除后保持有效
+        actor: 维护者
+        priority: P0
+        verify: cli
+        initial_state: ["实现分支指定提交的干净检出"]
+        steps: ["用候选版在本仓运行 tw check", "对照方案第 4 节列出的 28 个知识文件，逐个查看处理结果"]
+        expected: ["check 0 错误", "每个文件或被改写为仍成立的作用范围，或已删除且删除原因写入 decisions/2026-10-14-one-repository-one-runtime.md 的放弃过的做法"]
+        forbidden_effects: ["通过放宽 check 规则消除错误"]
+        evidence_hints: ["check 输出与逐文件处理表"]
+      - id: SOP-05-N01
+        polarity: negative
+        negative_type: stale-input
+        title: 现行文档不再描述团队流程为现行能力
+        actor: 维护者
+        priority: P1
+        verify: cli
+        initial_state: ["实现分支指定提交的干净检出"]
+        steps: ["在 README、AGENTS.md、docs/design.md、docs/install.md、docs/member-guide.md、docs/acceptance.md 与 skills/team-knowledge 中检索 tw team、team-workflow 技能、matt-、playwright-acceptance、checks、acceptance_entries"]
+        expected: ["命中只出现在升级说明、历史标记或方案链接中"]
+        forbidden_effects: ["现行文档把团队流程、场景验收或 checks 写成可用能力"]
+        evidence_hints: ["检索结果与逐处判断"]
+
+  - id: SOP-06
+    title: 旧场景迁入 sop-board
+    actor: 项目成员
+    entry: sop-board 场景校验
+    scenarios:
+      - id: SOP-06-P01
+        polarity: positive
+        title: 带 regression 人工说明的旧场景按升级说明整理后通过 sop-board 校验
+        actor: 项目成员
+        priority: P1
+        verify: cli
+        initial_state: ["本仓 docs/sop/archive/ 中一份含 regression 字段的旧场景文件", "已安装 sop-board"]
+        steps: ["按方案第 5 节与升级说明整理该文件", "用 sop-board 的场景校验（登记场景文件或 sop-board check 所在工作区）核对"]
+        expected: ["校验通过", "原 regression 人工说明的原因、负责人与触发时机保留在场景 expected 或验证手册中"]
+        forbidden_effects: ["整理时删除场景或改动 expected 的业务含义"]
+        evidence_hints: ["整理前后 diff 与校验输出"]
+      - id: SOP-06-N01
+        polarity: negative
+        negative_type: invalid-input
+        title: 未整理的旧场景被 sop-board 拒绝
+        actor: 项目成员
+        priority: P2
+        verify: cli
+        initial_state: ["同一份未整理的旧场景文件"]
+        steps: ["直接用 sop-board 校验"]
+        expected: ["校验失败并指出 regression 字段"]
+        forbidden_effects: ["未整理的文件通过校验"]
+        evidence_hints: ["校验输出"]
+
+  - id: SOP-07
+    title: 旧技能与指引清理
+    actor: 项目成员
+    entry: 升级说明与技能目录
+    scenarios:
+      - id: SOP-07-P01
+        polarity: positive
+        title: 按升级说明移除旧技能与团队指引块，保留成员自有内容
+        actor: 项目成员
+        priority: P1
+        verify: cli
+        initial_state: ["临时 HOME：技能目录装有旧版全部技能（team-workflow、team-knowledge、playwright-acceptance、15 个 matt-*）与一个成员自行安装的其他技能", "临时全局指引与项目 AGENTS.md 各含旧版团队指引块及一段成员自写内容"]
+        steps: ["按 CHANGELOG 与升级说明执行清理并安装候选版 team-knowledge"]
+        expected: ["技能目录只剩候选版 team-knowledge 与成员自行安装的技能", "全局与项目指引中的团队块被删除或替换，成员自写内容逐字保留", "项目知识指引块仍在"]
+        forbidden_effects: ["删除成员自行安装的技能或自写指引内容"]
+        evidence_hints: ["清理前后目录清单与指引 diff"]
+      - id: SOP-07-N01
+        polarity: negative
+        negative_type: other
+        title: 升级说明不要求删除 .tw 知识
+        actor: 项目成员
+        priority: P2
+        verify: cli
+        initial_state: ["旧版项目"]
+        steps: ["按升级说明完整操作一遍"]
+        expected: [".tw 下的 rules、decisions、lessons、overview 与 config.json 保持原样"]
+        forbidden_effects: ["任何步骤删除或改写 .tw 知识条目"]
+        evidence_hints: ["前后摘要对比"]

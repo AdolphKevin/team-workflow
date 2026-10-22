@@ -1,21 +1,27 @@
 ---
-title: "SOP 独立验证、看板与团队流程通过场景文件和结果格式协作"
-scope: ["self:skills/playwright-acceptance/**", "self:skills/team-workflow/references/scenarios.md", "self:skills/team-workflow/references/onboarding.md"]
-source: ["self:docs/proposals/2026-10-19-tw-sop-1-design.md"]
+title: "SOP 验收与回归沉淀由 sop-board 发行"
+scope: ["self:docs/design.md", "self:docs/install.md", "self:docs/acceptance.md"]
+source: ["self:docs/proposals/2026-10-22-knowledge-only.md", "self:docs/proposals/2026-10-19-tw-sop-1-design.md"]
 status: "accepted"
-tags: ["SOP", "独立验证", "sop-verify", "sop-board", "praxis-skills", "采用方式"]
+tags: ["SOP", "独立验证", "example-verify", "sop-board", "外部验证技能仓库", "采用方式"]
 ---
-# SOP 独立验证、看板与团队流程通过场景文件和结果格式协作
+# SOP 验收与回归沉淀由 sop-board 发行
 
-采用依据与握手规则见[已批准方案 D1](../../docs/proposals/2026-10-19-tw-sop-1-design.md#采用说明与决策)：`sop-verify` 归 praxis-skills，看板归 sop-board，总体方案位于 sop-board 的 `docs/proposals/`。
+业务验收标准、场景、独立执行、证据、复核、缺陷与复测随 sop-board 发行。本仓只保留知识库，验收入口及账号操作由产品仓库真实验证手册维护；知识条目引用测试或场景文件，不接管执行。
 
-三方只共享场景文件与结果 JSONL 两种格式，格式只加字段。team-workflow 不依赖另外两个仓库的代码，协作通过文件完成。
+职责依据见[已批准方案](../../docs/proposals/2026-10-22-knowledge-only.md)。本仓自身由独立代理按当前场景直接验收，结果写入验证记录。
 
 ## 备选
 
-- 把独立验证与看板并入 team-workflow：会将独立使用绑定到团队流程，采用方案 D1 的仓库分工。
-- 跨仓库直接导入运行时代码：会增加安装与升级耦合，采用文件格式握手。
+继续在本仓保留独立验收副本：两套契约与升级路径重复，使用者需判断调用哪套，因此不采用。
 
 ## 后果
 
-项目可按需采用独立验证或团队流程。浏览器执行技能提供两种路径，tw 项目沿用原有用法；独立验证的采用与接入见[场景指南](../../skills/team-workflow/references/scenarios.md)与[接入指南](../../skills/team-workflow/references/onboarding.md)。
+产品成员按 sop-board 已发行的契约整理入口与场景，人工范围保留原因、负责人和触发时机；知识使用者自行选择开发方法。
+
+## 放弃过的做法
+
+- 本仓维护浏览器验收副本，并让独立验证与团队流程通过文件格式协作
+  放弃原因：验收职责已统一交给 sop-board，继续保留副本会重复维护与发行；旧操作见 Git 历史。
+  来源：2026-10-19 的采用方案与 2026-10-22 知识库方案第 2、4、5 节
+  关键词：浏览器验收、SOP、回归沉淀、格式协作

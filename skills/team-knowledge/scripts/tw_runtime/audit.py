@@ -2,13 +2,13 @@
 from collections import Counter
 import os
 from pathlib import Path
-import sys
 import urllib.error
 import urllib.request
 
 from . import KB, brief, cache, check, entries, gitutil, textmatch
 
 BIG_FILE = 20 * 1024 * 1024
+LOCAL_MANAGED = {Path(cache.DIRECTORY).name, 'repositories.json'}
 
 
 def run(project, links=False, top=10):
@@ -52,13 +52,6 @@ def run(project, links=False, top=10):
 
 
 def local_usage(root):
-    # Team modules use bare imports; select them with the same precedence as the CLI.
-    team = str(Path(__file__).resolve().parent / 'team')
-    sys.path.insert(0, team)
-    try:
-        from cleanup import MANAGED, KEEP, size as material_size
-    finally:
-        sys.path.remove(team)
     base = Path(root) / KB / 'local'
     files, size, big, unmanaged = 0, 0, [], []
     if base.is_dir():
@@ -73,14 +66,20 @@ def local_usage(root):
                 size += length
                 if length > BIG_FILE:
                     big.append(path.relative_to(root).as_posix())
-        managed = {*MANAGED, *KEEP, Path(cache.DIRECTORY).name}
         for path in sorted(base.iterdir()):
-            if path.name not in managed:
+            if path.name not in LOCAL_MANAGED:
                 try:
                     unmanaged.append({'path': path.relative_to(root).as_posix(), 'bytes': material_size(path)})
                 except OSError:
                     continue
     return {'files': files, 'bytes': size, 'over_20MiB': sorted(big), 'unmanaged': unmanaged}
+
+
+def material_size(path):
+    if path.is_symlink() or path.is_file():
+        return path.lstat().st_size
+    return sum((Path(directory) / name).lstat().st_size
+               for directory, _, names in os.walk(path) for name in names)
 
 
 def check_links(project):
@@ -113,7 +112,7 @@ def render(report):
     if report['without_baseline']:
         lines += ['## 变化情况无法计算', *[f'- {x["path"]}：{x["status"]}' for x in report['without_baseline']], '']
     if report['lessons_without_guards']:
-        lines += ['## 没有守护场景的教训', *[f'- {p}' for p in report['lessons_without_guards']], '']
+        lines += ['## 没有防护引用的教训', *[f'- {p}' for p in report['lessons_without_guards']], '']
     if report['similar_titles']:
         lines += ['## 标题相近，可能重复', *[f'- {a} ↔ {b}' for a, b in report['similar_titles']], '']
     if report['near_size_limit']:

@@ -1,9 +1,9 @@
 ---
 title: "每遇到一个问题就加一条规则，规则反复增删、文本只增不减"
-scope: ["self:skills/team-workflow/SKILL.md", "self:skills/team-workflow/references/**", "self:skills/team-knowledge/SKILL.md", "self:skills/team-knowledge/references/**"]
+scope: ["self:skills/team-knowledge/SKILL.md", "self:skills/team-knowledge/references/**"]
 source: ["https://github.com/AdolphKevin/team-workflow/commit/a0bc686", "https://github.com/AdolphKevin/team-workflow/commit/40ffdae", "https://github.com/AdolphKevin/team-workflow/commit/d55d892", "https://github.com/AdolphKevin/team-workflow/commit/41b1a5a", "self:docs/proposals/2026-10-16-scenario-acceptance-and-positive-text.md"]
-verified: {"self": {"commit": "29ebd861fb0c21ebdc0f08464ca1f54c7a59e84e", "date": "2026-10-16"}}
-guards: ["check:release"]
+verified: {"self": {"commit": "777be859050a5b2a69f02c87a8975aee38239cbf", "date": "2026-10-22"}}
+guards: ["self:scripts/check_release.py#knowledge_checks", "self:scripts/release_text_rules.py#RULES"]
 tags: ["规则膨胀", "篇幅", "指令", "反复", "补丁话术", "否定句", "重复定义"]
 ---
 # 每遇到一个问题就加一条规则，规则反复增删、文本只增不减

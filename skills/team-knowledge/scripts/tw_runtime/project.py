@@ -9,8 +9,9 @@ from . import DATA_VERSION, FORMAT, KB, Invalid, entries, gitutil, globs
 
 CONFIG = f'{KB}/config.json'
 MAPPING = f'{KB}/local/repositories.json'
-TEAM_KEYS = ('checks', 'required_checks', 'risk_checks', 'inputs', 'external_inputs', 'environment_versions', 'accounts', 'acceptance_entries')
-KEYS = ('format', 'data_version', 'project', 'context', 'shared', 'documents', 'platform') + TEAM_KEYS
+LEGACY_KEYS = ('checks', 'required_checks', 'risk_checks', 'platform', 'inputs', 'external_inputs',
+               'environment_versions', 'acceptance_entries', 'accounts')
+KEYS = ('format', 'data_version', 'project', 'context', 'shared', 'documents')
 DOC_ID = re.compile(r'^[a-z0-9][a-z0-9._-]*$')
 LEGACY = ('.codestable', '.team-workflow.json', '.team-workflow')
 
@@ -20,7 +21,7 @@ def user_mapping_path():
 
 
 def location_settings(root, project_id=None, overrides=None):
-    """Read user defaults and checkout overrides; keys retain their caller's meaning."""
+    """Read repository mappings only; leave obsolete input mappings untouched."""
     root = Path(root)
 
     def read_json(path):
@@ -45,7 +46,7 @@ def location_settings(root, project_id=None, overrides=None):
         config = read_json(root / CONFIG)
         project = config.get('project', {}) if isinstance(config, dict) else {}
         project_id = project.get('id') if isinstance(project, dict) else None
-    result = {'repositories': {}, 'inputs': {}}
+    result = {'repositories': {}}
     user_path = user_mapping_path()
     if user_path.exists():
         data = read_json(user_path)
@@ -54,7 +55,7 @@ def location_settings(root, project_id=None, overrides=None):
         for name, settings in data['projects'].items():
             if not isinstance(name, str) or not name.strip():
                 raise Invalid(f'{user_path} 的项目身份必须是非空文本')
-            defaults = {'repositories': {}, 'inputs': {}}
+            defaults = {'repositories': {}}
             merge(defaults, settings, user_path)
             if name == project_id:
                 result = defaults
@@ -62,14 +63,14 @@ def location_settings(root, project_id=None, overrides=None):
     if path.exists():
         merge(result, read_json(path), path)
     if overrides:
-        merge(result, overrides, '--repository / --input')
+        merge(result, overrides, '--repository')
     return result
 
 
 def config_problems(config):
     if not isinstance(config, dict):
         return ['config.json 必须是 JSON 对象']
-    problems = [f'config.json 不使用字段：{key}' for key in config if key not in KEYS]
+    problems = [f'config.json 不使用字段：{key}' for key in config if key not in KEYS + LEGACY_KEYS]
     if config.get('format') != FORMAT:
         problems.append(f'config.json 的 format 必须是 "{FORMAT}"')
     if type(config.get('data_version')) is not int or config.get('data_version') != DATA_VERSION:
@@ -106,31 +107,6 @@ def config_problems(config):
             scope = doc.get('scope', [])
             if not (isinstance(scope, list) and all(not globs.split(x)[2] for x in scope)):
                 problems.append(f'documents {doc["id"]} 的 scope 应为 `仓库:路径` 数组')
-    for key in TEAM_KEYS:
-        if key in config and not isinstance(config[key], (dict, list)):
-            problems.append(f'{key} 的类型不正确')
-    if 'platform' in config:
-        problems.extend(platform_problems(config['platform']))
-    return problems
-
-
-def platform_problems(value):
-    if not isinstance(value, dict):
-        return ['platform 必须是对象']
-    problems = []
-    if not {'argv', 'operations'} <= value.keys() <= {'argv', 'timeout', 'operations'}:
-        problems.append('platform 应包含 argv、operations，可选 timeout')
-    argv = value.get('argv')
-    if not (isinstance(argv, list) and argv and all(isinstance(v, str) and v.strip() for v in argv)):
-        problems.append('platform.argv 必须是非空字符串数组')
-    timeout = value.get('timeout', 60)
-    if type(timeout) is not int or timeout <= 0:
-        problems.append('platform.timeout 必须是正整数')
-    operations = value.get('operations')
-    if not (isinstance(operations, list) and all(isinstance(v, str) for v in operations)
-            and 'task' in operations and set(operations) <= {'task', 'commit', 'reference', 'ci-result', 'file-url'}
-            and len(set(operations)) == len(operations)):
-        problems.append('platform.operations 只能声明 task、commit、reference、ci-result、file-url，且必须包含 task，不得重复')
     return problems
 
 
@@ -188,13 +164,10 @@ class Repo:
         return f'{self.root} @ {head}，{state}'
 
 
-def load_entries(source, repo='self', config=None):
+def load_entries(source, repo='self'):
     found, strays = entries.classify(source.names)
-    platform = (config or {}).get('platform', {})
-    argv = platform.get('argv', []) if isinstance(platform, dict) else []
-    scripts = {Path(value).as_posix() for value in argv if isinstance(value, str)
-               and value.endswith('.py') and not Path(value).is_absolute() and '..' not in Path(value).parts}
-    strays = [name for name in strays if name not in scripts]
+    # The old platform entry gets a migration warning from check, never execution.
+    strays = [name for name in strays if name != f'{KB}/platform.py']
     loaded = []
     for kind, ref in found:
         try:
@@ -238,7 +211,7 @@ class Project:
 
     def entries(self):
         if self._entries is None:
-            self._entries, self.strays = load_entries(self.source, config=self.config)
+            self._entries, self.strays = load_entries(self.source)
         return self._entries
 
     def mapping(self):
@@ -283,7 +256,7 @@ def resolve(alias, path, expected):
         repo.config = json.loads((root / CONFIG).read_text(encoding='utf-8'))
     except ValueError:
         repo.config = {}
-    repo.entries, _ = load_entries(source, alias, repo.config)
+    repo.entries, _ = load_entries(source, alias)
     return repo
 
 

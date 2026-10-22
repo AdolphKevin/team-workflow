@@ -6,9 +6,11 @@ assessment: {"complexity":"medium","risks":["public-contract"],"effort":"约 5 �
 roles: {"design_owner":"Claude","implementation_owner":"Codex","acceptance_owner":"AdolphKevin"}
 ---
 
+> 历史文档：保留当时的方案或验证记录；现行能力与使用方式见 [README](../../README.md)。
+
 # 场景化黑盒验收：tw 任务方案
 
-> 本文件是任务 TW-SCN-1 的 tw 方案原文。设计、取舍与决定见[已批准方案](2026-10-16-scenario-acceptance-and-positive-text.md)；验收场景见 [批次 2 场景](../sop/tw-scenario-acceptance.yaml)。
+> 本文件是任务 TW-SCN-1 的 tw 方案原文。设计、取舍与决定见[已批准方案](2026-10-16-scenario-acceptance-and-positive-text.md)；验收场景见 [批次 2 场景](https://github.com/AdolphKevin/team-workflow/blob/8be02e4/docs/sop/tw-scenario-acceptance.yaml)。
 
 ## 全局范围
 <!-- tw-section id=scope-global type=global-scope -->
@@ -25,7 +27,7 @@ roles: {"design_owner":"Claude","implementation_owner":"Codex","acceptance_owner
 <!-- tw-section id=A1 type=acceptance depends=scope-global -->
 批次 2 的 SOP-01 节点全部场景通过。
 
-- 场景：docs/sop/tw-scenario-acceptance.yaml#SOP-01
+- 场景：docs/sop/archive/tw-scenario-acceptance.yaml#SOP-01
 - 依据：位置 docs/proposals/2026-10-16-scenario-acceptance-and-positive-text.md；版本 2026-10-16 批准版及 2.3 补充；确认人 AdolphKevin
 - 检查：unit
 - 验证：自动；替身 项目平台脚本夹具
@@ -34,7 +36,7 @@ roles: {"design_owner":"Claude","implementation_owner":"Codex","acceptance_owner
 <!-- tw-section id=A2 type=acceptance depends=scope-global -->
 批次 2 的 SOP-02 节点全部场景通过。
 
-- 场景：docs/sop/tw-scenario-acceptance.yaml#SOP-02
+- 场景：docs/sop/archive/tw-scenario-acceptance.yaml#SOP-02
 - 依据：位置 docs/proposals/2026-10-16-scenario-acceptance-and-positive-text.md；版本 2026-10-16 批准版及 2.3 补充；确认人 AdolphKevin
 - 检查：unit
 - 验证：自动；替身 项目平台脚本夹具
@@ -43,7 +45,7 @@ roles: {"design_owner":"Claude","implementation_owner":"Codex","acceptance_owner
 <!-- tw-section id=A3 type=acceptance depends=scope-global -->
 批次 2 的 SOP-03 节点全部场景通过。
 
-- 场景：docs/sop/tw-scenario-acceptance.yaml#SOP-03
+- 场景：docs/sop/archive/tw-scenario-acceptance.yaml#SOP-03
 - 依据：位置 docs/proposals/2026-10-16-scenario-acceptance-and-positive-text.md；版本 2026-10-16 批准版及 2.3 补充；确认人 AdolphKevin
 - 检查：unit
 - 验证：自动；替身 项目平台脚本夹具
@@ -52,7 +54,7 @@ roles: {"design_owner":"Claude","implementation_owner":"Codex","acceptance_owner
 <!-- tw-section id=A4 type=acceptance depends=scope-global -->
 批次 2 的 SOP-04 节点全部场景通过。
 
-- 场景：docs/sop/tw-scenario-acceptance.yaml#SOP-04
+- 场景：docs/sop/archive/tw-scenario-acceptance.yaml#SOP-04
 - 依据：位置 docs/proposals/2026-10-16-scenario-acceptance-and-positive-text.md；版本 2026-10-16 批准版及 2.3 补充；确认人 AdolphKevin
 - 检查：unit
 - 验证：自动；替身 项目平台脚本夹具
@@ -61,7 +63,7 @@ roles: {"design_owner":"Claude","implementation_owner":"Codex","acceptance_owner
 <!-- tw-section id=A5 type=acceptance depends=scope-global -->
 批次 2 的 SOP-05 节点全部场景通过。
 
-- 场景：docs/sop/tw-scenario-acceptance.yaml#SOP-05
+- 场景：docs/sop/archive/tw-scenario-acceptance.yaml#SOP-05
 - 依据：位置 docs/proposals/2026-10-16-scenario-acceptance-and-positive-text.md；版本 2026-10-16 批准版及 2.3 补充；确认人 AdolphKevin
 - 检查：unit
 - 验证：自动；替身 项目平台脚本夹具
@@ -70,7 +72,7 @@ roles: {"design_owner":"Claude","implementation_owner":"Codex","acceptance_owner
 <!-- tw-section id=A6 type=acceptance depends=scope-global -->
 批次 2 的 SOP-06 节点全部场景通过。
 
-- 场景：docs/sop/tw-scenario-acceptance.yaml#SOP-06
+- 场景：docs/sop/archive/tw-scenario-acceptance.yaml#SOP-06
 - 依据：位置 docs/proposals/2026-10-16-scenario-acceptance-and-positive-text.md；版本 2026-10-16 批准版及 2.3 补充；确认人 AdolphKevin
 - 检查：unit
 - 验证：自动；替身 项目平台脚本夹具
@@ -79,7 +81,7 @@ roles: {"design_owner":"Claude","implementation_owner":"Codex","acceptance_owner
 <!-- tw-section id=A7 type=acceptance depends=scope-global -->
 批次 2 的 SOP-07 节点全部场景通过。
 
-- 场景：docs/sop/tw-scenario-acceptance.yaml#SOP-07
+- 场景：docs/sop/archive/tw-scenario-acceptance.yaml#SOP-07
 - 依据：位置 docs/proposals/2026-10-16-scenario-acceptance-and-positive-text.md；版本 2026-10-16 批准版及 2.3 补充；确认人 AdolphKevin
 - 检查：release
 - 验证：自动
@@ -88,7 +90,7 @@ roles: {"design_owner":"Claude","implementation_owner":"Codex","acceptance_owner
 <!-- tw-section id=A8 type=acceptance depends=scope-global -->
 批次 2 的 SOP-08 节点全部场景通过（方案 D9）。
 
-- 场景：docs/sop/tw-scenario-acceptance.yaml#SOP-08
+- 场景：docs/sop/archive/tw-scenario-acceptance.yaml#SOP-08
 - 依据：位置 docs/proposals/2026-10-16-scenario-acceptance-and-positive-text.md；版本 2026-10-16 批准版及 D9–D12；确认人 AdolphKevin
 - 检查：unit
 - 验证：自动；替身 项目平台脚本夹具

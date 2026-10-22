@@ -72,10 +72,8 @@ def parser():
 
     p = sub.add_parser('version', parents=[knowledge_options], help='版本与安装完整性')
     p.add_argument('--check-install', action='store_true')
-    p.add_argument('--home', help=argparse.SUPPRESS)
-    p = sub.add_parser('team', parents=[shared], add_help=False, help='团队任务与交付命令')
-    p.add_argument('--root', dest='team_root', help='团队命令的项目目录，也可写在团队子命令之后')
-    p.add_argument('--help', '-h', dest='team_help', action='store_true')
+    p.add_argument('--home', help='检查指定用户目录下的安装（默认当前用户）')
+    p = sub.add_parser('team', add_help=False, help='已移除，返回升级说明')
     p.add_argument('args', nargs=argparse.REMAINDER)
     return root
 
@@ -91,21 +89,18 @@ def emit(value, text=None, fmt='text', *, error=False):
 
 
 def main(argv=None):
-    args = parser().parse_args(argv)
+    command_parser = parser()
+    args, unknown = command_parser.parse_known_args(argv)
+    if args.command == 'team':
+        print('团队流程已移除：'
+              'https://github.com/AdolphKevin/team-workflow/blob/main/docs/proposals/2026-10-22-knowledge-only.md',
+              file=sys.stderr)
+        return 2
+    if unknown:
+        command_parser.error('unrecognized arguments: ' + ' '.join(unknown))
     knowledge_root = getattr(args, 'knowledge_root', None)
     root = Path(knowledge_root if knowledge_root is not None else args.root)
     try:
-        if args.command == 'team':
-            root = Path(args.team_root) if args.team_root is not None else root
-            team = Path(__file__).resolve().parent / 'team'
-            sys.path.insert(0, str(team))
-            import workflow
-            argv = ['--help'] if args.team_help else list(args.args)
-            if not any(v == '--root' or v.startswith('--root=') for v in argv):
-                argv += ['--root', str(root)]
-            for repository in args.repository + args.sub_repository:
-                argv += ['--repository', repository]
-            return workflow.main(argv)
         if args.command == 'init':
             project = Project(root, require_config=False)
             result = init.run(project.root, apply=args.apply, guidance=args.guidance, sources=args.source)

@@ -1,16 +1,19 @@
 ---
 title: "解决标准库重名时仍须保留内部模块的导入优先级"
-scope: ["self:skills/team-knowledge/scripts/tw_runtime/cli.py", "self:skills/team-knowledge/scripts/tw_runtime/team/**", "self:scripts/check_release.py"]
-source: ["self:AGENTS.md"]
-verified: {"self": {"commit": "8b536d5c3fa7cd8ce0100f47d1bc3d86618394ac", "date": "2026-10-15"}}
+scope: ["self:skills/team-knowledge/scripts/tw.py", "self:skills/team-knowledge/scripts/tw_runtime/cli.py", "self:skills/team-knowledge/scripts/tw_runtime/audit.py", "self:scripts/check_release.py"]
+source: ["self:docs/archive/validation-0.x.md", "self:docs/proposals/2026-10-22-knowledge-only.md"]
+verified: {"self": {"commit": "777be859050a5b2a69f02c87a8975aee38239cbf", "date": "2026-10-22"}}
+guards: ["self:scripts/check_release.py#import_scripts", "self:docs/sop/tw-knowledge-only.yaml#SOP-03-P01"]
 tags: ["导入", "标准库", "模块重名", "环境"]
 ---
 # 解决标准库重名时仍须保留内部模块的导入优先级
 
-现象：新模块与标准库同名，把整个 team 目录移到搜索路径末尾后，环境中同名的 metrics 包会被当成内部模块，两个命令入口都报工具缺陷。
+现象：旧团队模块曾与标准库重名，把整个目录移到搜索路径末尾后，环境中的同名第三方包被误当成内部模块，命令入口报错。
 
-根因：对一个文件的重名回避改变了所有内部模块的搜索顺序，干净环境会掩盖这个问题。
+根因：为避开一个文件名冲突，改变了全部内部模块的搜索顺序；干净环境掩盖了问题。
 
-修复与防护：项目模块使用不与标准库冲突的文件名，保留原有内部目录优先级。守护测试在独立进程放入同名假包，经两个命令入口核对实际导入的内部模块路径，并同时核对 validation 使用标准库 platform。
+修复与防护：知识入口把自身 scripts 目录放在搜索路径首位，包内使用相对导入；健康报告自行统计本机目录，避免重新引入裸模块导入。发行检查在独立解释器中导入全部知识模块。
 
-适用条件：新增运行时模块或调整命令入口的 Python 搜索路径时。
+发现方法：核对实际导入路径并运行安装后的知识入口；环境中有同名包时仍应读取本技能代码。
+
+适用条件：新增运行时模块或调整 Python 搜索路径时。

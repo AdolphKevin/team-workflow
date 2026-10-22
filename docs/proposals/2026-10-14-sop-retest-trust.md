@@ -1,3 +1,5 @@
+> 历史文档：保留当时的方案或验证记录；现行能力与使用方式见 [README](../../README.md)。
+
 # SOP 场景的 Agent 验证与人工复测（草案 v1）
 
 > 状态：已被取代 · 日期：2026-10-14 · 方案负责人：Claude · 评审人：AdolphKevin
@@ -20,7 +22,7 @@
 
 ## 1 与现有标准的对应
 
-本提案只落地[业务验收与质量改进标准](../../skills/team-workflow/references/business-acceptance.md)中已有的要求，不新增流程义务：
+本提案只落地[业务验收与质量改进标准](https://github.com/AdolphKevin/team-workflow/blob/8be02e4/skills/team-workflow/references/business-acceptance.md)中已有的要求，不新增流程义务：
 
 | 本提案 | 标准中的依据 |
 | --- | --- |
@@ -64,39 +66,39 @@ metadata:
 
 sops:
   - id: SOP-02
-    title: 建团队与承接
-    actor: "Owner / Admin"
-    entry: "/setting/teams"
-    must: ["切换分配策略只影响之后入队的会话"]
+    title: 创建示例处理组与分配任务
+    actor: "负责人 / 管理员"
+    entry: "/settings/example"
+    must: ["切换分配策略只影响之后入队的任务"]
     # negative_exempt: "<没有有意义的反向场景的理由>"
     scenarios:
       - id: SOP-02-P01
         polarity: positive
-        title: 新建手动认领团队
-        actor: Owner
+        title: 新建手动分配的示例处理组
+        actor: 负责人
         priority: P0
-        refs: ["ASSIGN-01"]
+        refs: ["EXAMPLE-01"]
         verify: api+ui            # api | ui | cli | 用 + 组合，如 api+ui
         layer: local              # 执行环境名称，由项目自定
-        initial_state: ["有 Agent A1、A2 和 Supervisor S"]
-        steps: ["新建 Support 团队并保存"]
-        expected: ["保存成功", "页面上没有品牌范围字段"]
+        initial_state: ["有成员 A1、A2 和管理员 S"]
+        steps: ["新建示例处理组并保存"]
+        expected: ["保存成功", "页面上没有租户范围字段"]
         forbidden_effects: []
-        evidence_hints: ["teams、team_members 行"]
-        tags: ["section:团队 · 新建"]
+        evidence_hints: ["example_groups、example_members 行"]
+        tags: ["section:处理组 · 新建"]
       - id: SOP-02-N01
         polarity: negative
         negative_type: permission
-        title: Admin 读取看不到的团队
-        actor: "Admin（只有品牌 A）"
+        title: 管理员读取无权查看的处理组
+        actor: "管理员（只有租户 A 的权限）"
         priority: P1
-        refs: ["#138"]
+        refs: ["<权限需求单>"]
         verify: api
         layer: local
-        initial_state: ["团队 T2 只被品牌 B 引用"]
-        steps: ["调用 GET /api/v2/teams/{T2}"]
+        initial_state: ["处理组 G2 只属于租户 B"]
+        steps: ["调用 GET /api/example/groups/{G2}"]
         expected: ["返回 NotFound"]
-        forbidden_effects: ["响应中不出现 T2 的名称或成员"]
+        forbidden_effects: ["响应中不出现 G2 的名称或成员"]
 ```
 
 **`tw team sop check <文件>` 的校验项**：
@@ -133,9 +135,9 @@ sops:
 
 ```json
 {"batch": "<批次>",
- "pairs": [{"sop": "SOP-02-N01", "case": "TC_TEAM_014", "relation": "equivalent", "note": ""}],
- "sop_only": [{"sop": "SOP-02-N03", "note": "测试用例未覆盖跨品牌团队的编辑"}],
- "case_only": [{"case": "TC_TEAM_031", "note": "SOP 未覆盖成员上限为 50 的边界"}]}
+ "pairs": [{"sop": "SOP-02-N01", "case": "TC_EXAMPLE_001", "relation": "equivalent", "note": ""}],
+ "sop_only": [{"sop": "SOP-02-N03", "note": "测试用例未覆盖跨租户处理组的编辑"}],
+ "case_only": [{"case": "TC_EXAMPLE_002", "note": "SOP 未覆盖示例处理组成员上限为 50 的边界"}]}
 ```
 
 - `relation` 取值：`equivalent`（等价）、`partial`（部分覆盖）、`conflict`（预期冲突）。
@@ -257,7 +259,7 @@ sops:
 
 ## 10 批次 0：用本机制验证重构阶段 2
 
-- **场景文件**：[`docs/sop/tw-unified-redesign-phase2.yaml`](../sop/tw-unified-redesign-phase2.yaml)，共 7 个阶段、29 个场景，每个阶段都有正向和反向场景。
+- **场景文件**：[`docs/sop/archive/tw-unified-redesign-phase2.yaml`](https://github.com/AdolphKevin/team-workflow/blob/8be02e4/docs/sop/tw-unified-redesign-phase2.yaml)，共 7 个阶段、29 个场景，每个阶段都有正向和反向场景。
   - 预期结果只依据重构方案 v4，不依据当前实现。
   - 这份文件需要你确认后，才能作为业务原文使用。
 - **Agent 验证**：由未参与阶段 2 实现的 Agent 逐条执行，结果按第 3.3 节写成 JSON Lines，保存在 `.tw/local/` 下。原始证据也留在本机。

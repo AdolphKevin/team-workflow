@@ -7,7 +7,8 @@
   },
   "context": [
     "AGENTS.md",
-    "docs/design.md"
+    "docs/design.md",
+    "docs/acceptance.md"
   ],
   "documents": [
     {
@@ -26,132 +27,9 @@
       "source": "self:AGENTS.md"
     },
     {
-      "id": "redesign",
-      "title": "合并重构方案",
-      "source": "self:docs/proposals/2026-10-14-unified-redesign.md"
-    },
-    {
-      "id": "platform-contract",
-      "title": "平台脚本契约",
-      "source": "self:skills/team-workflow/references/platform.md",
-      "scope": [
-        "self:skills/team-knowledge/scripts/tw_runtime/team/platform_script.py",
-        "self:skills/team-knowledge/scripts/tw_runtime/team/**"
-      ]
+      "id": "knowledge-only",
+      "title": "知识库职责方案",
+      "source": "self:docs/proposals/2026-10-22-knowledge-only.md"
     }
-  ],
-  "checks": {
-    "release": {
-      "argv": [
-        "python3",
-        "scripts/check_release.py",
-        "--junitxml",
-        "{output}/results.xml"
-      ],
-      "purpose": "发行检查：技能文字、链接、篇幅预算、上游补丁反向恢复与技能清单",
-      "cwd": ".",
-      "timeout": 600,
-      "format": "junit",
-      "required_cases": [
-        "SkillDocs::concepts",
-        "SkillDocs::versions",
-        "SkillDocs::negative-chains",
-        "SkillDocs::links",
-        "SkillDocs::retest-board",
-        "SkillDocs::release-integrity"
-      ],
-      "required_env": [],
-      "environment": {
-        "kind": "stateless"
-      },
-      "coverage": {
-        "level": "interface",
-        "entrypoints": [
-          "scripts/check_release.py"
-        ],
-        "environment": "repository-source",
-        "substitutes": [],
-        "isolation": "isolated",
-        "isolation_evidence": []
-      },
-      "report": "{output}/results.xml"
-    }
-  },
-  "required_checks": {
-    "code": [
-      "release"
-    ],
-    "docs": [
-      "release"
-    ]
-  },
-  "risk_checks": {
-    "public-contract": [
-      "release"
-    ]
-  },
-  "inputs": [],
-  "environment_versions": {},
-  "platform": {
-    "argv": [
-      "python3",
-      ".tw/platform.py"
-    ],
-    "timeout": 120,
-    "operations": [
-      "task",
-      "commit",
-      "reference",
-      "ci-result",
-      "file-url"
-    ]
-  },
-  "acceptance_entries": {
-    "cli": {
-      "surface": "cli",
-      "operate": "在临时工作目录运行交付的命令",
-      "observe": [
-        "标准输出",
-        "错误输出",
-        "退出码",
-        "文件变化"
-      ],
-      "evidence": [
-        "命令原文",
-        "完整输出",
-        "文件差异"
-      ],
-      "isolation": "每轮新建临时目录"
-    },
-    "skill": {
-      "surface": "skill",
-      "operate": "新会话只装候选技能，按场景给出任务原话",
-      "observe": [
-        "读取的文件",
-        "运行的命令与参数",
-        "向用户提的问题",
-        "最终仓库状态"
-      ],
-      "evidence": [
-        "会话记录",
-        "命令记录",
-        "文件差异"
-      ],
-      "isolation": "每轮新会话、新临时项目"
-    },
-    "doc": {
-      "surface": "doc",
-      "operate": "阅读交付文档并逐项核对场景",
-      "observe": [
-        "正文",
-        "链接",
-        "示例"
-      ],
-      "evidence": [
-        "原文与位置",
-        "核对记录"
-      ],
-      "isolation": "固定文档版本"
-    }
-  }
+  ]
 }

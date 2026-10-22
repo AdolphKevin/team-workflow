@@ -1,13 +1,13 @@
 ---
 title: "回放把隐藏条目算成已列出"
 scope: ["self:skills/team-knowledge/scripts/tw_runtime/brief.py", "self:scripts/replay_brief.py"]
-source: ["self:docs/validation.md", "self:docs/proposals/2026-10-14-unified-redesign.md"]
+source: ["self:docs/archive/validation-0.x.md", "self:docs/proposals/2026-10-14-unified-redesign.md"]
 verified: {"self": {"commit": "1dd6080c171ffe505b252956217b33f7ea7489f7", "date": "2026-10-15"}}
 tags: ["brief", "预算", "导航", "回放", "可见"]
 ---
 # 回放把隐藏条目算成已列出
 
-现象：导航超出篇幅时整节消失，回放却把隐藏条目计为已列出，掩盖了使用者读不到知识的问题。core 迁移试点的回放报告 19 个预期条目列出 15 个，输出中实际可见的只有 13 个。
+现象：导航超出篇幅时整节消失，回放却把隐藏条目计为已列出，掩盖了使用者读不到知识的问题。示例服务迁移试点的回放报告 19 个预期条目列出 15 个，输出中实际可见的只有 13 个。
 
 根因：回放直接使用被选中的条目集合，没有区分完整正文、可见索引和未输出条目；省略提示也没有预留篇幅。
 

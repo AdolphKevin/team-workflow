@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Command line entry for project knowledge and team workflow (`tw`)."""
+"""Command line entry for project knowledge (`tw`)."""
 from pathlib import Path
 import sys
 
