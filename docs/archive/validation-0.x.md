@@ -151,8 +151,8 @@ E2 只经离线夹具与代理试用验证；真实平台上的重审留到下�
 **真实仓库：core 本地克隆，原仓库未改动**
 
 - `init` 从真实远端识别出 `github.com/acme/example-service`。
-- `check` 检出以下问题：照抄旧卡时残留的 `__REPLACE__`、scope 指向已删除的 `internal/service/homepage_ad_service_auth_test.go`、旧目录 `.codestable` 与 `.team-workflow.json`。
-- 用 #146 的任务描述和路径运行 `brief`，用时 0.17 秒，取到对应决策和相关提交 `454f3998`。
+- `check` 检出以下问题：照抄旧卡时残留的 `__REPLACE__`、scope 指向已删除的测试文件、旧目录 `.codestable` 与 `.team-workflow.json`。
+- 用一个真实任务的描述和路径运行 `brief`，用时 0.17 秒，取到对应决策和相关提交。
 - 运行 `brief`、`check`、`audit` 前后，工作区文件指纹一致，证明三者零写入。
 - 发现并修复一个问题：CLAUDE.md 已有 `@./AGENTS.md` 时，`init --guidance` 仍会追加一份引用块。
 

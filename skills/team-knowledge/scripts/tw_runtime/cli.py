@@ -72,7 +72,7 @@ def parser():
 
     p = sub.add_parser('version', parents=[knowledge_options], help='版本与安装完整性')
     p.add_argument('--check-install', action='store_true')
-    p.add_argument('--home', help=argparse.SUPPRESS)
+    p.add_argument('--home', help='检查指定用户目录下的安装（默认当前用户）')
     p = sub.add_parser('team', add_help=False, help='已移除，返回升级说明')
     p.add_argument('args', nargs=argparse.REMAINDER)
     return root

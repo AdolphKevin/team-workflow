@@ -12,7 +12,7 @@
     "scripts/tw_runtime/brief.py": "b9f4b5353fc49d31e0ea7df1cfb4c37e294f9f92748b4c88cdfc12d07a6e394a",
     "scripts/tw_runtime/cache.py": "9039beef54f908fd6cd2a60f070d118b109c19a7b8f4817d25fc817151295f9f",
     "scripts/tw_runtime/check.py": "9a44e9ce5fb0aac88bbe3190a90ce049289fb6cd4a4958da4b36c7131a959ba5",
-    "scripts/tw_runtime/cli.py": "8d9624d6dcc83e75db2c3112bc7452bc7fa004df4b592afde1fc22250b6737e8",
+    "scripts/tw_runtime/cli.py": "6f173264d282e24b9aa6e26e78a271b4de0238c77093573dc6e8e9323b469696",
     "scripts/tw_runtime/entries.py": "3a5c35a21a80d303064ccc338bb76dab249758f6610f8367e732b6bd592dd6c1",
     "scripts/tw_runtime/files.py": "36dd3b7bf6641617f4d7f60d5f314ef5999c35aec1ba67057e02d476b72096f5",
     "scripts/tw_runtime/frontmatter.py": "5885b6dbf1287f25c599a2c1b450ad1b9c2db904f43a2be012710c3d4ac2e2a2",

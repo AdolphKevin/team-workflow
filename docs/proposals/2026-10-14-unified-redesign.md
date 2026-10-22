@@ -103,7 +103,7 @@
 | P2 | 默认展示最新的设计，只记代码里看不出来的东西：业务来源与例外、理由、边界、坑、跨服务约定，以及放弃过的做法和原因。不记完整版本历史、一次性结果、工具版本、行号、任务流水 | acceptance 卡写着“本次 436 项通过”；9 个 PROJECT.md 写着过期的工具版本；34% 的 memory 卡已被取代却仍在库中 | MATT writing-for-agents（能从环境查到的就不写）；Trellis 的 741 个行号锚点中 17% 已失效 |
 | P3 | 结构检查只查客观缺陷，语义交给评审和独立验收 | future_use 的约束等于标题（5 个仓都是 7/7）；evidence.result 照抄结论；已提交的卡片残留 `__REPLACE__` | ECC Memory Vault 的 doctor 只报告不修改；MATT 认为“未评审的词汇表比没有更糟” |
 | P4 | 绑定 git 提交，不绑定整文件的内容指纹 | 6 天后 17/17 张卡变成 needs-review；brief 每次都附带 6 条“已变化”提示 | Trellis 把运行态移出仓库 |
-| P5 | 一个事实只有一个正文归属，原文优先 | #146、#147 在 3 个仓各写了一份；“单测不等于端到端验收”在 4 个仓重复出现 | ECC living-docs 的单一归属原则 |
+| P5 | 一个事实只有一个正文归属，原文优先 | 同一批问题在 3 个仓各写了一份；“单测不等于端到端验收”在 4 个仓重复出现 | ECC living-docs 的单一归属原则 |
 | P6 | 读取分层，并设预算 | 一次聚焦 brief 有 82KB，诊断占 55%；约 22 个任务中只有 6 个读过 brief | Trellis #154（31–36KB 被截断后改为约 6KB）；ECC 的 8,000 字符上限 |
 | P7 | 规则有预算，也有删减机制 | CS SKILL.md 从 8KB 涨到 38KB；TW references 有 102KB；一个团队任务的阅读链约 129KB | MATT writing-for-agents 定期清理无效指令 |
 | P8 | 发布与开发分开，项目数据尽量不升级 | 至少 8 个版本轴；推送 main 即发布；各项目停在 schema 1/3/4/5；adopt 同一天被删又被加回 | Trellis 的模板哈希（只借鉴思路） |
@@ -236,7 +236,7 @@
 ```markdown
 ---
 title: "建会话前确定语言，并使用独立字段保存"
-scope: ["self:internal/biz/conversation_language_biz.go", "self:internal/data/conversation_repository.go"]
+scope: ["self:internal/biz/example_biz.go", "self:internal/data/example_repository.go"]
 source: ["https://github.com/acme/example-service/issues/1"]
 verified: {"self":{"commit":"108e82b5a2dd56ef8ef2f370259810de9c653bf6","date":"2026-10-14"}}
 status: "accepted"
@@ -759,7 +759,7 @@ guards: ["self:tests/order_graph/test_evidence_boundary.py#test_new_task_frame_d
 ### B6 每仓验收
 
 1. `tw check` 没有错误，旧目录已全部移除。
-2. 用最近的真实任务回放 brief（例如 core 的 #126–#152）。预期条目由独立代理事先确定，回放时这些条目要出现。
+2. 用最近的真实任务回放 brief（例如某个项目最近的二十多个任务）。预期条目由独立代理事先确定，回放时这些条目要出现。
 3. 已知冲突已经处置，例如 common 的 brand purge。
 4. 迁移说明完整：未迁入的内容都已列出，用户确认的问题都有记录。
 5. 高风险结论已经通过真实入口核对；无法运行的场景明确保留为未完成。
@@ -836,7 +836,7 @@ plugin.json、.claude-plugin/、LICENSE、licenses/
   - 跨仓与 worktree 的依赖核验；
   - 离线运行；
   - 篇幅预算。
-- **真实查询回放集**：从 core 的 #126–#152 等任务中挑选查询，由独立代理确定预期条目，作为召回回归。目前唯一的检索指标只来自 5 条合成查询。
+- **真实查询回放集**：从某个项目最近的真实任务中挑选查询，由独立代理确定预期条目，作为召回回归。目前唯一的检索指标只来自 5 条合成查询。
 - **迁移指南试用**：由未参与编写的代理，在 gateway 和 example-assistant 的副本上按指南完成迁移，检查指南能否独立执行。
 - CI 不再克隆 CS 默认分支，直接测试同一份发行源码。在 macOS 和 Linux 上，用 Python 3.10 和当前支持的最新版本验证。
 - 阶段 1 在 Claude Code、Codex、Cursor 上实测：技能发现、显式调用、自动调用，以及缺少依赖时的提示。
