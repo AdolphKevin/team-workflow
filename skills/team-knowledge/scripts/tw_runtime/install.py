@@ -49,54 +49,37 @@ def integrity(skill, expected_version=None):
     return {'status': 'modified' if modified else 'intact', **result}
 
 
-LEGACY_SKILLS = ('cs', 'cs-analysis')
-
-
-def check_install(home=None, require_team=False):
+def check_install(home=None):
     """`problems` concern the running tool and block verification; `installation_problems` concern the
     copies that clients load from the user's skill directories and are reported, not enforced."""
     home = Path(home).expanduser() if home else Path.home()
     own = integrity(SKILL, VERSION)
-    team = SKILL.parent / 'team-workflow'
-    team_integrity = integrity(team, VERSION) if (team / MANIFEST).is_file() else None
-    team_version = team_integrity.get('version') if team_integrity else None
-    running = {SKILL.resolve(), team.resolve()}
     copies, seen = [], set()
     for base in SKILL_HOMES:
-        for name in ('team-knowledge', 'team-workflow'):
-            candidate = home / base / name
-            if not candidate.exists():
-                continue
-            real = candidate.resolve()
-            if real in running or real in seen:
-                continue
-            seen.add(real)
-            state = integrity(real)
-            copies.append({'path': str(candidate), 'skill': name, 'version': state.get('version'),
-                           'status': state['status'], 'changed': state.get('changed', []),
-                           'missing': state.get('missing', []), 'unexpected': state.get('unexpected', []),
-                           **({'reason': state['reason']} if state.get('reason') else {})})
-    legacy = sorted(str(home / base / name) for base in SKILL_HOMES for name in LEGACY_SKILLS if (home / base / name).exists())
-    problems, notes = [], []
+        candidate = home / base / 'team-knowledge'
+        if not candidate.exists():
+            continue
+        real = candidate.resolve()
+        if real == SKILL.resolve() or real in seen:
+            continue
+        seen.add(real)
+        state = integrity(real)
+        copies.append({'path': str(candidate), 'skill': 'team-knowledge', 'version': state.get('version'),
+                       'status': state['status'], 'changed': state.get('changed', []),
+                       'missing': state.get('missing', []), 'unexpected': state.get('unexpected', []),
+                       **({'reason': state['reason']} if state.get('reason') else {})})
+    problems = []
     if own['status'] != 'intact':
         problems.append('正在运行的 team-knowledge 与发行清单不一致：' + describe(own))
-    if team_integrity is None:
-        (problems if require_team else notes).append('没有找到同一目录下的 team-workflow 技能；团队功能需要同一发行的两个技能')
-    elif team_version != VERSION:
-        problems.append(f'team-workflow 版本 {team_version} 与 team-knowledge {VERSION} 不是同一发行')
-    elif team_integrity['status'] != 'intact':
-        problems.append('正在使用的 team-workflow 与发行清单不一致：' + describe(team_integrity))
     installation = []
     for copy in copies:
         if copy['status'] != 'intact':
             installation.append(f'{copy["path"]} 的文件被改动：' + describe(copy))
         elif copy['version'] != VERSION:
             installation.append(f'{copy["path"]} 是另一个发行（{copy["version"]}），客户端可能加载旧版本')
-    installation += [f'存在应卸载的旧技能：{path}（npx skills remove -g cs cs-analysis）' for path in legacy]
     return {'ok': not problems, 'installed_ok': not installation, 'version': VERSION, 'skill': str(SKILL),
-            'integrity': own, 'team_workflow': team_version, 'team_integrity': team_integrity,
-            'other_copies': copies, 'legacy_skills': legacy, 'problems': problems,
-            'installation_problems': installation, 'notes': notes}
+            'integrity': own, 'other_copies': copies, 'problems': problems,
+            'installation_problems': installation}
 
 
 def describe(state):

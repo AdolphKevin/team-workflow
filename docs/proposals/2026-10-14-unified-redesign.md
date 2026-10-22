@@ -1,3 +1,5 @@
+> 历史文档：保留当时的方案或验证记录；现行能力与使用方式见 [README](../../README.md)。
+
 # team-workflow 与 CS 合并重构方案（草案 v4）
 
 > 状态：已批准，实施中 · 日期：2026-10-14 · 方案负责人：Claude（核心调研） · 协作设计：Codex · 评审与批准：AdolphKevin
@@ -21,7 +23,7 @@
 | 2026-10-14 | AdolphKevin | v4.1：T1 保留任务编号与可读目录；C 节的命令重新分组移到 T7 | 阶段 2 独立评审 F6、批次 0 第一轮缺陷 F3 之后，会话中确认“可以” |
 | 2026-10-14 | AdolphKevin | v4.2：T7 提前，阶段 3–5 在 tw 彻底完成后进行 | 会话中指示“流程验证没问题后，把流程简化这一步先提前。阶段 3，4，5 要在 tw 彻底完成后再去做” |
 | 2026-10-15 | AdolphKevin | T7 [流程简化方案](2026-10-15-process-simplification.md) 全文及其 D1–D4 | 会话中确认“可以” |
-| 2026-10-15 | AdolphKevin | 阶段 3 试点后、agent-py 迁移前：brief 改为来源摘要、关联双向扩展、按守护测试路径取用，迁移指南准备步骤补环境确认；改动用未参与调整的真实任务回放验证 | 会话中答复“agent-py 迁移前，先做这两项改动” |
+| 2026-10-15 | AdolphKevin | 阶段 3 试点后、example-assistant 迁移前：brief 改为来源摘要、关联双向扩展、按守护测试路径取用，迁移指南准备步骤补环境确认；改动用未参与调整的真实任务回放验证 | 会话中答复“example-assistant 迁移前，先做这两项改动” |
 | 2026-10-15 | AdolphKevin | [Issue 与变更请求承载流程](2026-10-15-issue-and-change-request-flow.md) 全文及 D1–D5：工具不内置平台代码，平台读取由项目平台脚本完成 | 会话中答复“D1-D5 按建议批准” |
 | 2026-10-15 | AdolphKevin | [方案以 Markdown 原文为准](2026-10-15-markdown-designs.md) 全文及 D1–D5；Issue #5 暂停，作为该改动的首个真实用例 | 会话中答复“D1-D5 按你的建议执行” |
 
@@ -45,13 +47,13 @@
   - 工具只做导航（`brief`）和结构检查（`check`/`audit`）。计划令牌、锁、回执、内容指纹、`future_use`、跨文件取代链等机制全部删除。
 - **把“遇到过的错误”作为首要沉淀对象**：
   - 设立 `lesson` 种类。缺陷流程中必须考虑写 lesson，并尽量绑定守护测试。
-  - 从 git 历史找回教训不做成默认流程，由用户在需要时指挥代理去做。目前只计划为 agent-py 找回 Agent Native 开发中的教训，包括把 agent 仓的相关教训迁入 agent-py。
+  - 从 git 历史找回教训不做成默认流程，由用户在需要时指挥代理去做。目前只计划为 example-assistant 找回 Agent Native 开发中的教训，包括把 agent 仓的相关教训迁入 example-assistant。
 - **迁移不写脚本**：
   - 已接入的项目由代理按迁移指南整理旧知识：逐条核实后，用新格式和新的表述写入 `.tw/`，再删除旧目录，用一个 PR 交给用户确认。
   - 新运行时完全不读取旧格式。回退时直接撤销 PR。
 - **团队流程**：本次只拆除与知识之间的桥接，并统一任务身份、证据位置和版本号。流程本身的简化放到第二阶段单独评审。
 - **验收**：
-  - 先在 agent-py、core、common 试点迁移，由独立代理复核，高风险结论经真实入口核对。
+  - 先在 example-assistant、core、common 试点迁移，由独立代理复核，高风险结论经真实入口核对。
   - 最后由两位真实成员双向接续。
 
 ## 1 评估
@@ -63,7 +65,7 @@
 | 工作量 | 工具实现：阶段 1–2 约 2–3 周，单人加代理，逐阶段验收，属于粗估。迁移见 B7 |
 | 依据 | 5 份调研报告，以及 Codex 四轮产出，见附录 B |
 | 未决事项 | 文中引用的统计数字在使用前抽查复算 |
-| 所需能力 | Python 标准库与 git；Claude Code、Codex、Cursor 的技能机制；业务仓验证环境（PostgreSQL 等）；迁移时由用户确认 live-chat 的业务判断 |
+| 所需能力 | Python 标准库与 git；Claude Code、Codex、Cursor 的技能机制；业务仓验证环境（PostgreSQL 等）；迁移时由用户确认 示例客服项目 的业务判断 |
 
 本任务属于复杂任务，按团队流程**先批准方案，再实施**。G3 的决定已全部确认，方案正文可以整份批准，也可以逐节批准。
 
@@ -113,7 +115,7 @@
 | N1 | 命名：目录 `.tw/`；技能 `team-workflow`（沿用）和 `team-knowledge`（取代 `cs`）；CLI `tw` | 通用名在代理工具圈已被占用：`workbench`、`wb`、`.workbench/` 被 wbcli 使用，`.keel/` 被 KEEL 使用，`.baton/` 被 blader/baton 使用，cairn 有多个同名项目。沿用 `.team-workflow/` 会与三处冲突：旧的纯本地证据目录、各项目根 `.gitignore` 中的忽略行、现有运行时（`common.py:177`）。新目录与旧布局互不重叠 |
 | N2 | 任务记录不入库：结果依次保存在 Issue、PR、提交说明中，本地只留草稿 | 89 条任务记录中有 30 条是维护或合并流水；knowledge_use 极少使用；内容与 Issue 和交付产物重复 |
 | N3 | 知识分类按现行 K1 的种类与边界：rule、decision、lesson，加上 glossary 和 overview | 11 类分类产生了 32.5% 的脚手架文件，还出现按配额建卡、同一概念被拆进 3 类的情况 |
-| N4 | 从 git 历史找回教训不作为默认流程，也不提供工具，由用户按需指挥代理执行。目前只计划为 agent-py 找回 Agent Native 开发中的教训，并把 agent 仓里适用的教训迁入（B5） | 用户确认 |
+| N4 | 从 git 历史找回教训不作为默认流程，也不提供工具，由用户按需指挥代理执行。目前只计划为 example-assistant 找回 Agent Native 开发中的教训，并把 agent 仓里适用的教训迁入（B5） | 用户确认 |
 | N5 | 团队流程的简化放到第二阶段 | 本次已涉及公开契约和数据迁移，再叠加流程语义变化，出问题时难以定位 |
 | N6 | CS 仓归档，新仓不保留 CS 的提交历史 | 运行时整体重写，旧历史仍可在归档仓中查阅 |
 | N7 | 迁移由代理按迁移指南整理，不提供迁移脚本；新运行时不读取旧格式（B） | 用户确认 |
@@ -133,7 +135,7 @@
    → W、K3
 2. **最有价值的教训没有沉淀**。
    - 用户原话：“cs 这个项目最大的价值就是沉淀历史遇到的错误”。
-   - 9 月 5 日重建时丢弃了约 547 张旧卡，只有 agent-py 用 history-review 保留了 27 组教训。
+   - 9 月 5 日重建时丢弃了约 547 张旧卡，只有 example-assistant 用 history-review 保留了 27 组教训。
    
    → K1 lesson、K3、B5
 3. **工具状态互相作废**。
@@ -235,7 +237,7 @@
 ---
 title: "建会话前确定语言，并使用独立字段保存"
 scope: ["self:internal/biz/conversation_language_biz.go", "self:internal/data/conversation_repository.go"]
-source: ["https://github.com/channelwill/cw2-live-chat/issues/146"]
+source: ["https://github.com/acme/example-service/issues/1"]
 verified: {"self":{"commit":"108e82b5a2dd56ef8ef2f370259810de9c653bf6","date":"2026-10-14"}}
 status: "accepted"
 ---
@@ -281,13 +283,13 @@ status: "accepted"
 
 括号中的内容在迁移时据原文填写，这里只示意格式。
 
-**示例 3：教训**（来自 agent-py 的 history-review H06，`lessons/2026-09-05-operation-reaffirmation.md`）
+**示例 3：教训**（来自 example-assistant 的 history-review H06，`lessons/2026-09-05-operation-reaffirmation.md`）
 
 ```markdown
 ---
 title: "重复表达操作不能制造新案件或丢失原案件"
 scope: ["self:packages/order_graph/**"]
-source: ["https://github.com/channelwill/cw2-live-chat-agent-py/commit/f0dd458241"]
+source: ["https://github.com/acme/example-assistant/commit/0123456789abcdef"]
 verified: {"self":{"commit":"b4d0aa0647e2483d2816cbc817b8c8ab1e72f328","date":"2026-10-14"}}
 guards: ["self:tests/order_graph/test_evidence_boundary.py#test_new_task_frame_does_not_project_host_route_as_active_operation"]
 ---
@@ -449,15 +451,15 @@ guards: ["self:tests/order_graph/test_evidence_boundary.py#test_new_task_frame_d
 
 ## 建会话前确定语言
 创建事务前判定，随会话写入独立字段……
-来源：https://github.com/channelwill/cw2-live-chat/issues/146 等 3 项 · 核实于 2026-10-14，之后 scope 内有 2 个提交，另有未提交修改
+来源：https://github.com/acme/example-service/issues/1 等 3 项 · 核实于 2026-10-14，之后 scope 内有 2 个提交，另有未提交修改
 → decisions/2026-10-13-conversation-language.md
 
 ## 继续阅读
 - 语言回写规则 → rules/conversation-language-update.md（守护测试 tests/test_language.py）
-- 代理侧弱输入边界 → agent-py:rules/language-evidence.md（与 decisions/2026-10-13-conversation-language.md 关联）
+- 代理侧弱输入边界 → example-assistant:rules/language-evidence.md（与 decisions/2026-10-13-conversation-language.md 关联）
 
 ## 共享仓
-- agent-py：../cw2-live-chat-agent-py @ 4f2c123，无未提交修改
+- example-assistant：../example-assistant @ 4f2c123，无未提交修改
 
 ## 未找到的条目
 - rules/missing.md
@@ -592,7 +594,7 @@ guards: ["self:tests/order_graph/test_evidence_boundary.py#test_new_task_frame_d
 - `check_cs_knowledge.py`、`check_cs_delivery.py`，以及 `check_parallel.py` 中与 CS 相关的部分；
 - CI 中克隆 CS 默认分支的步骤。
 
-**防止旧系统复活**：Trellis 在 live-chat agent 仓出过这样的事——系统被删除后，另一个分支运行了 init，自动提交又把它带回了主线。对策：
+**防止旧系统复活**：Trellis 在 示例客服项目 agent 仓出过这样的事——系统被删除后，另一个分支运行了 init，自动提交又把它带回了主线。对策：
 
 - 发布说明要求卸载 `cs`、`cs-analysis`；
 - 整体替换托管的指引块；
@@ -730,7 +732,7 @@ guards: ["self:tests/order_graph/test_evidence_boundary.py#test_new_task_frame_d
 
 ### B4 多仓顺序与换装
 
-- 多仓产品（如 live-chat）以组为单位换装：全员卸载 `cs`、`cs-analysis`，安装同一个新版本 tag。
+- 多仓产品（如 示例客服项目）以组为单位换装：全员卸载 `cs`、`cs-analysis`，安装同一个新版本 tag。
 - 组内按“契约提供方 → 核心实现 → 消费者”的顺序逐仓迁移，每个仓一个 PR。
 - 尚未迁移的仓，在 brief 里显示为“未迁移”，`tw check` 也会提示旧目录的存在。
 
@@ -743,16 +745,16 @@ guards: ["self:tests/order_graph/test_evidence_boundary.py#test_new_task_frame_d
   - 已有的复盘文件。
 - 只保留现在仍可能再犯的失败机制，写成 lesson，尽量绑定守护测试。由用户确认后提交。
 
-**目前唯一计划的找回：agent-py 的 Agent Native 开发教训**
+**目前唯一计划的找回：example-assistant 的 Agent Native 开发教训**
 
-- 目标：写入 agent-py 的 `.tw/lessons/`。
+- 目标：写入 example-assistant 的 `.tw/lessons/`。
 - 来源：
-  - agent-py 自己的 `.codestable/wiki/history-review/`：从 337 条记录中归纳出 27 组；
-  - agent-py 9 月 5 日重建前的知识（`334cc9d^`）；
+  - example-assistant 自己的 `.codestable/wiki/history-review/`：从 337 条记录中归纳出 27 组；
+  - example-assistant 9 月 5 日重建前的知识（`334cc9d^`）；
   - agent 仓 9 月 5 日重建前的知识（`cc2278f8^`）；
   - agent 仓已删除的 Trellis spec（在 `ef6f3e3a` 中删除，其中 graph-patterns.md 有 19 个场景小节）。
-- 迁移规则：agent 仓的教训如果适用于 agent-py 的实现，就迁入 agent-py，并在正文中写明适用条件。不适用的内容不迁入。
-- 作为阶段 3 中 agent-py 迁移之后的一项独立任务，由你指挥执行。
+- 迁移规则：agent 仓的教训如果适用于 example-assistant 的实现，就迁入 example-assistant，并在正文中写明适用条件。不适用的内容不迁入。
+- 作为阶段 3 中 example-assistant 迁移之后的一项独立任务，由你指挥执行。
 
 ### B6 每仓验收
 
@@ -767,11 +769,11 @@ guards: ["self:tests/order_graph/test_evidence_boundary.py#test_new_task_frame_d
 | 项 | 估算 | 依据 |
 | --- | --- | --- |
 | 小服务迁移 | 每仓 0.5–1 代理小时 | 9 月 5 日重建时每仓约 25–30 分钟，但当时字段是机械填写的；新流程需要更多阅读 |
-| agent-py、core、common | 每仓 0.5–1 代理日 | agent-py 的历史复核约 1.5 小时，覆盖 337 条记录；core 当前有 52 张卡 |
+| example-assistant、core、common | 每仓 0.5–1 代理日 | example-assistant 的历史复核约 1.5 小时，覆盖 337 条记录；core 当前有 52 张卡 |
 | 独立复核 | 约为迁移时长的 30–50% | 按 B3 的范围 |
 | 真实入口核对 | 按高风险结论的数量计算，需要数据库等环境 | 迁移时再估 |
 | 用户确认 | 约 58 条决策和需求，每条 2–5 分钟，合计 2–5 人工小时 | 项目审计统计 |
-| agent-py 历史教训找回 | 由你决定范围 | B5 |
+| example-assistant 历史教训找回 | 由你决定范围 | B5 |
 
 ---
 
@@ -835,7 +837,7 @@ plugin.json、.claude-plugin/、LICENSE、licenses/
   - 离线运行；
   - 篇幅预算。
 - **真实查询回放集**：从 core 的 #126–#152 等任务中挑选查询，由独立代理确定预期条目，作为召回回归。目前唯一的检索指标只来自 5 条合成查询。
-- **迁移指南试用**：由未参与编写的代理，在 gateway 和 agent-py 的副本上按指南完成迁移，检查指南能否独立执行。
+- **迁移指南试用**：由未参与编写的代理，在 gateway 和 example-assistant 的副本上按指南完成迁移，检查指南能否独立执行。
 - CI 不再克隆 CS 默认分支，直接测试同一份发行源码。在 macOS 和 Linux 上，用 Python 3.10 和当前支持的最新版本验证。
 - 阶段 1 在 Claude Code、Codex、Cursor 上实测：技能发现、显式调用、自动调用，以及缺少依赖时的提示。
 
@@ -920,9 +922,9 @@ plugin.json、.claude-plugin/、LICENSE、licenses/
 | --- | --- | --- | --- | --- |
 | 0 冻结设计 | N1–N8 已确认；批准方案正文；字段表、命令参数、读写边界、删除清单定稿 | — | 方案评审人 | — |
 | 1 知识运行时 | `init/brief/read/new/check/audit/cache/version`；格式与预算；写作规范与正反例；成员操作说明；迁移指南与找回教训要点；真实查询回放集与召回基线；三个客户端的调用实测 | 在 gateway 和 core 的副本上读写，能发现占位符和失效引用；查询不写入任何文件 | 未参与实现的代理在隔离工作区试用 | 0 |
-| 2 合并与团队衔接 | 合仓；把 TW 脚本迁入运行时；删除桥接；合并配置；建立 `local/` 布局；落实 T3 的执行绑定契约；稳定的任务身份（v4.1：任务编号加可读目录）；适配 live-chat 的 worktree 依赖工具（`script/worktree/skills/livechat-worktree-dependency/scripts/worktree.py`，目前只处理两份旧映射路径） | 在本仓用新流程完成一个真实任务；只提交知识时，按内容绑定的检查不失效；新布局下 worktree 依赖解析正确 | 独立验收者核对原始结果 | 1 |
+| 2 合并与团队衔接 | 合仓；把 TW 脚本迁入运行时；删除桥接；合并配置；建立 `local/` 布局；落实 T3 的执行绑定契约；稳定的任务身份（v4.1：任务编号加可读目录）；适配 示例客服项目 的 worktree 依赖工具（`script/worktree/skills/example-worktree-dependency/scripts/worktree.py`，目前只处理两份旧映射路径） | 在本仓用新流程完成一个真实任务；只提交知识时，按内容绑定的检查不失效；新布局下 worktree 依赖解析正确 | 独立验收者核对原始结果 | 1 |
 | T7 流程简化（v4.2 提前） | 按[流程简化方案](2026-10-15-process-simplification.md)：固定材料组与 `start`、评审 Markdown 与逐项复核、`deliver` 顺序封装、参数归位、status 与关闭规则 | 本仓真实任务从 `start` 走到 `deliver`；中途改源码触发逐项复核 | 未参与实现的验收者按批次 1 场景执行 | 2 |
-| 3 迁移试点 | 按 B 由代理迁移 agent-py、core、common；agent-py 迁移之后，由你指挥找回历史教训（B5） | brand purge 冲突被识别并改写；brief 回放能取到预期条目；迁移说明完整 | 按 B3 独立复核；用户确认语义 | 1、2、T7、候选发行包 |
+| 3 迁移试点 | 按 B 由代理迁移 example-assistant、core、common；example-assistant 迁移之后，由你指挥找回历史教训（B5） | brand purge 冲突被识别并改写；brief 回放能取到预期条目；迁移说明完整 | 按 B3 独立复核；用户确认语义 | 1、2、T7、候选发行包 |
 | 4 成员试点与发行 | tag 发行；安装、升级、回退 | 两位成员在同一任务中双向接续、检索和交付；实测阅读量、命令数和耗时 | 两位真实成员 | 3 |
 | 5 推广 | 其余仓按组由代理迁移 | 每组按 B6 验收 | 用户与团队的业务验收 | 4 |
 
@@ -1004,7 +1006,7 @@ plugin.json、.claude-plugin/、LICENSE、licenses/
 
 | 意见 | 修订 |
 | --- | --- |
-| 只有 agent-py 值得找回 Agent Native 教训，agent 仓的教训可以迁入 agent-py | B5 只计划 agent-py 一项，并列出具体来源与迁入规则；I 阶段 3 中由你指挥执行 |
+| 只有 example-assistant 值得找回 Agent Native 教训，agent 仓的教训可以迁入 example-assistant | B5 只计划 example-assistant 一项，并列出具体来源与迁入规则；I 阶段 3 中由你指挥执行 |
 | 从 git 找回教训不应强制，由用户按需指挥 | N4 确认；删除 `--history` 和“已清空过的仓默认读历史”；B5 改为按需的要点说明 |
 | 项目只管最新设计；迁移由代理整理，不提供脚本 | N7 确认；删除 `tw rebuild` 整套命令、旧格式读取、暂存与回退日志；B 改为迁移指南；N8 推导出不保存取代链和演变（v4 已撤回） |
 

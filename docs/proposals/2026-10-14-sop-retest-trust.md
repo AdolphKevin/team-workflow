@@ -1,3 +1,5 @@
+> 历史文档：保留当时的方案或验证记录；现行能力与使用方式见 [README](../../README.md)。
+
 # SOP 场景的 Agent 验证与人工复测（草案 v1）
 
 > 状态：已被取代 · 日期：2026-10-14 · 方案负责人：Claude · 评审人：AdolphKevin
@@ -20,7 +22,7 @@
 
 ## 1 与现有标准的对应
 
-本提案只落地[业务验收与质量改进标准](../../skills/team-workflow/references/business-acceptance.md)中已有的要求，不新增流程义务：
+本提案只落地[业务验收与质量改进标准](https://github.com/AdolphKevin/team-workflow/blob/8be02e4/skills/team-workflow/references/business-acceptance.md)中已有的要求，不新增流程义务：
 
 | 本提案 | 标准中的依据 |
 | --- | --- |
@@ -257,7 +259,7 @@ sops:
 
 ## 10 批次 0：用本机制验证重构阶段 2
 
-- **场景文件**：[`docs/sop/tw-unified-redesign-phase2.yaml`](../sop/tw-unified-redesign-phase2.yaml)，共 7 个阶段、29 个场景，每个阶段都有正向和反向场景。
+- **场景文件**：[`docs/sop/archive/tw-unified-redesign-phase2.yaml`](https://github.com/AdolphKevin/team-workflow/blob/8be02e4/docs/sop/tw-unified-redesign-phase2.yaml)，共 7 个阶段、29 个场景，每个阶段都有正向和反向场景。
   - 预期结果只依据重构方案 v4，不依据当前实现。
   - 这份文件需要你确认后，才能作为业务原文使用。
 - **Agent 验证**：由未参与阶段 2 实现的 Agent 逐条执行，结果按第 3.3 节写成 JSON Lines，保存在 `.tw/local/` 下。原始证据也留在本机。

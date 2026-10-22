@@ -1,18 +1,18 @@
 ---
 title: "迁移代理没有数据库环境，核实规则挡掉了大部分行为知识"
 scope: ["self:skills/team-knowledge/references/migration.md"]
-source: ["self:docs/validation.md", "self:skills/team-knowledge/references/migration.md"]
+source: ["self:docs/archive/validation-0.x.md", "self:skills/team-knowledge/references/migration.md"]
 verified: {"self": {"commit": "9cb446629417d81a3a99f2ac492573cac502573d", "date": "2026-10-15"}}
 tags: ["迁移", "核实", "数据库", "沙箱", "守护测试", "回放"]
 related: ["decisions/2026-10-14-migration-by-agent.md"]
 ---
 # 迁移代理没有数据库环境，核实规则挡掉了大部分行为知识
 
-现象：core 迁移第一轮只写出 14 个条目，独立回放集事先确定的 30 条知识只覆盖 3 条。缺的多是持久化、并发和授权行为，旧卡里原本都有。
+现象：示例服务迁移第一轮只写出 14 个条目，独立回放集事先确定的 30 条知识只覆盖 3 条。缺的多是持久化、并发和授权行为，旧卡里原本都有。
 
 根因：迁移指南要求这类结论运行守护测试后才能迁入，跑不了就不迁入。迁移代理的沙箱起不了数据库，规则按设计把它们全部挡在外面。指南的准备步骤没有要求先备好运行环境。
 
-修复与防护：在沙箱外用一次性 PostgreSQL 运行 core 已登记的 db-suite，把原始结果交给迁移代理返工，覆盖升到 27 条。环境准备与结果交接按[迁移指南第 1 步](../../skills/team-knowledge/references/migration.md)执行。
+修复与防护：在沙箱外用一次性 PostgreSQL 运行 示例服务已有的数据库检查，把原始结果交给迁移代理返工，覆盖升到 27 条。环境准备与结果交接按[迁移指南第 1 步](../../skills/team-knowledge/references/migration.md)执行。
 
 发现方法：迁移后用独立预期回放 brief，核对每条预期知识是否在正文或索引中可见；“未核实、未迁入”的比例异常高时，先查验证环境。
 

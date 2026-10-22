@@ -1,5 +1,0 @@
-interface:
-  display_name: "Agent Environment Retro"
-  short_description: "Review agent navigation, instructions, tools and checks."
-policy:
-  allow_implicit_invocation: false

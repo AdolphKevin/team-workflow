@@ -1,12 +1,14 @@
 ---
-title: "team-workflow 维护仓总览"
-source: ["self:README.md", "self:docs/design.md", "self:docs/proposals/2026-10-16-scenario-acceptance-and-positive-text.md"]
-verified: {"self": {"commit": "f51c1b9ff5911b0b7fee4991e63feb622ce58b90", "date": "2026-10-16"}}
+title: "Team Workflow 项目总览"
+source: ["self:README.md", "self:docs/design.md", "self:docs/proposals/2026-10-22-knowledge-only.md"]
+verified: {"self": {"commit": "777be859050a5b2a69f02c87a8975aee38239cbf", "date": "2026-10-22"}}
 ---
-# team-workflow 维护仓总览
+# Team Workflow 项目总览
 
-本仓维护三样东西：团队入口 `team-workflow`、知识入口 `team-knowledge`（唯一的 Python 运行时 `tw`），以及 15 个直接复用的 MATT 方法。另有试点中的浏览器场景验收技能 `playwright-acceptance`，它只消费 `tw` 的场景与结果契约，不进入运行时（见 decisions/2026-10-19-playwright-acceptance-skill.md）。
+本仓只发行项目知识技能 team-knowledge，开工前读取约束、决策和教训，完成后与代码一起维护；与成员使用的开发流程无关。
 
-读代码从 `skills/team-knowledge/scripts/tw_runtime/` 开始：知识命令在顶层模块（brief、check、entries），团队流程在 `team/`（入口 workflow.py，交付核查在 delivery.py，执行绑定在 common.py 与 validation.py）。场景文件的格式与内容指纹在 `team/scenario_files.py`，YAML 子集读取在 `team/scenario_yaml.py`，任务场景读取、用例导入与覆盖核对在 `team/scenarios.py`，逐行结果契约在 `team/scenario_results.py`，当前状态、轮次登记与统计在 `team/scenario_rounds.py`。验收材料路径与产品指纹由 `team/validation.py` 统一计算；检查运行继续绑定完整源码。场景验收、评审绑定与回归状态的交付规则在 `team/scenario_acceptance.py`，交付继续复用场景状态与运行选用。流程下一步的统一读取入口是 `team/commands.py` 的 `current_status`；受阻问题身份由 `team/scenario_acceptance.py` 的 `findings` 生成。场景验收的设计依据见[已批准方案第 2 节](../docs/proposals/2026-10-16-scenario-acceptance-and-positive-text.md#2-验收流程的正确逻辑)。tw 的验收场景在 `docs/sop/`，发行检查与打包在 `scripts/`，MATT 来源与补丁在 `upstream/`。
+从 `skills/team-knowledge/SKILL.md` 和写作规范开始。唯一 Python 标准库运行时在 `skills/team-knowledge/scripts/tw_runtime/`：cli 分发命令，project 读取配置及跨仓映射，brief/read 读取知识，entries/check 校验结构与引用，audit 汇总健康情况；init/new/cache 是显式写入入口，install 核对文件清单。
 
-通用工具只用 Python 3.10+ 标准库；业务检查和环境脚本留在业务仓库。自动化测试和代理试用不能代替两位真实成员试点。
+发行检查与打包在 `scripts/`，当前验收场景在 `docs/sop/tw-knowledge-only.yaml`。独立代理经临时项目的真实命令入口验收，结果写入 `docs/validation.md`；历史场景与记录分别在 `docs/sop/archive/`、`docs/archive/`。
+
+项目知识、共享原文与本机材料分开保存。引用只表示可追溯，测试运行由产品仓库 CI 证明。SOP 验收与回归沉淀由 sop-board 发行。两位真实成员各自一周试点须单独记录。

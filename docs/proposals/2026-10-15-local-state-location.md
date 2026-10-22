@@ -6,6 +6,8 @@ assessment: {"complexity":"medium","risks":["public-contract"],"effort":"约 1 �
 roles: {"design_owner":"Claude","implementation_owner":"Codex","acceptance_owner":"AdolphKevin"}
 ---
 
+> 历史文档：保留当时的方案或验证记录；现行能力与使用方式见 [README](../../README.md)。
+
 # 本机状态的边界方案
 
 > 状态：已批准 · 日期：2026-10-15 · 方案负责人：Claude
@@ -81,7 +83,7 @@ roles: {"design_owner":"Claude","implementation_owner":"Codex","acceptance_owner
 - 两个文件都由人或代理编辑，工具只读不写，因此多个 worktree 并行时不存在写入冲突。
 - 现在有两处读取映射（`project.py` 的 `mapping` 与 `team/common.py` 的 `location_settings`），合并为一个函数，各自的键含义不变。
 - 缺少映射时仍只提示，不猜测、不自动克隆；提示中同时给出两层文件的位置。
-- live-chat 的 worktree 依赖工具写的是检出目录内的文件，不受影响。
+- 示例客服项目 的 worktree 依赖工具写的是检出目录内的文件，不受影响。
 
 ### 2.3 已提交内容不引用本机材料
 <!-- tw-section id=references type=scope depends=scope-global -->
@@ -121,7 +123,7 @@ roles: {"design_owner":"Claude","implementation_owner":"Codex","acceptance_owner
 | D1 | 本机状态是否移出工作区 | 不移，留在 `.tw/local/`，也不新增目录 | 已确认（2026-10-15） |
 | D2 | 共享仓映射几层 | 两层：用户级默认，检出目录覆盖 | 已确认（2026-10-15） |
 | D3 | 旧项目怎么迁 | 不强制迁移；是否提升映射由使用的代理决定，工具不做自动迁移 | 已确认（2026-10-15） |
-| D4 | 排期 | agent-py 推广之前完成 | 已确认（2026-10-15） |
+| D4 | 排期 | example-assistant 推广之前完成 | 已确认（2026-10-15） |
 
 ## 5 验收标准
 <!-- tw-section id=verification type=scope depends=scope-global -->
@@ -261,5 +263,5 @@ tw audit 列出不归工具管理的目录；更新成员说明、设计说明�
 
 - **本机状态移到 `git rev-parse --git-path tw`，记录中的路径改用 `local:` 前缀**（v1）
   - 好处只有两点：`git clean -fdx` 不会删除，编辑器和搜索看不到。
-  - 放弃原因：工具数据从一处变成三处（`.tw/`、`.git/` 下的状态目录、用户级配置），更难理解和维护；worktree 的状态目录在工作区外，要为记录路径另设前缀、改写路径校验和约 10 处写死的路径；live-chat 的 worktree 依赖工具要跟着改；清理逻辑的复杂度并不因此降低。
+  - 放弃原因：工具数据从一处变成三处（`.tw/`、`.git/` 下的状态目录、用户级配置），更难理解和维护；worktree 的状态目录在工作区外，要为记录路径另设前缀、改写路径校验和约 10 处写死的路径；示例客服项目 的 worktree 依赖工具要跟着改；清理逻辑的复杂度并不因此降低。
   - 重新考虑的条件：实际出现因整目录删除或 `git clean -fdx` 丢失进行中任务的事故，且成员说明不足以避免。

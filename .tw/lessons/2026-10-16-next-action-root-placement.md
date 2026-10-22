@@ -1,18 +1,19 @@
 ---
-title: "下一步中的项目参数被知识命令拒绝"
-scope: ["self:skills/team-knowledge/scripts/tw_runtime/cli.py", "self:skills/team-knowledge/scripts/tw_runtime/team/repairs.py"]
-source: ["self:skills/team-workflow/references/contracts.md"]
-verified: {"self": {"commit": "ffc8fdcc8d590d18242e77bd0bb2917c3cbd17ba", "date": "2026-10-16"}}
-tags: ["下一步", "初始化", "root", "命令参数"]
+title: "知识命令应接受文档中给出的项目参数位置"
+scope: ["self:skills/team-knowledge/scripts/tw_runtime/cli.py"]
+source: ["self:docs/archive/validation-0.x.md"]
+verified: {"self": {"commit": "777be859050a5b2a69f02c87a8975aee38239cbf", "date": "2026-10-22"}}
+guards: ["self:docs/sop/tw-knowledge-only.yaml#SOP-01-P01"]
+tags: ["初始化", "root", "命令参数"]
 ---
-# 下一步中的项目参数被知识命令拒绝
+# 知识命令应接受文档中给出的项目参数位置
 
-现象：未初始化项目的团队状态正确指向初始化，照抄下一步中的命令却被参数解析器拒绝；工具约定中的知识检查命令也有同一问题。
+现象：旧团队状态给出的初始化命令把 `--root` 放在子命令后，知识入口只接受它位于子命令前，照抄指引实际执行时失败。
 
-根因：项目参数只在知识入口的全局解析器注册，团队入口和知识子命令的参数位置约定分离。此前测试验证了提示文字，实际执行恢复命令才暴露差异。
+根因：公共参数在不同入口单独注册，文字检查没有执行给出的命令。
 
-修复与防护：知识子命令共用项目参数定义，取值顺序与团队入口一致。守护测试通过实际知识命令覆盖全部子命令与两处取值，真实入口照抄初始化指引并核对配置写入。
+修复与防护：所有知识子命令共用项目参数定义，支持子命令前后两处写法；两处同时出现时子命令值优先。
 
-发现方法：直接执行下一步与工具约定中的命令，比较两种参数位置的结果。
+发现方法：在临时目录实际执行 `tw --root <项目> init` 与 `tw init --root <项目>`，再用同样两种形式执行知识检查，核对结果。
 
-适用条件：增改公共命令参数、生成恢复命令或调整命令示例时。
+适用条件：修改公共命令参数或文档示例时。

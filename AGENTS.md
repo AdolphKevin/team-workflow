@@ -1,15 +1,13 @@
 # 工作入口
 
-本仓维护集中分发的团队入口 `team-workflow`、知识入口 `team-knowledge`（唯一的 Python 运行时）、直接复用的 MATT 方法、试点中的浏览器场景验收技能 `playwright-acceptance` 和验证工具。
-架构和边界见 [README](README.md) 与[设计说明](docs/design.md)；本次合并重构见[方案](docs/proposals/2026-10-14-unified-redesign.md)。
+本仓只维护项目知识技能 `team-knowledge` 及其 Python 运行时 `tw`，与成员使用的开发流程无关。职责见 [README](README.md)、[设计边界](docs/design.md)与[已批准方案](docs/proposals/2026-10-22-knowledge-only.md)。
 
-- 本仓自己的知识在 `.tw/`，开工前用 `tw brief` 读取，完成后在同一改动中更新。这里不包含消费项目的知识、凭证和运行日志。
-- MATT 源码复用来源见 `upstream/matt.lock.json`，本地改动见 `upstream/matt.patch`。更新时保留原文、配套资源和许可，核对依赖闭包。
-- 源文档只保存一份正文；知识条目引用原文，不复制词汇或设计决策。
-- 通用工具仅用 Python 3.10+ 标准库。项目脚本和业务测试留在业务仓库。
-- 本仓不维护自身的单元、接口与集成测试，tw 的验收按 `docs/sop/` 中的场景经真实入口执行；发行前运行 `python3 scripts/check_release.py`。指令文本受发布检查的篇幅预算约束，新增强制规则必须对应真实失败案例或验收要求。
-- 技能变化须在隔离工作区做独立代理试用，检查真实输入与结果；代理试用不能代替两位真实团队成员试点。
-- 保留用户已有授权和实现方式，不增加自动提交、外部发布或强制多代理流程。
+- 本仓知识在 `.tw/`；源码、知识与原文在同一改动中维护，原文只保存一份正文。
+- 通用工具只用 Python 3.10+ 标准库；产品的业务脚本和测试留在产品仓库。
+- 本仓不新增单元、接口或集成测试。验收由未参与实现的独立代理，按 `docs/sop/tw-knowledge-only.yaml` 经真实命令入口执行，结果写入 `docs/validation.md`。`docs/sop/archive/` 仅供历史追溯。
+- 技能变化须在隔离工作区做独立代理试用，核对实际输入与结果；两位真实成员各自试用一周的结论单独记录，代理试用不能替代。
+- 发行前运行 `python3 scripts/check_release.py` 与打包命令。指令篇幅预算见 `.tw/rules/instruction-budgets.md`；新增强制规则须有真实失败案例或验收要求。
+- 保留用户已有授权、实现方式及未提交改动；提交与发布按用户指示执行。
 
 <!-- team-workflow:guidance:knowledge start -->
 ## 项目知识

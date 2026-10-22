@@ -1,10 +1,12 @@
+> 历史文档：保留当时的方案或验证记录；现行能力与使用方式见 [README](../../README.md)。
+
 # 以 SOP 场景验收最终交付（修订 2）
 
 > 状态：修订 2 已批准，待实施 · 日期：2026-10-20 · 方案负责人：Claude · 批准人：AdolphKevin
 >
 > 来源：AdolphKevin 2026-10-20 的决定（第 6 节）；失败案例为 2026-10-19 至 10-20 的 SOP 看板开发会话（第 1 节）。
 >
-> 修订对象：[场景化黑盒验收方案](2026-10-16-scenario-acceptance-and-positive-text.md) 2.1、2.2 节与第 5 节的回归沉淀；[业务验收标准](../../skills/team-workflow/references/business-acceptance.md)第 2、4、5、7、8 节；[测试能力建设](../../skills/team-workflow/references/test-capability.md)；[场景指南](../../skills/team-workflow/references/scenarios.md)第 1、4、6 节；团队入口第 2、3 步；[团队交付](../../skills/team-workflow/references/team-delivery.md)；[接入指南](../../skills/team-workflow/references/onboarding.md)；全局指引模板。
+> 修订对象：[场景化黑盒验收方案](2026-10-16-scenario-acceptance-and-positive-text.md) 2.1、2.2 节与第 5 节的回归沉淀；[业务验收标准](https://github.com/AdolphKevin/team-workflow/blob/8be02e4/skills/team-workflow/references/business-acceptance.md)第 2、4、5、7、8 节；[测试能力建设](https://github.com/AdolphKevin/team-workflow/blob/8be02e4/skills/team-workflow/references/test-capability.md)；[场景指南](https://github.com/AdolphKevin/team-workflow/blob/8be02e4/skills/team-workflow/references/scenarios.md)第 1、4、6 节；团队入口第 2、3 步；[团队交付](https://github.com/AdolphKevin/team-workflow/blob/8be02e4/skills/team-workflow/references/team-delivery.md)；[接入指南](https://github.com/AdolphKevin/team-workflow/blob/8be02e4/skills/team-workflow/references/onboarding.md)；全局指引模板。
 
 ## 批准记录
 
@@ -88,7 +90,7 @@
 
 ## 4 验收
 
-场景文件 `docs/sop/tw-tier-1.yaml` 改为下列 6 条：
+场景文件 `docs/sop/archive/tw-tier-1.yaml` 改为下列 6 条：
 
 - **SOP-01 场景验收与交付（cli）**：P01 没有登记检查的任务，场景经独立执行者全部通过后 `accept`、`deliver` 成功；N01 有场景未通过或受阻未处置时 `deliver` 拒绝并列出缺项。
 - **SOP-02 产品变化后的回归（cli）**：P01 产品变化后已通过场景变为待判定，重跑一条、沿用一条（带理由）后交付成功，统计分开计数；N01 沿用缺少理由时拒绝。

@@ -1,22 +1,17 @@
 ---
 title: "技能指令文本受篇幅预算约束"
-scope: ["self:skills/team-knowledge/SKILL.md", "self:skills/team-knowledge/references/**", "self:skills/team-workflow/SKILL.md", "self:skills/team-workflow/references/matt-integration.md", "self:skills/team-workflow/references/platform.md", "self:skills/team-workflow/references/onboarding.md", "self:skills/team-workflow/references/scenarios.md", "self:scripts/check_release.py"]
-source: ["self:docs/proposals/2026-10-14-unified-redesign.md", "self:docs/proposals/2026-10-15-issue-and-change-request-flow.md", "self:docs/proposals/2026-10-16-scenario-acceptance-and-positive-text.md"]
-verified: {"self": {"commit": "853f87fa90c1e6129eca6069ec5380d962aa6844", "date": "2026-10-17"}}
-guards: ["check:release"]
+scope: ["self:skills/team-knowledge/SKILL.md", "self:skills/team-knowledge/references/**", "self:scripts/check_release.py"]
+source: ["self:docs/proposals/2026-10-22-knowledge-only.md", "self:docs/proposals/2026-10-14-unified-redesign.md"]
+verified: {"self": {"commit": "777be859050a5b2a69f02c87a8975aee38239cbf", "date": "2026-10-22"}}
+guards: ["self:scripts/check_release.py#knowledge_checks"]
 tags: ["篇幅预算", "指令", "发行检查"]
 ---
 # 技能指令文本受篇幅预算约束
 
-按 Unicode 字符计算，以下文本有上限，超出即发行失败：
+按 Unicode 字符计算，team-knowledge 的 SKILL.md 上限 2,500；writing.md、migration.md 各 3,000；lessons-from-history.md 为 1,500；首次必读链上限 8,000。超出即发行失败。
 
-- team-knowledge 的 SKILL.md 不超过 2,500；writing.md、migration.md 各不超过 3,000；lessons-from-history.md 不超过 1,500。
-- team-workflow 的 SKILL.md、matt-integration.md、platform.md 各不超过 3,000。
-- team-workflow 的 onboarding.md 不超过 4,000（含初始化时生成项目平台脚本的指引）。
-- team-workflow 的 scenarios.md 不超过 5,000。
-- 两个技能各自的首次必读链不超过 8,000。
-
-新增参考文档必须先在 `scripts/check_release.py` 中登记预算。超出预算时通过合并、删除或按需路由解决，不通过提高上限解决。业务验收标准等按需参考暂不计入，留待流程简化阶段处理。
+新增参考文档先在 `scripts/check_release.py` 登记预算。超出预算时合并、删除重复内容或按需引用；新增强制规则须对应真实失败案例或验收要求。
 
 ## 依据
-方案 M6：一个团队任务曾需要读约 129KB 指令，规则只增不减。
+
+合并方案 M6 记录了单次任务需读约 129KB 指令的失败；知识库方案保留知识预算，移除团队指令及其预算。

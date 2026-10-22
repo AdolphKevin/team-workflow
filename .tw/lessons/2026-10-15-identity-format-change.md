@@ -1,18 +1,19 @@
 ---
 title: "改变仓库身份格式后，已迁移项目的配置失效而检查没有报"
-scope: ["self:skills/team-knowledge/scripts/tw_runtime/team/commands.py", "self:skills/team-knowledge/scripts/tw_runtime/team/common.py", "self:skills/team-knowledge/scripts/tw_runtime/team/portable.py"]
-source: ["https://github.com/AdolphKevin/team-workflow/issues/5", "self:docs/validation.md"]
-verified: {"self": {"commit": "ac3be9083919f45fb2a2dcb979a99efdbc5cc3fb", "date": "2026-10-15"}}
-tags: ["仓库身份", "external_inputs", "迁移", "配置", "回归", "project"]
+scope: ["self:skills/team-knowledge/scripts/tw_runtime/project.py", "self:skills/team-knowledge/scripts/tw_runtime/check.py", "self:skills/team-knowledge/scripts/tw_runtime/gitutil.py"]
+source: ["self:docs/archive/validation-0.x.md", "self:docs/proposals/2026-10-22-knowledge-only.md"]
+verified: {"self": {"commit": "777be859050a5b2a69f02c87a8975aee38239cbf", "date": "2026-10-22"}}
+guards: ["self:docs/sop/tw-knowledge-only.yaml#SOP-01-P02", "self:docs/sop/tw-knowledge-only.yaml#SOP-02-P01"]
+tags: ["仓库身份", "迁移", "配置", "共享仓"]
 ---
 # 改变仓库身份格式后，已迁移项目的配置失效而检查没有报
 
-现象：平台脚本改造把仓库身份从 `所有者/仓库` 改为 git 远端规范化的 `主机/路径`。core 迁移后的配置仍写 `channelwill/cw2-live-chat-common`，`tw team project` 与 `tw check` 都报正常，直到 `start` 解析依赖仓时才失败。由 Issue #5 的 A7 独立验收发现。
+现象：旧平台改造把仓库身份从 `所有者/仓库` 改为 `主机/路径`，已迁移项目仍保存旧值，直到解析依赖仓才失败。由历史独立验收发现，详见验证记录归档。
 
-根因：身份格式只在使用依赖仓的命令里核对，配置检查不解析本机检出；改变格式时也没有核对已迁移项目的配置。
+根因：身份格式只在使用依赖仓的命令中核对，配置检查未解析本机检出，也未覆盖已迁移项目。
 
-修复与防护：`tw team project` 逐个解析 external_inputs 中的依赖仓，身份与本机检出不一致时报错，并给出应改成的值；缺少本机映射只提示。不做新旧格式自动兼容。
+修复与防护：知识层的共享仓以规范化远端身份声明；`project.resolve` 核对实际检出身份，`tw check` 报告不匹配及期望、实际值；缺少映射时提示配置。知识格式与身份格式分开处理，升级不重写项目配置。
 
-发现方法：在真实的已迁移项目上运行 `tw team project`，以及会解析依赖仓的 `start`。
+发现方法：用真实临时共享仓经 brief、read、check 核对来源；分别配置正确身份、错误身份与缺少映射，确认读取与提示范围。
 
-适用条件：改变仓库身份、任务身份或任何配置字段的格式时，先在已迁移项目上运行检查。
+适用条件：调整共享仓身份或本机映射规则时。

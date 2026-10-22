@@ -1,63 +1,38 @@
 # Team Workflow
 
-本仓集中维护三样东西：团队开发流程、项目知识，以及直接复用的 MATT 开发方法。
+本仓只发行 `team-knowledge`：在任何开发流程里，开工前读取项目知识，完成后把仍有用的结论与代码一起维护。仓库名称保持不变。
 
-| 技能 | 作用 |
+知识放在各项目的 `.tw/`，通用命令只需 Python 3.10+ 和 Git。规则说明必须保持的行为，决策保留选择与放弃原因，教训记录真实发生的问题及其防护。
+
+| 位置 | 内容 |
 | --- | --- |
-| `team-workflow` | 团队任务入口：评估、分节方案、评审、实施与交接、业务验收、知识更新和最终交付 |
-| `team-knowledge` | 项目知识入口，也承载唯一的 Python 运行时 `tw`：开工前读取 `.tw/` 中的现行约束、决策和踩过的坑，完成后在同一改动中更新 |
-| `matt-*` | 15 个 MATT 方法：规格、拆分、实现、诊断、测试先行、设计、领域建模、审查、PR 等 |
-| `playwright-acceptance` | 浏览器场景验收：用 Playwright 接管已打开的 Chrome，按场景文件的明确步骤执行，结果转成 `tw team scenarios submit` 的契约（试点中，见[技能说明](skills/playwright-acceptance/SKILL.md)） |
-
-用 `team-workflow` 开始新任务时，默认进入团队流程。简单任务可以先实施，再由具体评审人一并批准方案和代码；中等、复杂任务要先批准方案再实施。直接调用 MATT 方法保持轻量，只需要 `.tw/` 知识。
-
-## 项目里的 `.tw/`
-
-| 位置 | 是否入库 | 内容 |
-| --- | --- | --- |
-| `config.json` | 入库 | 项目身份、共享仓、原文登记、团队检查配置 |
-| `overview.md`、`glossary.md` | 入库 | 项目总览、项目特有术语 |
-| `rules/`、`decisions/`、`lessons/` | 入库 | 现行约束、决策（含放弃过的做法）、踩过的坑 |
-| `local/` | 忽略 | 本机路径映射、缓存、任务草稿与运行证据 |
-
-条目存在就表示它现在有效。决定改变时，正文改写为新结论，旧做法和放弃原因保留在“放弃过的做法”中。写作规范见[写作规范](skills/team-knowledge/references/writing.md)，成员使用方法见[成员操作说明](docs/member-guide.md)。
+| `config.json` | 项目身份、上下文、共享仓与原文登记 |
+| `overview.md`、`glossary.md` | 项目概览与项目特有术语 |
+| `rules/`、`decisions/`、`lessons/` | 现行约束、决策与教训，与代码一起评审 |
+| `local/` | 被 Git 忽略的本机路径映射、缓存和成员材料 |
 
 ## 安装与开始
 
-按[安装与升级](docs/install.md)用固定发行标签安装全部技能。下面以 `tw` 代表 `python3 ~/.agents/skills/team-knowledge/scripts/tw.py`。
+按[安装与升级](docs/install.md)选择固定发行版本，只安装知识技能。下文用 `tw` 代表 `python3 <team-knowledge 技能目录>/scripts/tw.py`。
 
 ```bash
-tw init --apply --guidance        # 新项目：建立 .tw/ 与 AGENTS.md 中的知识指引
-tw brief --task "<任务>" --path <相关路径>
-tw check                          # 结构检查，零写入
-tw team project                   # 团队流程：核对配置、知识与安装
-tw team --help                    # 列出团队命令及用途
-tw team status --help             # 查看 status 接受的参数
+tw init                         # 预览；缺少 README 时用 --source self:文档路径
+tw init --apply --guidance       # 初始化，并填写生成的 overview.md
+tw brief --task "修改退款金额校验" --path src/pay/refund.py
+tw read rules/refund-limit.md
+tw check                        # 只检查结构与引用，不执行测试
+tw audit                        # 查看健康报告与本机材料大小
 ```
 
-团队命令只有 `--root` 和可重复的 `--repository` 是全局参数；其他参数写在对应命令后。简单任务用四条命令：
-
-```bash
-tw team start --task <任务文件> --design <方案>
-tw team run --task <身份>
-# 未参与实施的人填写自动生成的 review.md
-tw team review --task <身份> --submit
-tw team deliver --task <身份> --reason <不需要更新知识的理由>
-```
-
-中等以上任务先用 `approval-draft --reviewer <姓名> --mode plan` 取得方案批准。要更新知识时，评审后先 `accept --task <身份>`，通过后写知识并 `tw check`，再 deliver。完整的“不通过”评审也能保存，验收仍拒绝；status 只列有效记录和下一条命令。显式材料路径仍可使用；工具不执行发布或关闭。
-
-- 已有 `.codestable/` 的项目按[迁移指南](skills/team-knowledge/references/migration.md)由代理整理。
-- 团队流程的接入见[接入指南](skills/team-workflow/references/onboarding.md)，命令见[工具约定](skills/team-workflow/references/contracts.md)。
-- 业务验收、回归、缺陷关联与每周复盘的共同标准见[业务验收与质量改进标准](skills/team-workflow/references/business-acceptance.md)。
+日常使用见[成员操作说明](docs/member-guide.md)，条目格式见[写作规范](skills/team-knowledge/references/writing.md)。开发方法由成员选择；SOP 验收与回归沉淀由 sop-board 发行，职责依据见[已批准方案](docs/proposals/2026-10-22-knowledge-only.md)。
 
 ## 维护与验证
-
-MATT 基于 [mattpocock/skills](https://github.com/mattpocock/skills) 主分支提交 `b0618bc`，保留源码、配套资源和 MIT 许可；适配补丁可以反向恢复并逐文件校验，见[来源与更新](docs/upstream.md)。
 
 ```bash
 python3 scripts/check_release.py
 python3 scripts/package.py --output <仓库外目录>/team-workflow.zip
 ```
 
-[验收标准](docs/acceptance.md)区分场景验收、隔离代理试用和真实成员试点，实际结果记录在[验证记录](docs/validation.md)；未执行的项目不得写成通过。工具只核对所列检查与材料，不替代业务判断。
+发行包只含知识技能、插件元数据、许可与公开说明。本仓知识和本机材料留在本仓。修改技能后先运行 `python3 scripts/package.py --manifest` 更新文件清单，再执行发行检查。
+
+[设计边界](docs/design.md)说明运行时职责。[验收标准](docs/acceptance.md)要求独立代理经实际命令入口执行场景，结果写入[验证记录](docs/validation.md)。两位真实成员的一周试点单独记录。

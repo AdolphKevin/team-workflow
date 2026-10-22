@@ -1,3 +1,13 @@
+# 1.0.0（工作区候选版，未发布）
+
+- 只发行 `team-knowledge`；项目知识与成员使用的开发流程无关，知识命令、跨仓映射与既有格式继续可用。
+- 移除团队运行时及 `tw team` 能力、团队入口、浏览器验收副本、15 个 MATT 副本、上游补丁及其专属许可。SOP 验收与回归沉淀由 sop-board 发行，MATT 由成员自行安装上游。
+- 旧团队字段与 `check:` 防护引用只给迁移警告；配置和本机材料保持原样，文件与测试名引用继续校验。初始化及安装完整性检查只针对知识技能。
+- 发行内容、现行入口文档和本仓知识同步收缩，旧场景归档；历史正文保留并清理内部信息。
+- 升级方法见[从 0.x 升级](docs/install.md#从-0x-升级)：按来源移除旧技能与团队指引块，保留成员自写内容，把运行要求交给产品仓库脚本和 CI，按 sop-board 契约整理旧场景及人工范围说明。
+
+> 以下为历史发行记录，命令与能力仅适用于对应旧版本。
+
 # 未发布（0.9.0-dev，合并重构）
 
 - 以 SOP 场景验收最终交付（[方案修订 2](docs/proposals/2026-10-20-verification-tiers.md)）：需求完成以独立执行者经真实入口执行场景为准，开发中不产出单元、接口与集成测试。`checks`、`required_checks` 可以为空，没有适用检查的任务不需要运行记录即可验收交付；风险可以不配检查。产品变化后已通过场景在 `pending` 中为 `undetermined`（待判定），受影响的重跑，不受影响的用新命令 `scenarios carry`（`reason`、`scope`）沿用，统计中沿用与执行分开计数（`carried`）。整体交付按场景验收、知识与交接判定，删除 `automation_status`、`regression_pending`；场景 `regression` 只记人工说明，旧的 `{check, cases}`、`{pending}` 照常读取不产生效果。`scenarios check` 输出 `scenario_count` 与 `node_counts`。标准、验收入口建设（原测试能力建设）、场景指南、团队入口、交付、接入、指引与记录模板随之改写；`tw check` 对教训的提示改为引用守护它的 SOP 场景。本仓自身的测试与测试运行脚本删除。
@@ -44,12 +54,12 @@
 - `verify` 对非对象的执行记录给出明确错误，不再抛出未处理异常。
 - 方案批准只要求写明批准人，确认依据 `confirmation` 改为可选；批准、方案、交接和进度记录不再要求评论作者本人就是记录中的批准人或负责人，可由他人代为记录。每条平台记录保留实际发布评论的账号 `recorded_by`，`load` 返回 `approval_records`，同时列出批准人和记录人以便追责。问题处置标为接受限制或延期时同样只要求确认人 `confirmed_by`，`confirmation` 可选。
 - 业务验收标准扩展为团队共同标准：首次验收由未参与实现的测试同事、用户或 AI 执行；回归按业务保证选择单元、集成或 E2E，缺陷回归须保留原问题的失败证据；E2E 写清起终点与替代依赖；本机与 CI 入口、交付证据范围、缺陷关联与每周开发测试共同复盘。新增交付验收、缺陷复验与保护、每周质量复盘三份记录模板。
-- 新增[项目验收方式与测试能力建设](skills/team-workflow/references/test-capability.md)：指导成员或代理调查项目事实、列出关键业务保证、选定层次与观察点，为各项目设计匹配的验收方式，记入新增的[项目验收方案](skills/team-workflow/templates/project-verification.md)模板并经开发与测试确认，项目之间不照搬工具与命令；项目尚无集成或 E2E 入口时，人工验收通过后整体交付写为“人工验收通过，自动回归未完成（待建设）”，由首个需要的需求建设最小入口并提供干净运行、重复运行、故意失败和 CI 实跑证据；给出浏览器、接口与数据库、消息接收端、消息消费者与定时任务、模型与智能体输出的常见检查要点，其他入口按共同理念推导；接口与数据库要点吸收了确切值断言、负向场景清单、业务仓维护的数据库运行器约定和“受阻”判定，不再依赖成员本机技能；模型与智能体输出按确定性合同程序断言、场景驱动真实对话并冻结证据、未参与实现的 AI 或人独立语义复核三层验收，复核结论与运行状态分离。
+- 新增[项目验收方式与测试能力建设](https://github.com/AdolphKevin/team-workflow/blob/8be02e4/skills/team-workflow/references/test-capability.md)：指导成员或代理调查项目事实、列出关键业务保证、选定层次与观察点，为各项目设计匹配的验收方式，记入新增的[项目验收方案](https://github.com/AdolphKevin/team-workflow/blob/8be02e4/skills/team-workflow/templates/project-verification.md)模板并经开发与测试确认，项目之间不照搬工具与命令；项目尚无集成或 E2E 入口时，人工验收通过后整体交付写为“人工验收通过，自动回归未完成（待建设）”，由首个需要的需求建设最小入口并提供干净运行、重复运行、故意失败和 CI 实跑证据；给出浏览器、接口与数据库、消息接收端、消息消费者与定时任务、模型与智能体输出的常见检查要点，其他入口按共同理念推导；接口与数据库要点吸收了确切值断言、负向场景清单、业务仓维护的数据库运行器约定和“受阻”判定，不再依赖成员本机技能；模型与智能体输出按确定性合同程序断言、场景驱动真实对话并冻结证据、未参与实现的 AI 或人独立语义复核三层验收，复核结论与运行状态分离。
 - 交付报告新增可选 `automation`，按场景声明 `automated`、`manual-only`、`pending-automation`；待建设条目须引用延期问题并给出期限。`verify` 结果新增 `automation_status` 与 `regression_pending`，`delivery_complete` 含义不变，`assurance` 说明它不代表回归已自动化。未声明时结果为 `not-declared`，旧报告不受影响。
 - 分发指引恢复五条常驻的需求完成门槛，正文仍只在业务验收标准维护。
 - 验收场景新增 `sources`（业务原文位置、版本、确认人）：`prepare` 列出缺少来源的验收项，`verify` 拒绝缺少来源的验收；方案历史中的早期修订仍可读取，补充来源需重新批准。`verify` 拒绝评审人或人工观察人与方案实施者相同的验收。
 - 修正 `profile.json` 模板：示例检查 `unit` 的覆盖层次改为 `unit`，避免照抄后夸大覆盖范围。
-- 新增随技能分发的[业务验收与质量改进标准](skills/team-workflow/references/business-acceptance.md)：需求完成门槛、主代理与子代理派遣协议、从 SOP 到自动回归的四步流水线、交付报告最低内容、项目真实验证操作手册的最低内容。主技能、团队交付和接入指南引用该页；项目文件只保留本仓专属补充。
+- 新增随技能分发的[业务验收与质量改进标准](https://github.com/AdolphKevin/team-workflow/blob/8be02e4/skills/team-workflow/references/business-acceptance.md)：需求完成门槛、主代理与子代理派遣协议、从 SOP 到自动回归的四步流水线、交付报告最低内容、项目真实验证操作手册的最低内容。主技能、团队交付和接入指南引用该页；项目文件只保留本仓专属补充。
 - 新增 `guidance`：默认预览，`--apply` 在项目 AGENTS.md（没有则新建，CLAUDE.md 只放 `@AGENTS.md` 引用）与本机 `~/.claude/CLAUDE.md`、`~/.codex/AGENTS.md` 写入标记块，内容来自随技能分发的 `templates/guidance-*.md`；只维护标记之间的内容，未安装的客户端跳过，标记损坏时拒绝写入。
 - 项目配置的 `workflow_version` 或格式高于已安装工具时，所有命令返回 `tool-outdated` 并提示 `npx skills update -g`。
 

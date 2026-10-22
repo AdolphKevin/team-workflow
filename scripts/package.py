@@ -7,15 +7,9 @@ from pathlib import Path
 import sys
 import zipfile
 
+sys.dont_write_bytecode = True
 ROOT = Path(__file__).resolve().parents[1]
-SKILL = ROOT / 'skills/team-workflow'
 KNOWLEDGE = ROOT / 'skills/team-knowledge'
-
-
-def skill_manifest():
-    sys.path.insert(0, str(KNOWLEDGE / 'scripts'))
-    from tw_runtime import install
-    return install.manifest(SKILL)
 
 
 def knowledge_manifest():
@@ -25,7 +19,7 @@ def knowledge_manifest():
 
 
 def manifests():
-    return {SKILL / 'MANIFEST.json': skill_manifest(), KNOWLEDGE / 'MANIFEST.json': knowledge_manifest()}
+    return {KNOWLEDGE / 'MANIFEST.json': knowledge_manifest()}
 
 
 def write_manifest():
@@ -39,7 +33,7 @@ def write_manifest():
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--output', type=Path)
-    parser.add_argument('--manifest', action='store_true', help='Regenerate the skills\' MANIFEST.json files only')
+    parser.add_argument('--manifest', action='store_true', help='Regenerate the team-knowledge MANIFEST.json only')
     args = parser.parse_args()
     root = ROOT
     if args.manifest:
@@ -58,9 +52,13 @@ def main():
         parser.error('Archive exists; choose a new path')
     manifest = json.loads((root / 'plugin.json').read_text())
     files = [root / name for name in ('plugin.json', '.claude-plugin/plugin.json', '.claude-plugin/marketplace.json',
-                                      'README.md', 'LICENSE', 'VERSION')]
-    for name in ('skills', 'assets', 'licenses', 'docs', 'upstream'):
-        files.extend(p for p in (root / name).rglob('*') if p.is_file() and '__pycache__' not in p.parts and p.suffix != '.pyc')
+                                      '.agents/plugins/marketplace.json', 'README.md', 'CHANGELOG.md', 'LICENSE', 'VERSION')]
+    if {p.name for p in (root / 'skills').iterdir()} != {'team-knowledge'}:
+        parser.error('Only team-knowledge may be shipped')
+    if (KNOWLEDGE / 'scripts/tw_runtime/team').exists() or (root / 'upstream').exists():
+        parser.error('Removed runtime or upstream files must not be shipped')
+    for name in ('skills/team-knowledge', 'assets', 'docs'):
+        files.extend(p for p in (root / name).rglob('*') if p.is_file() and '__pycache__' not in p.parts and p.suffix not in ('.pyc', '.pyo') and p.name != '.DS_Store')
     if any(p.is_symlink() for p in files):
         parser.error('Do not package symlinks')
     output.parent.mkdir(parents=True, exist_ok=True)

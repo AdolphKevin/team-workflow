@@ -1,18 +1,18 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "team-workflow",
-  "version": "0.9.0-dev",
-  "description": "团队任务流程、项目知识（.tw）与 MATT 开发方法，支持分节评审、接力实施和真实验证。",
+  "version": "1.0.0",
+  "description": "项目知识库：开工前读取 .tw/ 中的约束、决策与教训，完成后与代码一起维护，适用于任何开发流程。",
   "extensions": {
     "com.openai": {
       "interface": {
         "displayName": "Team Workflow",
-        "shortDescription": "团队任务流程与 MATT 开发方法",
-        "longDescription": "用 tw init 建立项目的 .tw/ 知识目录。team-workflow 新任务默认采用评估、方案评审、实施交接、验收和知识更新；独立 MATT 调用保持轻量。",
+        "shortDescription": "任何开发流程都可使用的项目知识库",
+        "longDescription": "项目知识库：开工前读取 .tw/ 中的约束、决策与教训，完成后与代码一起维护，适用于任何开发流程。",
         "category": "Productivity",
         "logo": "./assets/logo.svg",
         "composerIcon": "./assets/logo.svg",
-        "defaultPrompt": "按 team-workflow 完成团队任务的评估、实施与验收。"
+        "defaultPrompt": "使用 team-knowledge 读取当前任务相关的项目知识，完成后按实际结论更新并检查。"
       }
     }
   }

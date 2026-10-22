@@ -6,9 +6,11 @@ assessment: {"complexity":"medium","risks":["public-contract"],"effort":"约半�
 roles: {"design_owner":"Claude","implementation_owner":"Codex","acceptance_owner":"AdolphKevin"}
 ---
 
+> 历史文档：保留当时的方案或验证记录；现行能力与使用方式见 [README](../../README.md)。
+
 # TW-SOP-1：playwright-acceptance 的独立用法与采用说明
 
-> 本文件是任务 TW-SOP-1 的 tw 方案原文。总体设计见 sop-board 仓库的 `docs/proposals/2026-10-19-standalone-sop-verification.md`（v8）的 D9、D12 与第 8 节 TW-SOP-1 一行；验收场景见 [docs/sop/tw-sop-1.yaml](../sop/tw-sop-1.yaml)。
+> 本文件是任务 TW-SOP-1 的 tw 方案原文。总体设计见 sop-board 仓库的 `docs/proposals/2026-10-19-standalone-sop-verification.md`（v8）的 D9、D12 与第 8 节 TW-SOP-1 一行；验收场景见 [docs/sop/archive/tw-sop-1.yaml](https://github.com/AdolphKevin/team-workflow/blob/8be02e4/docs/sop/tw-sop-1.yaml)。
 >
 > 状态：修订 2。修订 1 于 2026-10-19 经 AdolphKevin 授权由 Claude 代批；实现时发现场景指南已达 5000 字的篇幅上限，修订 2 改为场景指南只加一句指向接入指南的独立验证方式，采用方式完整写在接入指南；修订 3 依第 1 轮验收补充转换失败时结果目录保持原样、如实写明场景指南的压缩方式、任务范围加入发行清单；修订 4 依第 2 轮验收在技能文本中写明执行者的取法；均于同日代批。
 
@@ -46,7 +48,7 @@ roles: {"design_owner":"Claude","implementation_owner":"Codex","acceptance_owner
 <!-- tw-section id=A1 type=acceptance depends=scope-global,I1 -->
 SOP-01 节点全部场景通过。
 
-- 场景：docs/sop/tw-sop-1.yaml#SOP-01
+- 场景：docs/sop/archive/tw-sop-1.yaml#SOP-01
 - 依据：位置 sop-board 仓库 docs/proposals/2026-10-19-standalone-sop-verification.md 的 D9、D12；版本 v8（2026-10-19）；确认人 AdolphKevin / 位置 docs/proposals/2026-10-19-tw-sop-1-design.md 的 I1 节；版本 修订 4；确认人 AdolphKevin
 - 检查：unit
 - 验证：自动；替身 项目平台脚本夹具
@@ -55,7 +57,7 @@ SOP-01 节点全部场景通过。
 <!-- tw-section id=A2 type=acceptance depends=scope-global,I2 -->
 SOP-02 节点全部场景通过。技能场景由只装候选技能的新会话执行。
 
-- 场景：docs/sop/tw-sop-1.yaml#SOP-02
+- 场景：docs/sop/archive/tw-sop-1.yaml#SOP-02
 - 依据：位置 sop-board 仓库 docs/proposals/2026-10-19-standalone-sop-verification.md 的 D9；版本 v8（2026-10-19）；确认人 AdolphKevin / 位置 docs/proposals/2026-10-19-tw-sop-1-design.md 的 I2 节；版本 修订 4；确认人 AdolphKevin
 - 检查：无
 
@@ -63,7 +65,7 @@ SOP-02 节点全部场景通过。技能场景由只装候选技能的新会话�
 <!-- tw-section id=A3 type=acceptance depends=scope-global,D1 -->
 SOP-03 节点全部场景通过。
 
-- 场景：docs/sop/tw-sop-1.yaml#SOP-03
+- 场景：docs/sop/archive/tw-sop-1.yaml#SOP-03
 - 依据：位置 sop-board 仓库 docs/proposals/2026-10-19-standalone-sop-verification.md 的 D12 与第 7 节 E-T1；版本 v8（2026-10-19）；确认人 AdolphKevin / 位置 docs/proposals/2026-10-19-tw-sop-1-design.md 的 D1 节；版本 修订 4；确认人 AdolphKevin
 - 检查：release
 - 验证：自动
@@ -73,5 +75,5 @@ SOP-03 节点全部场景通过。
 按 I1 修改 `to_scenarios.py` 并在 `tests/test_playwright_to_scenarios.py` 中先写失败测试再实现；按 I2 修改 `SKILL.md`；按 D1 补充两份指南并写决策记录。运行全量测试、发布检查与 `tw check`。
 
 - 验收：A1、A2、A3
-- 范围：skills/playwright-acceptance、skills/team-workflow/MANIFEST.json、tests/test_standalone_sop_docs.py、skills/team-workflow/references/scenarios.md、skills/team-workflow/references/onboarding.md、tests/test_playwright_to_scenarios.py、.tw/decisions、docs/sop/tw-sop-1.yaml、docs/proposals/2026-10-19-tw-sop-1-design.md、docs/validation.md
+- 范围：skills/playwright-acceptance、skills/team-workflow/MANIFEST.json、tests/test_standalone_sop_docs.py、skills/team-workflow/references/scenarios.md、skills/team-workflow/references/onboarding.md、tests/test_playwright_to_scenarios.py、.tw/decisions、docs/sop/archive/tw-sop-1.yaml、docs/proposals/2026-10-19-tw-sop-1-design.md、docs/validation.md
 - 前置任务：无

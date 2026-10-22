@@ -11,10 +11,12 @@
 | `source` | 必填：Issue、PR、提交链接或 `仓库:原文路径` |
 | `verified` | rule、lesson 必填：`{"self": {"commit": "<实际核对时的完整提交>", "date": "YYYY-MM-DD"}}`，日期填实际核对的那天 |
 | `status` | decision 必填：`accepted` 或 `rejected` |
-| `guards` | 可选：能发现该问题的 SOP 场景 `self:场景文件#场景编号`，或 `check:检查名` |
+| `guards` | 可选：能发现该问题的测试，写成 `仓库:文件#测试名`，如 `self:tests/test_refund.py#test_refund_limit` |
 | `tags`、`symbols`、`related`、`owner` | 可选。`tags` 写任务描述里会出现的业务词，brief 靠它匹配中文 |
 
 文件名：`rules/<slug>.md`，`decisions/` 和 `lessons/` 用 `YYYY-MM-DD-<slug>.md`，slug 只用小写字母、数字和连字符。
+
+`guards` 核对文件存在且包含指定名称；引用只表示可追溯，运行由 CI 证明。引用场景文件时，`#` 后写场景编号；实际执行结果另记项目验证记录。
 
 ## 正文
 
@@ -47,7 +49,7 @@
 ```
 
 - `documents` 是数组，`source` 写 `self:路径`（可用 glob）、`别名:路径` 或 http(s) 链接。
-- `shared` 只写远端身份。用户级 `${XDG_CONFIG_HOME:-~/.config}/tw/repositories.json` 按 `project.id` 提供默认路径：`{"projects": {"github.com/acme/core": {"repositories": {"common": "~/src/common"}}}}`；检出目录 `.tw/local/repositories.json` 的格式为 `{"repositories": {"common": "../common"}}`。命令行 > 检出目录 > 用户级，按键覆盖；两个文件由成员或代理编辑，工具只读。`inputs` 的外部文件路径同样合并。
+- `shared` 只写远端身份。用户级 `${XDG_CONFIG_HOME:-~/.config}/tw/repositories.json` 按 `project.id` 提供默认路径：`{"projects": {"github.com/acme/core": {"repositories": {"common": "~/src/common"}}}}`；检出目录 `.tw/local/repositories.json` 的格式为 `{"repositories": {"common": "../common"}}`。命令行 > 检出目录 > 用户级，按键覆盖；两个文件由成员或代理编辑，工具只读。
 - 知识与原文写结论和关键数据，引用入库的文件；本机材料的原件留在执行者本机，试点和手工输出放在仓库外。目录布局可以说明。
 
 ## 正例
