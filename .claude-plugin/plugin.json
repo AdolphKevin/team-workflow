@@ -1,6 +1,6 @@
 {
   "name": "team-workflow",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "项目知识库：开工前读取 .tw/ 中的约束、决策与教训，完成后与代码一起维护，适用于任何开发流程。",
   "author": {
     "name": "AdolphKevin"

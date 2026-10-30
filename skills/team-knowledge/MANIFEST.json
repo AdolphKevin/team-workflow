@@ -7,7 +7,7 @@
     "references/migration.md": "b4b015fa11621353f464aac02806539dc78ec86dc2417647809b9b778a02d3e5",
     "references/writing.md": "a3a0ff23d99046f72f6107cd232c3b3659cedb78f11dd9dc1ffed9ded4a30d9a",
     "scripts/tw.py": "4e5aeff6ce3aec67fc8f78c82040b583fa8af732aa6da75e4ef76c869a15e61b",
-    "scripts/tw_runtime/__init__.py": "889a6d8e7d1300edcf4f07d301da77d87b4b34ef54f65a32b4f1b82ba0f28ae6",
+    "scripts/tw_runtime/__init__.py": "8e1de2b638df05ec6580c9a0b6af40de3a94e1fa73da2cec93387a8e5223fa02",
     "scripts/tw_runtime/audit.py": "9e9396b7f319044fdfeeb104bf2b1bd76a507f796c91883bab0e58b7f1ac403c",
     "scripts/tw_runtime/brief.py": "b9f4b5353fc49d31e0ea7df1cfb4c37e294f9f92748b4c88cdfc12d07a6e394a",
     "scripts/tw_runtime/cache.py": "9039beef54f908fd6cd2a60f070d118b109c19a7b8f4817d25fc817151295f9f",
@@ -28,5 +28,5 @@
   },
   "schema_version": 1,
   "skill": "team-knowledge",
-  "version": "1.0.0"
+  "version": "1.0.1"
 }

@@ -102,7 +102,7 @@ sops:
         verify: cli
         initial_state: ["实现分支指定提交的干净检出"]
         steps: ["python3 scripts/check_release.py", "python3 scripts/package.py --output <仓库外>/tw.zip", "列出 ZIP 内容", "把 ZIP 中的技能安装到临时技能目录，运行 tw version --check-install"]
-        expected: ["前两步退出码 0", "ZIP 的技能目录只有 team-knowledge", "version --check-install 通过，只核对 team-knowledge", "插件元数据、VERSION 与运行时版本一致为 1.0.0"]
+        expected: ["前两步退出码 0", "ZIP 的技能目录只有 team-knowledge", "version --check-install 通过，只核对 team-knowledge", "插件元数据、VERSION 与运行时版本一致为 1.0.1"]
         forbidden_effects: ["ZIP 中出现 team-workflow、playwright-acceptance、matt-*、upstream/"]
         evidence_hints: ["命令输出与 ZIP 清单"]
       - id: SOP-03-N01

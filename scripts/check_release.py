@@ -31,7 +31,7 @@ def check(root=ROOT):
     manifest = json.loads((root / 'plugin.json').read_text())
     version = (root / 'VERSION').read_text().strip()
     assert manifest['name'] == 'team-workflow' and manifest['version'] == version
-    assert version == '1.0.0'
+    assert version == '1.0.1'
     sys.path.insert(0, str(root / 'skills/team-knowledge/scripts'))
     from tw_runtime import VERSION, install
     assert VERSION == version
