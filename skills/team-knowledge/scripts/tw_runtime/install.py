@@ -1,6 +1,7 @@
 """Release manifest and installation integrity of the skills."""
 import hashlib
 import json
+import os
 from pathlib import Path
 
 from . import VERSION, Invalid, require
@@ -53,10 +54,15 @@ def check_install(home=None):
     """`problems` concern the running tool and block verification; `installation_problems` concern the
     copies that clients load from the user's skill directories and are reported, not enforced."""
     home = Path(home).expanduser() if home else Path.home()
+    # Claude Code loads global skills from CLAUDE_CONFIG_DIR instead of ~/.claude when it is set, and the skills
+    # CLI links only the directory active at install time, so a configured directory can lack the skill. The
+    # default directories stay in the scan for sessions that still use them.
+    configured = os.environ.get('CLAUDE_CONFIG_DIR', '').strip()
+    claude = Path(configured).expanduser() / 'skills' if configured else None
     own = integrity(SKILL, VERSION)
     copies, seen = [], set()
-    for base in SKILL_HOMES:
-        candidate = home / base / 'team-knowledge'
+    for base in [home / base for base in SKILL_HOMES] + ([claude] if claude else []):
+        candidate = base / 'team-knowledge'
         if not candidate.exists():
             continue
         real = candidate.resolve()
@@ -72,6 +78,9 @@ def check_install(home=None):
     if own['status'] != 'intact':
         problems.append('正在运行的 team-knowledge 与发行清单不一致：' + describe(own))
     installation = []
+    if claude and not (claude / 'team-knowledge').exists():
+        installation.append(f'{claude / "team-knowledge"} 不存在或链接失效：CLAUDE_CONFIG_DIR 指向的 Claude Code '
+                            f'读不到 team-knowledge，把 {SKILL} 链接到这里')
     for copy in copies:
         if copy['status'] != 'intact':
             installation.append(f'{copy["path"]} 的文件被改动：' + describe(copy))

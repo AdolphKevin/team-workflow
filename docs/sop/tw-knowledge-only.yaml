@@ -1,5 +1,5 @@
 # TW-KO-1：本仓收缩为项目知识库的验收场景
-# 预期只依据 docs/proposals/2026-10-22-knowledge-only.md（修订 1，2026-10-22 批准）第 3、4、5、6 节，不依据当前实现的输出。
+# 预期只依据 docs/proposals/2026-10-22-knowledge-only.md（修订 1，2026-10-22 批准）第 3、4、5、6 节，以及 metadata.sources 中用户确认的补充要求，不依据当前实现的输出。
 # 执行者：未参与实现与审核的独立代理，经命令行真实入口执行；本仓不接入 sop-board（方案第 8 节）。
 # "候选版"指实现分支指定提交的 skills/team-knowledge，取出到临时目录后安装到临时技能目录使用；"旧版"指 main 分支 8be02e4 的发行内容。
 # "旧版项目"指用旧版 tw init --apply 建立、再手工加入全部旧团队字段（checks、required_checks、risk_checks、platform、inputs、external_inputs、environment_versions、acceptance_entries、accounts）、一条 guards 为 check:名称 的规则、一条 guards 为 self:文件#测试名 的规则，以及 .tw/local/ 下一份团队任务材料的临时 Git 项目。
@@ -7,11 +7,14 @@
 metadata:
   requirement: "team-workflow 只发行 team-knowledge：知识命令独立可用，团队流程、场景验收与 MATT 副本移除，已有项目可升级"
   batch: "tw-knowledge-only"
-  version: 1
+  version: 2
   owner: "AdolphKevin"
   sources:
     - ref: "docs/proposals/2026-10-22-knowledge-only.md 第 3–6 节"
       version: "修订 1（2026-10-22 批准）"
+      confirmed_by: "AdolphKevin"
+    - ref: "安装检查另外核对 CLAUDE_CONFIG_DIR 指向的 Claude Code 技能目录，该目录缺少技能时提示；默认目录照常核对，未设置时行为不变（SOP-03-P02、N02、P03）"
+      version: "用户确认（2026-10-30）"
       confirmed_by: "AdolphKevin"
   tags: ["tw", "知识库", "升级"]
 
@@ -114,6 +117,40 @@ sops:
         expected: ["命中只有 .tw/config.json 的 format 标识 channelwill/team-workflow 及方案明确保留的公开地址"]
         forbidden_effects: ["出现个人本机绝对路径、内部项目名、真实站点或真实单号"]
         evidence_hints: ["检索命令与结果"]
+      - id: SOP-03-P02
+        polarity: positive
+        title: 设置 CLAUDE_CONFIG_DIR 时，安装检查另外核对该目录下的副本
+        actor: 维护者
+        priority: P1
+        verify: cli
+        initial_state: ["临时 HOME 的 .agents/skills 装有候选版 team-knowledge，没有 .claude/skills", "临时配置目录 A 的 skills/ 下有一份改过一个文件的 team-knowledge 副本"]
+        steps: ["设置 CLAUDE_CONFIG_DIR=<目录 A>，运行临时 HOME 中候选版的 tw version --check-install --home <临时 HOME>", "把目录 A 的副本换成指向候选版的链接后重跑", "保持 CLAUDE_CONFIG_DIR=<目录 A>，在临时 HOME 的 .claude/skills 放一份改过一个文件的副本后重跑"]
+        expected: ["第一步退出码 1，安装问题指出目录 A 下的副本被改动", "第二步退出码 0，没有安装问题", "第三步退出码 1，安装问题指出临时 HOME 的 .claude/skills 下的副本被改动"]
+        forbidden_effects: ["第一步漏报目录 A 的改动", "第三步因设置了 CLAUDE_CONFIG_DIR 而漏报 .claude/skills 下的副本", "检查命令写入或修改文件"]
+        evidence_hints: ["两次命令与完整 JSON 输出"]
+      - id: SOP-03-N02
+        polarity: negative
+        negative_type: other
+        title: CLAUDE_CONFIG_DIR 指向的目录缺少技能时给出提示
+        actor: 维护者
+        priority: P1
+        verify: cli
+        initial_state: ["临时 HOME 的 .agents/skills 装有候选版 team-knowledge，.claude/skills 中有指向它的链接", "临时配置目录 B 有 skills/，但没有 team-knowledge"]
+        steps: ["设置 CLAUDE_CONFIG_DIR=<目录 B>，运行候选版 tw version --check-install --home <临时 HOME>", "在目录 B 的 skills/ 放一个指向不存在路径的 team-knowledge 链接后重跑"]
+        expected: ["两次退出码均为 1", "安装问题指出目录 B 下的 team-knowledge 缺少或链接失效，并说明要链接哪个技能目录"]
+        forbidden_effects: ["因临时 HOME 的 .claude/skills 完好而判定通过", "检查命令写入或修改文件"]
+        evidence_hints: ["两次命令与完整 JSON 输出"]
+      - id: SOP-03-P03
+        polarity: positive
+        title: 未设置 CLAUDE_CONFIG_DIR 时安装检查保持原行为
+        actor: 维护者
+        priority: P1
+        verify: cli
+        initial_state: ["临时 HOME 的 .agents/skills 装有候选版 team-knowledge，没有 .claude/skills", "运行环境未设置 CLAUDE_CONFIG_DIR"]
+        steps: ["运行候选版 tw version --check-install --home <临时 HOME>", "在临时 HOME 的 .claude/skills 放一份改过一个文件的副本后重跑"]
+        expected: ["第一步退出码 0，没有关于 Claude Code 技能目录的提示", "第二步退出码 1，安装问题指出临时 HOME 的 .claude/skills 下的副本被改动"]
+        forbidden_effects: ["第一步提示缺少 Claude Code 技能目录"]
+        evidence_hints: ["两次命令与完整 JSON 输出"]
 
   - id: SOP-04
     title: 在其他工作流中使用知识

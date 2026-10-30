@@ -14,6 +14,15 @@ python3 ~/.agents/skills/team-knowledge/scripts/tw.py version --check-install
 
 新版本经发布后使用其标签；main 用于开发。安装检查只核对知识技能自身及客户端目录内的同名副本，报告文件缺失、修改、多余文件与版本差异。多端共用同一份技能时，不需要分别维护运行时。
 
+Claude Code 从 `CLAUDE_CONFIG_DIR`（默认 `~/.claude`）下的 `skills/` 加载全局技能，skills CLI 只链接到安装当次该变量指向的目录。使用自定义 `CLAUDE_CONFIG_DIR` 的（如多个账号各用一个配置目录），把 `~/.agents/skills/team-knowledge` 链进 `$CLAUDE_CONFIG_DIR/skills`。链接指向同一份技能，升级后自动生效：
+
+```bash
+mkdir -p <配置目录>/skills
+ln -s ~/.agents/skills/team-knowledge <配置目录>/skills/team-knowledge
+```
+
+在设置了 `CLAUDE_CONFIG_DIR` 的环境中，`version --check-install` 另外核对该目录；缺少技能或链接失效时报告安装问题。
+
 也可使用客户端已有的插件安装工具，来源为本仓、版本固定到发行标签。根目录 `plugin.json` 与 `.claude-plugin/plugin.json` 的名称、版本和描述一致；插件名仍为 `team-workflow`。选择一种安装方式，避免客户端同时加载两份同名技能。
 
 本地候选版可从发行 ZIP 解压 `skills/team-knowledge/` 到隔离技能目录，再用其中的 `scripts/tw.py version --check-install --home <临时用户目录>` 检查。修改源码后运行 `python3 scripts/package.py --manifest` 更新清单。
