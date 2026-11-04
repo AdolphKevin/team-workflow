@@ -7,7 +7,7 @@ description: 项目知识入口。开始需求、修复、重构或评审前，�
 
 项目知识的读写与使用的开发流程无关。
 
-知识放在仓库的 `.tw/`：`overview.md`、`glossary.md`、`rules/`、`decisions/`、`lessons/`，与代码一起评审；`.tw/local/` 是被 Git 忽略的本机目录。命令都是 `python3 <本技能目录>/scripts/tw.py <命令>`，下文简写为 `tw`。
+知识放在仓库的 `.tw/`：`overview.md`、`glossary.md`、`rules/`、`decisions/`、`lessons/`，与代码一起评审；`.tw/local/` 是被 Git 忽略的本机目录。命令写作 `tw <命令>`：PATH 上有 `tw` 启动器时直接运行，否则为 `python3 <本技能目录>/scripts/tw.py <命令>`。交给子代理时，把 `tw version` 输出的 `command` 写进交接。
 
 ## 开工前
 
@@ -17,14 +17,21 @@ description: 项目知识入口。开始需求、修复、重构或评审前，�
 
 ## 完成后
 
-可复用的结论按种类写：
+按结论的种类决定去向：
 
-- 修复了根因不明显的缺陷：写 lesson，在 `guards` 引用能发现它的测试。
-- 做了难以逆转、缺少背景会让人意外、确有取舍的选择：写或改写 decision。决定改变时，旧做法连同放弃原因移入“放弃过的做法”。
-- 改变了必须保持的行为或契约：新增或改写 rule。
-- 项目已登记原文（`config.json` 的 `documents`）时，直接改原文，条目引用它。
+| 结论 | 去向 |
+| --- | --- |
+| 修复了根因不明显的缺陷 | lesson，`guards` 引用能发现它的测试 |
+| 难以逆转、缺少背景会让人意外、确有取舍的选择，含用户确认的产品决定 | decision；决定改变时，旧做法连同放弃原因移入“放弃过的做法” |
+| 改变了必须保持的行为或契约 | rule |
+| 验证环境的操作事实：入口、账号类别、验证码与密钥的取得位置 | 产品仓库的真实验证手册 |
+| 个人偏好与协作习惯 | 代理或个人记忆 |
+| 一次性结果、测试计数、工具版本、行号、任务过程 | PR 或提交说明 |
+| 草稿、日志、截图、原始输出 | `.tw/local/<任务>/` |
 
-一次性结果、测试计数、工具版本、行号和任务过程写进 PR 或提交说明。没有可复用结论时说明理由即可。新条目可用 `tw new rule|decision|lesson --slug --title --scope --source` 生成骨架，核对过当前代码后加 `--verified-at-head`。最后运行 `tw check` 并修复全部错误，知识与代码放在同一个 PR。
+结论写在它所约束的代码所在的仓库；项目已登记原文（`config.json` 的 `documents`）时直接改原文，条目引用它。该仓库还没有 `.tw/` 时，先写进 PR 说明，并向用户提出初始化或迁移。
+
+收尾时通读 `.tw/local/<任务>/` 和本次写入记忆的内容，其中的项目结论按上表移入仓库。没有可复用结论时说明理由即可。新条目可用 `tw new rule|decision|lesson --slug --title --scope --source` 生成骨架，核对过当前代码后加 `--verified-at-head`；改写已有条目时，核对后把 `verified` 更新为当前提交与日期。最后运行 `tw check` 并修复全部错误，知识与代码放在同一个 PR。
 
 写法与正反例见[写作规范](references/writing.md)。
 
@@ -33,4 +40,4 @@ description: 项目知识入口。开始需求、修复、重构或评审前，�
 - 首次使用：`tw init` 预览，`tw init --apply --guidance` 写入，再填写 `overview.md`。概览来源取可重复的 `--source`，其次取 `README.md`；预览列出所需来源，补齐后写入。
 - 项目里还有 `.codestable/` 或 `.team-workflow*`：由你按[迁移指南](references/migration.md)逐条整理。
 - 用户要求找回历史教训：按[找回历史教训](references/lessons-from-history.md)。
-- 健康报告：`tw audit`。brief、read、check、audit 只读。
+- 清理本机材料或查看知识健康：`tw audit` 按目录列出 `.tw/local/` 的大小与最后修改时间。brief、read、check、audit 只读。

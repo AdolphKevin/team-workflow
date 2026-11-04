@@ -4,8 +4,10 @@ from dataclasses import dataclass, field
 import json
 from pathlib import Path
 import re
+import shlex
 
 from . import Invalid, KB, cache, entries, gitutil, globs, repo_paths, textmatch
+from .project import knowledge_state
 
 KNOWLEDGE = ('rule', 'decision', 'lesson')
 EXPLICIT, SCOPE, TEXT, RELATED = range(4)
@@ -21,7 +23,8 @@ class Pick:
     reasons: list = field(default_factory=list)
 
     def key(self):
-        return (self.tier, -self.specificity, -len(self.reasons), self.entry.label)
+        signals = sum(not reason.startswith(('由 ', '与 ')) for reason in self.reasons)
+        return (self.tier, -self.specificity, -signals, self.entry.label)
 
 
 def relative_paths(root, paths):
@@ -33,6 +36,79 @@ def relative_paths(root, paths):
             raise Invalid(f'路径必须是仓库内的相对路径：{value}')
         result.append(path)
     return result
+
+
+def query_paths(root, paths, task):
+    local, outside = [], []
+    for value in paths or ():
+        absolute, relative = repo_paths.query_location(value, root)
+        check_path = relative if relative is not None else str(absolute).lstrip('/')
+        if any(char in check_path for char in '*?[]{}') and globs.problem(check_path):
+            raise Invalid(f'路径应使用有效的通配符：{value}')
+        if relative is not None:
+            local.append(relative)
+            continue
+        state = knowledge_state(absolute)
+        command, within = None, None
+        if state['root']:
+            within = absolute.relative_to(state['root']).as_posix()
+            if str(value).endswith('/') and within != '.':
+                within += '/'
+            command = shlex.join(['tw', '--root', state['root'], 'brief', '--task', task, '--path', within])
+        outside.append({'given': str(value), 'path': str(absolute), **state, 'relative_path': within, 'command': command})
+    return local, outside
+
+
+def outside_lines(outside):
+    return [(f'- {item["given"]}：仓库 {item["root"]}，{item["description"]}。在该仓库读取：`{item["command"]}`\n'
+             if item['root'] else f'- {item["given"]}：不在 Git 仓库中。\n') for item in outside]
+
+
+def coverage_text(coverage):
+    direct, indirect = coverage['direct'], coverage['indirect']
+    if direct:
+        if not indirect:
+            return f'直接命中 {direct} 条。\n\n'
+        return f'直接命中 {direct} 条；另有 {indirect} 条按任务词组或关联选出。\n\n'
+    if not indirect:
+        return '本仓知识中没有与任务相关的条目。\n\n'
+    if coverage['has_paths']:
+        return f'本仓知识没有条目覆盖所给路径；以下 {indirect} 条只按任务词组或关联选出，先核对是否与任务相关。\n\n'
+    return f'未提供 --path，以下 {indirect} 条只按任务词组或关联选出；查明要改的文件后带 --path 再读。\n\n'
+
+
+def validate_request(task, budget):
+    if not task or not task.strip():
+        raise Invalid('需要 --task 描述当前任务')
+    if budget < 1000:
+        raise Invalid('--budget 不能小于 1000 个字符')
+
+
+def uninitialized(state, task, paths, budget):
+    validate_request(task, budget)
+    local, outside = query_paths(state['root'], paths, task)
+    lines = ['本仓库尚未建立 `.tw/` 项目知识。\n\n']
+    if state['legacy']:
+        lines += ['开工前按任务词和要改的路径在旧知识目录中检索、阅读相关旧卡，把它们当作未核实的线索；'
+                  '整理迁移时按 team-knowledge 的迁移指南（references/migration.md）。\n\n']
+        lines += [f'- 旧知识目录 {item["path"]}：{item["tracked_files"]} 个受版本管理的文件\n'
+                  for item in state['legacy']]
+    else:
+        lines += ['需要记录项目知识时运行 `tw init`。\n']
+    if outside:
+        lines += ['\n## 其他仓库\n', *outside_lines(outside)]
+    notice = '（部分指引超出预算；加大 --budget 查看）\n'
+    text, omitted = '', False
+    for line in lines:
+        if len(text) + len(line) + len(notice) > budget:
+            omitted = True
+            break
+        text += line
+    if omitted:
+        text += notice
+    return {'task': task, 'paths': local, **state, 'entries': [],
+            'coverage': {'direct': 0, 'indirect': 0, 'has_paths': bool(paths)}, 'outside': outside,
+            'budget': budget, 'chars': len(text), 'markdown': text}
 
 
 def explicit_label(value):
@@ -214,6 +290,15 @@ def body_for(entry):
     return re.sub(r'^(#{2,5}) ', r'#\1 ', text, flags=re.M)
 
 
+def reason_summary(reasons):
+    independent = [reason for reason in reasons if not reason.startswith(('由 ', '与 '))]
+    related = [reason for reason in reasons if reason.startswith(('由 ', '与 '))]
+    if len(related) > 1:
+        label = related[0].split(' ', 2)[1]
+        related = [f'关联 {len(related)} 条（{label} 等）']
+    return '；'.join(independent + related)
+
+
 def source_summary(entry):
     sources = entry.values('source')
     if not sources:
@@ -260,18 +345,19 @@ def overview_within(overview, limit):
 
 
 def build(project, task, paths=(), symbols=(), refs=(), tags=(), budget=6000, index_only=False):
-    if not task or not task.strip():
-        raise Invalid('需要 --task 描述当前任务')
-    if budget < 1000:
-        raise Invalid('--budget 不能小于 1000 个字符')
-    paths = relative_paths(project.root, paths)
+    validate_request(task, budget)
+    has_paths = bool(paths)
+    paths, outside = query_paths(project.root, paths, task)
     picks, terms, abandoned_hits, missing = select(project, task, paths, symbols, refs, tags)
+    direct = sum(p.tier <= SCOPE for p in picks)
+    coverage = {'direct': direct, 'indirect': len(picks) - direct, 'has_paths': has_paths}
+    coverage_notice = coverage_text(coverage)
     shared = project.shared()
     commits = gitutil.recent_commits(project.root, paths)
     path_notice = '范围为整个仓库，未按路径筛选\n\n' if '.' in paths else ''
     # Counted per kind: entries, abandoned reminders, commits, then shared/missing lines.
     hidden = [0, 0, 0, 0]
-    units = ('个条目', '条曾放弃的方向', '条相关提交', '行共享仓或未找到的条目')
+    units = ('个条目', '条曾放弃的方向', '条相关提交', '行仓库或未找到的条目')
     hint = '加大 --budget 或用 --entry 查看' if index_only else '用相同的 --task、--path 加 --index 查看'
 
     def footer(counts):
@@ -279,11 +365,13 @@ def build(project, task, paths=(), symbols=(), refs=(), tags=(), budget=6000, in
         return f'（未列出：{"、".join(parts)}。{hint}）\n' if parts else ''
 
     # Reserve the longest footer the counts could produce.
-    left = budget - len(path_notice) - len(footer([len(picks), len(abandoned_hits), len(commits), len(missing) + len(shared)]))
+    left = (budget - len(path_notice) - len(coverage_notice)
+            - len(footer([len(picks), len(abandoned_hits), len(commits), len(missing) + len(shared) + len(outside)])))
     reserved = {}
     for title, lines in [
         ('未找到的条目', [f'- {label}\n' for label in missing]),
         ('共享仓', [f'- {alias}：{repo.describe()}\n' for alias, repo in sorted(shared.items())]),
+        ('其他仓库', outside_lines(outside)),
     ]:
         # Space is reserved first; the sections still print in their usual place.
         # Even pathological metadata must leave room for the task heading.
@@ -320,6 +408,7 @@ def build(project, task, paths=(), symbols=(), refs=(), tags=(), budget=6000, in
         status = drift(pick, memo, dirty)['text']
         block = (f'## {pick.entry.title}{"（已拒绝）" if pick.entry.fields.get("status") == "rejected" else ""}\n'
                  f'{body_for(pick.entry)}\n'
+                 f'选中：{reason_summary(pick.reasons)}\n'
                  f'来源：{source_summary(pick.entry)} · {status}\n→ {pick.entry.label}\n\n')
         if not overflow and len(block) <= content_left:
             left -= len(block)
@@ -348,12 +437,13 @@ def build(project, task, paths=(), symbols=(), refs=(), tags=(), budget=6000, in
     if len(commit_nav) > left:
         hidden[2] = len(commits)
         commit_nav = ''
-    markdown = (heading + path_notice + intro + glossary + ''.join(block for _, _, block in rendered) + reminder_nav + index_nav
-                + reserved['共享仓'] + commit_nav + reserved['未找到的条目']
+    markdown = (heading + coverage_notice + path_notice + intro + glossary + ''.join(block for _, _, block in rendered) + reminder_nav + index_nav
+                + reserved['共享仓'] + reserved['其他仓库'] + commit_nav + reserved['未找到的条目']
                 + footer(hidden)).rstrip('\n') + '\n'
     selected = [(p, status) for p, status, _ in rendered] + indexed
     return {
         'task': task.strip(), 'paths': paths, 'chars': len(markdown), 'budget': budget,
+        'coverage': coverage, 'outside': outside,
         'entries': [{'label': p.entry.label, 'title': p.entry.title, 'kind': p.entry.kind, 'tier': p.tier,
                      'reasons': p.reasons, 'rendered': p.entry.label in full, 'listed': p.entry.label in listed, 'status': status}
                     for p, status in selected],

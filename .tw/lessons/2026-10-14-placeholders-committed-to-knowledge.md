@@ -2,7 +2,7 @@
 title: "必填字段过多，占位符和机械填写被提交进知识库"
 scope: ["self:skills/team-knowledge/scripts/tw_runtime/entries.py"]
 source: ["self:docs/proposals/2026-10-14-unified-redesign.md"]
-verified: {"self": {"commit": "b0247ca6a68c818c565dbe60fe6c07e18c61ab52", "date": "2026-10-14"}}
+verified: {"self": {"commit": "7cd1894ce0ffdde383d31cc7225a52710f72db8b", "date": "2026-11-04"}}
 tags: ["占位符", "形式填充", "必填字段"]
 ---
 # 必填字段过多，占位符和机械填写被提交进知识库
@@ -11,7 +11,7 @@ tags: ["占位符", "形式填充", "必填字段"]
 
 根因：每张卡强制填写至少两个未来场景和四元组证据，写作者为了通过校验而填写，而不是为了读者。
 
-修复与防护：必填字段只保留 title、scope、source、verified（决策另有 status）；`tw check` 把占位内容当作错误；一次性结果、行号锚点、工具版本给出警告。
+修复与防护：三种条目共有的必填字段为 title、scope、source；rule、lesson 另需 verified，decision 另需 status；`tw check` 把占位内容当作错误；一次性结果、行号锚点、工具版本给出警告。
 
 发现方法：`tw check` 报“残留占位内容”；评审时看结构化字段是否只是重复正文。
 

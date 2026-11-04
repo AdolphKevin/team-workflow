@@ -7,7 +7,7 @@
 metadata:
   requirement: "team-workflow 只发行 team-knowledge：知识命令独立可用，团队流程、场景验收与 MATT 副本移除，已有项目可升级"
   batch: "tw-knowledge-only"
-  version: 2
+  version: 3
   owner: "AdolphKevin"
   sources:
     - ref: "docs/proposals/2026-10-22-knowledge-only.md 第 3–6 节"
@@ -15,6 +15,9 @@ metadata:
       confirmed_by: "AdolphKevin"
     - ref: "安装检查另外核对 CLAUDE_CONFIG_DIR 指向的 Claude Code 技能目录，该目录缺少技能时提示；默认目录照常核对，未设置时行为不变（SOP-03-P02、N02、P03）"
       version: "用户确认（2026-10-30）"
+      confirmed_by: "AdolphKevin"
+    - ref: "docs/proposals/2026-11-04-field-feedback.md 第 2、4、6 节"
+      version: "用户确认（2026-11-04）"
       confirmed_by: "AdolphKevin"
   tags: ["tw", "知识库", "升级"]
 
@@ -102,7 +105,7 @@ sops:
         verify: cli
         initial_state: ["实现分支指定提交的干净检出"]
         steps: ["python3 scripts/check_release.py", "python3 scripts/package.py --output <仓库外>/tw.zip", "列出 ZIP 内容", "把 ZIP 中的技能安装到临时技能目录，运行 tw version --check-install"]
-        expected: ["前两步退出码 0", "ZIP 的技能目录只有 team-knowledge", "version --check-install 通过，只核对 team-knowledge", "插件元数据、VERSION 与运行时版本一致为 1.0.1"]
+        expected: ["前两步退出码 0", "ZIP 的技能目录只有 team-knowledge", "version --check-install 通过，只核对 team-knowledge", "插件元数据、VERSION 与运行时版本一致为 1.1.0"]
         forbidden_effects: ["ZIP 中出现 team-workflow、playwright-acceptance、matt-*、upstream/"]
         evidence_hints: ["命令输出与 ZIP 清单"]
       - id: SOP-03-N01
@@ -267,3 +270,258 @@ sops:
         expected: [".tw 下的 rules、decisions、lessons、overview 与 config.json 保持原样"]
         forbidden_effects: ["任何步骤删除或改写 .tw 知识条目"]
         evidence_hints: ["前后摘要对比"]
+
+  - id: SOP-08
+    title: 选中依据与覆盖说明
+    actor: 项目成员
+    entry: 候选版 tw 命令行
+    scenarios:
+      - id: SOP-08-P01
+        polarity: positive
+        title: 直接命中与任务词组选中分别说明
+        actor: 项目成员
+        priority: P1
+        verify: cli
+        initial_state: ["临时项目有 src/pay/ 规则（标签“退款”）和 src/user/ 教训（标签“验收”）"]
+        steps: ["tw brief --task \"修改退款金额校验并更新验收\" --path src/pay/refund.py"]
+        expected: ["规则正文写明“选中：路径…”", "教训标明只按词组“验收”选中", "第一行写直接命中 1 条、另有 1 条按词组或关联选出"]
+        forbidden_effects: ["只读命令修改项目知识或本机材料"]
+        evidence_hints: ["命令、退出码与完整输出；操作前后文件清单和摘要"]
+      - id: SOP-08-N01
+        polarity: negative
+        negative_type: other
+        title: 所给路径没有知识覆盖
+        actor: 项目成员
+        priority: P1
+        verify: cli
+        initial_state: ["同一项目，没有条目覆盖 web/"]
+        steps: ["tw brief --task \"调整页面布局并更新验收脚本\" --path web/layout.tsx"]
+        expected: ["第一行写明本仓知识没有条目覆盖所给路径，列出的条目只按词组或关联选出", "退出码 0"]
+        forbidden_effects: ["只读命令修改项目知识或本机材料"]
+        evidence_hints: ["命令、退出码与完整输出；操作前后文件清单和摘要"]
+      - id: SOP-08-N02
+        polarity: negative
+        negative_type: other
+        title: 未提供路径时给出再读指引
+        actor: 项目成员
+        priority: P1
+        verify: cli
+        initial_state: ["同一项目"]
+        steps: ["同一任务不带 --path"]
+        expected: ["第一行写明未提供 --path，提示带路径再读"]
+        forbidden_effects: ["只读命令修改项目知识或本机材料"]
+        evidence_hints: ["命令、退出码与完整输出；操作前后文件清单和摘要"]
+      - id: SOP-08-P02
+        polarity: positive
+        title: 其他仓库的状态与命令
+        actor: 项目成员
+        priority: P1
+        verify: cli
+        initial_state: ["三个同级临时仓库 A（当前，已建立 .tw/）、B（已建立）、C（未建立，有已跟踪的 .codestable/），另有一个不在 Git 中的目录 D"]
+        steps: ["在 A 中给出 A 内路径、../B/...、C 内绝对路径、D 内路径"]
+        expected: ["退出码 0", "A 内路径照常选择", "B、C、D 各报告所在仓库与状态，B、C 给出可直接运行的命令", "B 的条目内容未出现在输出中"]
+        forbidden_effects: ["只读命令修改项目知识或本机材料"]
+        evidence_hints: ["命令、退出码与完整输出；操作前后文件清单和摘要"]
+      - id: SOP-08-P03
+        polarity: positive
+        title: 本机真实输入的覆盖说明与其他仓库状态
+        actor: 项目成员
+        priority: P1
+        verify: cli
+        initial_state: ["本机真实输入，只运行只读命令，前后核对 git status 不变"]
+        steps: ["在 TW-1 的核心服务仓重跑原查询，并加上指向前端仓的路径"]
+        expected: ["第一行写明只按词组或关联选出", "前端仓报告为尚未建立 .tw/、有旧知识目录，并给出命令"]
+        forbidden_effects: ["只读命令修改项目知识或本机材料"]
+        evidence_hints: ["命令、退出码与完整输出；操作前后文件清单和摘要"]
+
+  - id: SOP-09
+    title: 尚未建立 .tw/ 的仓库
+    actor: 项目成员
+    entry: 候选版 tw 命令行
+    scenarios:
+      - id: SOP-09-P01
+        polarity: positive
+        title: 旧知识目录的开工指引
+        actor: 项目成员
+        priority: P1
+        verify: cli
+        initial_state: ["临时仓库有已跟踪的 .codestable/（3 张卡片）、没有 .tw/"]
+        steps: ["tw brief --task \"修改校验\" --path src/x.ts"]
+        expected: ["退出码 0", "写明尚未建立 .tw/、旧知识目录位置与文件数、开工前检索阅读相关旧卡并视为未核实线索、迁移指南", "输出中没有旧卡正文"]
+        forbidden_effects: ["只读命令修改项目知识或本机材料"]
+        evidence_hints: ["命令、退出码与完整输出；操作前后文件清单和摘要"]
+      - id: SOP-09-P02
+        polarity: positive
+        title: 没有旧目录时提示初始化
+        actor: 项目成员
+        priority: P1
+        verify: cli
+        initial_state: ["既没有 .tw/ 也没有旧目录"]
+        steps: ["tw brief --task \"修改校验\" --path src/x.ts"]
+        expected: ["退出码 0，写明尚未建立并提示 tw init"]
+        forbidden_effects: ["只读命令修改项目知识或本机材料"]
+        evidence_hints: ["命令、退出码与完整输出；操作前后文件清单和摘要"]
+      - id: SOP-09-P03
+        polarity: positive
+        title: 本机真实输入的旧知识指引
+        actor: 项目成员
+        priority: P1
+        verify: cli
+        initial_state: ["本机真实输入，只运行只读命令，前后核对 git status 不变"]
+        steps: ["在 TW-2 的前端仓重跑原查询"]
+        expected: ["退出码 0，输出同 P01"]
+        forbidden_effects: ["只读命令修改项目知识或本机材料"]
+        evidence_hints: ["命令、退出码与完整输出；操作前后文件清单和摘要"]
+
+  - id: SOP-10
+    title: 核实基线
+    actor: 项目成员
+    entry: 候选版 tw 命令行
+    scenarios:
+      - id: SOP-10-P01
+        polarity: positive
+        title: 已提交正文修改沿用基线时警告
+        actor: 项目成员
+        priority: P1
+        verify: cli
+        initial_state: ["规则的 verified 为提交 X；之后一个提交只改正文"]
+        steps: ["tw check"]
+        expected: ["对该条目给出警告，写明修改提交、原基线、当前 HEAD 完整提交与今天日期的填写方式", "无其他错误时退出码 0"]
+        forbidden_effects: ["只读命令修改项目知识或本机材料"]
+        evidence_hints: ["命令、退出码与完整输出；操作前后文件清单和摘要"]
+      - id: SOP-10-P02
+        polarity: positive
+        title: 核对并更新基线后警告消失
+        actor: 项目成员
+        priority: P1
+        verify: cli
+        initial_state: ["SOP-10-P01 的项目"]
+        steps: ["按警告把 verified 改为当前 HEAD 与今天，与另一处正文修改一起提交", "tw check"]
+        expected: ["警告消失"]
+        forbidden_effects: ["只读命令修改项目知识或本机材料"]
+        evidence_hints: ["命令、退出码与完整输出；操作前后文件清单和摘要"]
+      - id: SOP-10-P03
+        polarity: positive
+        title: 工作区与暂存区分别核对
+        actor: 项目成员
+        priority: P1
+        verify: cli
+        initial_state: ["正文有未提交修改、verified 未改"]
+        steps: ["tw check", "把 verified 一并改掉后 tw check", "对暂存区运行 tw check --cached，分别核对沿用与更新 verified 的情况"]
+        expected: ["给出警告；把 verified 一并改掉后警告消失", "--cached 对暂存区给出相同结果"]
+        forbidden_effects: ["只读命令修改项目知识或本机材料"]
+        evidence_hints: ["命令、退出码与完整输出；操作前后文件清单和摘要"]
+      - id: SOP-10-N01
+        polarity: negative
+        negative_type: other
+        title: 只修改作用范围内代码时保持核实基线
+        actor: 项目成员
+        priority: P1
+        verify: cli
+        initial_state: ["临时 Git 项目"]
+        steps: ["tw new rule --verified-at-head 新建条目并提交", "之后一个提交只改 scope 内代码", "tw check"]
+        expected: ["没有这条警告"]
+        forbidden_effects: ["只读命令修改项目知识或本机材料"]
+        evidence_hints: ["命令、退出码与完整输出；操作前后文件清单和摘要"]
+      - id: SOP-10-N02
+        polarity: negative
+        negative_type: other
+        title: 只有日期或没有基线的条目照常检查
+        actor: 项目成员
+        priority: P1
+        verify: cli
+        initial_state: ["verified 只有日期的规则、没有 verified 的决策"]
+        steps: ["修改并提交", "tw check"]
+        expected: ["没有这条警告"]
+        forbidden_effects: ["只读命令修改项目知识或本机材料"]
+        evidence_hints: ["命令、退出码与完整输出；操作前后文件清单和摘要"]
+
+  - id: SOP-11
+    title: 排序打平
+    actor: 项目成员
+    entry: 候选版 tw 命令行
+    scenarios:
+      - id: SOP-11-P01
+        polarity: positive
+        title: 独立信号数优先于关联边数量
+        actor: 项目成员
+        priority: P1
+        verify: cli
+        initial_state: ["临时项目有决策 D 与 8 条规则，作用范围都是 pkg/，每条规则关联 D 和另一条规则；教训 L 作用范围 pkg/、标签与任务词组相同、没有关联；标题足够长，使 --budget 1000 只能列出部分条目"]
+        steps: ["tw brief --task \"<该词组>\" --path pkg --format json", "--budget 取只能列出部分条目的值时再次运行"]
+        expected: ["L 排在 D 与 8 条规则之前", "L 出现在正文或索引中"]
+        forbidden_effects: ["只读命令修改项目知识或本机材料"]
+        evidence_hints: ["命令、退出码与完整输出；操作前后文件清单和摘要"]
+      - id: SOP-11-P02
+        polarity: positive
+        title: 本机真实输入的失败快照回放
+        actor: 项目成员
+        priority: P1
+        verify: cli
+        initial_state: ["本机真实输入，在失败当时的项目快照上回放；真实仓库只运行只读命令，前后核对 git status 不变"]
+        steps: ["在临时快照上回放三条记录的查询"]
+        expected: ["该教训三次都出现在正文或索引中"]
+        forbidden_effects: ["只读命令修改项目知识或本机材料"]
+        evidence_hints: ["命令、退出码与完整输出；操作前后文件清单和摘要"]
+
+  - id: SOP-12
+    title: 本机材料汇总
+    actor: 项目成员
+    entry: 候选版 tw 命令行
+    scenarios:
+      - id: SOP-12-P01
+        polarity: positive
+        title: 目录汇总、时间与大文件列表
+        actor: 项目成员
+        priority: P1
+        verify: cli
+        initial_state: [".tw/local/ 下有查询缓存、repositories.json、含 2 个超过 20 MiB 文件的 material-a/、最后修改设为 60 天前的 material-b/、另外 12 个小目录"]
+        steps: ["tw audit --top 5", "tw audit --top 5 --format json", "核对所有本机材料"]
+        expected: ["按大小降序列出 5 个顶层项，各带大小、文件数、最后修改日期", "写明其余项数与总大小", "material-b/ 标出 30 天以上未修改", "缓存与映射标为工具管理", "大文件每行一个", "JSON 含全部顶层项", "所有本机材料保持原样"]
+        forbidden_effects: ["只读命令修改项目知识或本机材料"]
+        evidence_hints: ["命令、退出码与完整输出；操作前后文件清单和摘要"]
+
+  - id: SOP-13
+    title: 结论去向
+    actor: 项目成员
+    entry: 候选版 team-knowledge 技能会话
+    scenarios:
+      - id: SOP-13-P01
+        polarity: positive
+        title: 技能试用中结论进入各自位置
+        actor: 项目成员
+        priority: P1
+        verify: agent
+        initial_state: ["独立会话在只装候选版 team-knowledge 的临时项目中完成一个任务", "项目已建立 .tw/，documents 登记了验证手册，.tw/local/<任务>/decisions.md 有一条用户已确认的产品决定草稿", "任务说明中给出一条验证环境操作事实，任务过程产生调试日志"]
+        steps: ["在独立会话中完成任务并收尾"]
+        expected: ["产品决定写为 .tw/ 中的 decision", "操作事实写入验证手册", "日志留在 .tw/local/", "tw check 0 错误"]
+        forbidden_effects: ["项目结论只留在本机材料或个人记忆中"]
+        evidence_hints: ["独立会话的原始需求、实际命令、文件改动与输出"]
+      - id: SOP-13-P02
+        polarity: positive
+        title: 看板快照处理方式由用户选择
+        actor: 项目成员
+        priority: P1
+        verify: cli
+        initial_state: ["候选版成员说明"]
+        steps: ["阅读成员说明"]
+        expected: ["成员说明写明看板快照与 .tw/ 的关系及两种处理方式，由用户选择"]
+        forbidden_effects: ["替用户决定看板快照处理方式"]
+        evidence_hints: ["命令、退出码与完整输出；操作前后文件清单和摘要"]
+
+  - id: SOP-14
+    title: 启动器
+    actor: 项目成员
+    entry: 候选版 tw 命令行
+    scenarios:
+      - id: SOP-14-P01
+        polarity: positive
+        title: 临时用户目录中的启动器可复制运行
+        actor: 项目成员
+        priority: P1
+        verify: cli
+        initial_state: ["临时用户目录按安装说明安装候选版并创建启动器，PATH 只加入该 bin"]
+        steps: ["在任意临时项目中 tw version、tw brief", "复制运行 tw version 的 command"]
+        expected: ["tw version、tw brief 正常", "tw version 的 command 复制运行得到相同版本"]
+        forbidden_effects: ["只读命令修改项目知识或本机材料"]
+        evidence_hints: ["命令、退出码与完整输出；操作前后文件清单和摘要"]

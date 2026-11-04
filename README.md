@@ -13,7 +13,7 @@
 
 ## 安装与开始
 
-按[安装与升级](docs/install.md)选择固定发行版本，只安装知识技能。下文用 `tw` 代表 `python3 <team-knowledge 技能目录>/scripts/tw.py`。
+按[安装与升级](docs/install.md)选择固定发行版本，只安装知识技能并建立 PATH 上的 `tw` 启动器。下文的 `tw` 为该启动器，或 `python3 <team-knowledge 技能目录>/scripts/tw.py`；`tw version` 的 `command` 给出可复制运行的完整命令。
 
 ```bash
 tw init                         # 预览；缺少 README 时用 --source self:文档路径

@@ -2,10 +2,11 @@
 import argparse
 import json
 from pathlib import Path
+import shlex
 import sys
 
 from . import Invalid, audit, brief, cache, check, init, install, new, read
-from .project import Project
+from .project import Project, knowledge_state
 
 
 def parser():
@@ -111,14 +112,20 @@ def main(argv=None):
                 result = install.check_install(args.home)
                 emit(result)
                 return 0 if result['ok'] and result['installed_ok'] else 1
-            emit({'version': install.VERSION, 'skill': str(install.SKILL)})
+            emit({'version': install.VERSION, 'skill': str(install.SKILL),
+                  'command': shlex.join(['python3', str(install.SKILL / 'scripts/tw.py')])})
             return 0
+        if args.command == 'brief':
+            state = knowledge_state(root)
+            if state['status'] in ('legacy', 'uninitialized'):
+                result = brief.uninitialized(state, args.task, args.path, args.budget)
+                emit(result, result['markdown'], 'json' if args.format == 'json' else 'text')
+                return 0
         repositories = args.repository + getattr(args, 'sub_repository', [])
         project = Project(root, repositories, cached=getattr(args, 'cached', False),
                           require_config=args.command not in ('check',))
         if args.command == 'brief':
-            paths = brief.relative_paths(root, args.path)
-            result = brief.build(project, args.task, paths, args.symbol, args.entry, args.tag, args.budget, args.index)
+            result = brief.build(project, args.task, args.path, args.symbol, args.entry, args.tag, args.budget, args.index)
             emit(result, result['markdown'], 'json' if args.format == 'json' else 'text')
             return 0
         if args.command == 'read':

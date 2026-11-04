@@ -1,5 +1,6 @@
 """Read-only health report. Separates structure, evidence availability and undecided business truth."""
 from collections import Counter
+from datetime import date, datetime
 import os
 from pathlib import Path
 import urllib.error
@@ -12,6 +13,7 @@ LOCAL_MANAGED = {Path(cache.DIRECTORY).name, 'repositories.json'}
 
 
 def run(project, links=False, top=10):
+    top = max(0, top)
     structure = check.run(project)
     loaded = project.entries()
     knowledge = [e for e in loaded if e.kind in check.KNOWLEDGE]
@@ -43,7 +45,7 @@ def run(project, links=False, top=10):
         'change_hotspots': hotspots[:top], 'without_baseline': unverified,
         'similar_titles': similar, 'near_size_limit': near_limit,
         'shared': {alias: repo.describe() for alias, repo in sorted(project.shared().items())},
-        'local': local_usage(project.root),
+        'local': local_usage(project.root), 'top': top,
         'business_truth': '未判定：结构检查与提交变化只说明需要复核的位置，结论是否成立由评审和真实入口验证决定',
     }
     if links:
@@ -53,33 +55,36 @@ def run(project, links=False, top=10):
 
 def local_usage(root):
     base = Path(root) / KB / 'local'
-    files, size, big, unmanaged = 0, 0, [], []
+    items, big = [], []
     if base.is_dir():
-        for directory, _, names in os.walk(base):
-            for name in names:
-                path = Path(directory) / name
+        for path in base.iterdir():
+            size, count, modified = 0, 0, path.lstat().st_mtime
+            material = [path]
+            if path.is_dir() and not path.is_symlink():
+                material = []
+                for directory, dirs, names in os.walk(path):
+                    modified = max(modified, Path(directory).lstat().st_mtime)
+                    material.extend(Path(directory) / name for name in names)
+                    material.extend(Path(directory) / name for name in dirs if (Path(directory) / name).is_symlink())
+            for file in material:
                 try:
-                    length = path.stat().st_size
+                    stat = file.lstat()
                 except OSError:
                     continue
-                files += 1
-                size += length
-                if length > BIG_FILE:
-                    big.append(path.relative_to(root).as_posix())
-        for path in sorted(base.iterdir()):
-            if path.name not in LOCAL_MANAGED:
-                try:
-                    unmanaged.append({'path': path.relative_to(root).as_posix(), 'bytes': material_size(path)})
-                except OSError:
-                    continue
-    return {'files': files, 'bytes': size, 'over_20MiB': sorted(big), 'unmanaged': unmanaged}
-
-
-def material_size(path):
-    if path.is_symlink() or path.is_file():
-        return path.lstat().st_size
-    return sum((Path(directory) / name).lstat().st_size
-               for directory, _, names in os.walk(path) for name in names)
+                size += stat.st_size
+                count += 1
+                modified = max(modified, stat.st_mtime)
+                if stat.st_size > BIG_FILE:
+                    big.append({'path': file.relative_to(root).as_posix(), 'bytes': stat.st_size})
+            last = datetime.fromtimestamp(modified).date()
+            age = (date.today() - last).days
+            items.append({'path': path.relative_to(root).as_posix(), 'bytes': size, 'files': count,
+                          'modified': last.isoformat(), 'age_days': age, 'stale': age > 30,
+                          'managed': path.name in LOCAL_MANAGED})
+    items.sort(key=lambda x: (-x['bytes'], x['path']))
+    big.sort(key=lambda x: (-x['bytes'], x['path']))
+    return {'files': sum(x['files'] for x in items), 'bytes': sum(x['bytes'] for x in items),
+            'items': items, 'large_files': big}
 
 
 def check_links(project):
@@ -120,11 +125,28 @@ def render(report):
     if report['shared']:
         lines += ['## 共享仓', *[f'- {k}：{v}' for k, v in report['shared'].items()], '']
     local = report['local']
-    lines += [f'本地目录 {KB}/local：{local["files"]} 个文件，{local["bytes"] / 1048576:.1f} MiB' +
-              (f'；超过 20MiB 的原件：{"、".join(local["over_20MiB"])}' if local['over_20MiB'] else ''), '']
-    if local['unmanaged']:
-        lines += ['## 不归工具管理的本机材料',
-                  *[f'- {x["path"]}：{x["bytes"]} 字节（{x["bytes"] / 1048576:.1f} MiB）' for x in local['unmanaged']], '']
+    top = report['top']
+    lines += ['## 本机材料', f'本地目录 {KB}/local：{local["files"]} 个文件，{local["bytes"] / 1048576:.1f} MiB', '']
+    for item in local['items'][:top]:
+        flags = ('；工具管理' if item['managed'] else '') + ('；30 天以上未修改' if item['stale'] else '')
+        lines.append(f'- {item["path"]}：{item["bytes"] / 1048576:.1f} MiB，{item["files"]} 个文件，'
+                     f'最后修改 {item["modified"]}，距今 {item["age_days"]} 天{flags}')
+    remainder = local['items'][top:]
+    if remainder:
+        lines.append(f'另有 {len(remainder)} 项，共 {sum(x["bytes"] for x in remainder) / 1048576:.1f} MiB')
+        stale = [x for x in remainder if x['stale']]
+        if stale:
+            lines += ['30 天以上未修改（其余项）：', *[f'- {x["path"]}：最后修改 {x["modified"]}，距今 {x["age_days"]} 天' for x in stale[:top]]]
+            if len(stale) > top:
+                lines.append(f'另有 {len(stale) - top} 项 30 天以上未修改')
+        managed = [x['path'] for x in remainder if x['managed']]
+        if managed:
+            lines.append('工具管理：' + '、'.join(managed))
+    big = local['large_files']
+    if big:
+        lines += ['', f'超过 20 MiB 的文件共 {len(big)} 个：',
+                  *[f'- {x["path"]}：{x["bytes"] / 1048576:.1f} MiB' for x in big[:top]]]
+    lines.append('')
     if 'links' in report:
         lines += ['## 外部链接', *[f'- {x["url"]}：{x["result"]}' for x in report['links']], '']
     lines.append(report['business_truth'])

@@ -13,6 +13,23 @@ class RelativePath(str):
         return result
 
 
+def query_location(value, root):
+    """Parent segments and absolute queries refer to cwd; other queries refer to root."""
+    raw = os.fspath(value)
+    if not isinstance(raw, str) or '\\' in raw or '\0' in raw:
+        raise Invalid(f'路径应使用正斜杠且包含有效字符：{raw!r}')
+    if Path(raw).is_absolute() or '..' in raw.split('/'):
+        path = Path(raw).resolve()
+        try:
+            relative = path.relative_to(Path(root).resolve()).as_posix()
+        except ValueError:
+            return path, None
+        hint = getattr(value, 'directory', False) or raw.endswith('/') or path.is_dir()
+        return path, normalize(RelativePath(relative, hint), root=root)
+    relative = normalize(value, root=root)
+    return Path(root) / relative, relative
+
+
 def normalize(value, *, root=None, scope=False):
     """Normalize a literal path; only queries supplying root accept in-repo absolutes.
 

@@ -12,7 +12,7 @@
 <!-- team-workflow:guidance:knowledge start -->
 ## 项目知识
 
-开工前读取 `.tw/` 中与任务相关的现行约束、决策和踩过的坑：
-`python3 <team-knowledge 技能目录>/scripts/tw.py brief --task "<任务>" --path <相关路径>`。
-完成后按 team-knowledge 技能的规则更新知识（与代码同一个 PR），并运行 `tw.py check`。
+开工前按 team-knowledge 技能读取 `.tw/` 中与任务相关的现行约束、决策和踩过的坑：
+`tw brief --task "<任务>" --path <相关路径>`。`tw` 是 PATH 上的启动器；找不到 `tw` 时改用 `python3 <team-knowledge 技能目录>/scripts/tw.py`。
+完成后按 team-knowledge 技能的规则更新知识（与代码同一个 PR），并运行 `tw check`。
 <!-- team-workflow:guidance:knowledge end -->

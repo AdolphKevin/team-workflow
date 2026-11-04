@@ -34,6 +34,29 @@ def head(root):
     return run(root, 'rev-parse', '--verify', '-q', 'HEAD^{commit}', check=False).stdout.strip() or None
 
 
+def read_objects(root, specs):
+    """Read many Git objects in one process; missing objects map to None."""
+    specs = list(dict.fromkeys(specs))
+    if not specs:
+        return {}
+    result = subprocess.run(command(root, 'cat-file', '--batch'),
+                            input=('\n'.join(specs) + '\n').encode(), capture_output=True)
+    if result.returncode:
+        raise Invalid('git cat-file 失败：' + result.stderr.decode('utf-8', 'replace').strip())
+    objects, offset = {}, 0
+    for spec in specs:
+        end = result.stdout.index(b'\n', offset)
+        header = result.stdout[offset:end].split()
+        offset = end + 1
+        if header[-1] == b'missing':
+            objects[spec] = None
+            continue
+        size = int(header[-1])
+        objects[spec] = result.stdout[offset:offset + size].decode('utf-8', 'replace')
+        offset += size + 1
+    return objects
+
+
 def files(root):
     """Existing tracked files plus untracked files that are not ignored."""
     out = output(root, 'ls-files', '-z', '--cached', '--others', '--exclude-standard')

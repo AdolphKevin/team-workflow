@@ -2,7 +2,7 @@
 title: "回放把隐藏条目算成已列出"
 scope: ["self:skills/team-knowledge/scripts/tw_runtime/brief.py", "self:scripts/replay_brief.py"]
 source: ["self:docs/archive/validation-0.x.md", "self:docs/proposals/2026-10-14-unified-redesign.md"]
-verified: {"self": {"commit": "1dd6080c171ffe505b252956217b33f7ea7489f7", "date": "2026-10-15"}}
+verified: {"self": {"commit": "7cd1894ce0ffdde383d31cc7225a52710f72db8b", "date": "2026-11-04"}}
 tags: ["brief", "预算", "导航", "回放", "可见"]
 ---
 # 回放把隐藏条目算成已列出

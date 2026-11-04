@@ -14,6 +14,21 @@ python3 ~/.agents/skills/team-knowledge/scripts/tw.py version --check-install
 
 新版本经发布后使用其标签；main 用于开发。安装检查只核对知识技能自身及客户端目录内的同名副本，报告文件缺失、修改、多余文件与版本差异。多端共用同一份技能时，不需要分别维护运行时。
 
+安装后在 PATH 上建立 `tw` 启动器，所有客户端与配置目录共用 skills CLI 安装的这一份技能，升级后自动生效：
+
+```bash
+mkdir -p ~/.local/bin
+cat > ~/.local/bin/tw <<'SH'
+#!/bin/sh
+exec python3 "$HOME/.agents/skills/team-knowledge/scripts/tw.py" "$@"
+SH
+chmod +x ~/.local/bin/tw
+export PATH="$HOME/.local/bin:$PATH"
+tw version
+```
+
+把 PATH 设置加入所用 shell 的启动文件即可供后续终端使用。`tw version` 的 `command` 是可复制运行的完整命令；交给子代理时把它写进交接。
+
 Claude Code 从 `CLAUDE_CONFIG_DIR`（默认 `~/.claude`）下的 `skills/` 加载全局技能，skills CLI 只链接到安装当次该变量指向的目录。使用自定义 `CLAUDE_CONFIG_DIR` 的（如多个账号各用一个配置目录），把 `~/.agents/skills/team-knowledge` 链进 `$CLAUDE_CONFIG_DIR/skills`。链接指向同一份技能，升级后自动生效：
 
 ```bash
@@ -29,7 +44,7 @@ ln -s ~/.agents/skills/team-knowledge <配置目录>/skills/team-knowledge
 
 ## 项目初始化
 
-下文的 `tw` 表示 `python3 <team-knowledge 技能目录>/scripts/tw.py`。
+下文的 `tw` 为 PATH 上的启动器，或 `python3 <team-knowledge 技能目录>/scripts/tw.py`。
 
 ```bash
 tw init                         # 预览；缺 README 时用 --source self:文档路径
