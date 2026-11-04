@@ -2,7 +2,7 @@
 title: "迁移代理没有数据库环境，核实规则挡掉了大部分行为知识"
 scope: ["self:skills/team-knowledge/references/migration.md"]
 source: ["self:docs/archive/validation-0.x.md", "self:skills/team-knowledge/references/migration.md"]
-verified: {"self": {"commit": "9cb446629417d81a3a99f2ac492573cac502573d", "date": "2026-10-15"}}
+verified: {"self": {"commit": "7cd1894ce0ffdde383d31cc7225a52710f72db8b", "date": "2026-11-04"}}
 tags: ["迁移", "核实", "数据库", "沙箱", "守护测试", "回放"]
 related: ["decisions/2026-10-14-migration-by-agent.md"]
 ---

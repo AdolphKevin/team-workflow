@@ -270,3 +270,20 @@ def parse_mapping(values):
 
 def legacy_paths(root):
     return [name for name in LEGACY if (Path(root) / name).exists()]
+
+
+def knowledge_state(path):
+    """Inspect knowledge layout without reading another repository's entries."""
+    directory = Path(path).resolve()
+    while not directory.is_dir() and directory != directory.parent:
+        directory = directory.parent
+    root = gitutil.toplevel(directory)
+    if root is None:
+        return {'root': None, 'status': 'outside-git', 'description': '不在 Git 仓库中', 'legacy': []}
+    legacy = [{'path': name, 'tracked_files': len(gitutil.tracked_under(root, name))}
+              for name in legacy_paths(root)]
+    initialized = (root / CONFIG).is_file()
+    status = 'initialized' if initialized else 'legacy' if legacy else 'uninitialized'
+    description = ('已建立 .tw/' if initialized else
+                   '尚未建立 .tw/，有旧知识目录' if legacy else '尚未建立 .tw/')
+    return {'root': str(root), 'status': status, 'description': description, 'legacy': legacy}

@@ -1,8 +1,8 @@
 ---
 title: "知识只描述现行设计，并保留放弃过的做法"
 scope: ["self:skills/team-knowledge/**"]
-source: ["self:docs/proposals/2026-10-14-unified-redesign.md"]
-verified: {"self": {"commit": "b0247ca6a68c818c565dbe60fe6c07e18c61ab52", "date": "2026-10-14"}}
+source: ["self:docs/proposals/2026-10-14-unified-redesign.md", "self:docs/proposals/2026-11-04-field-feedback.md"]
+verified: {"self": {"commit": "7cd1894ce0ffdde383d31cc7225a52710f72db8b", "date": "2026-11-04"}}
 status: "accepted"
 tags: ["知识模型", "放弃过的做法", "分类", "任务记录", "写入"]
 ---
@@ -29,3 +29,9 @@ tags: ["知识模型", "放弃过的做法", "分类", "任务记录", "写入"]
   重新考虑的条件：无
   来源：方案附录 A
   关键词：superseded、取代链、supersedes
+
+- 刷新核实基线的写入命令
+  放弃原因：自动刷新无法证明条目结论已经核对；用户确认只由 check 警告并给出可照填的当前提交与日期，核对后直接编辑 Markdown。
+  重新考虑的条件：有能核实业务结论的明确入口，且用户确认需要写入命令
+  来源：实际使用反馈方案第 2.3、6 节（2026-11-04）
+  关键词：刷新核实基线、verified、写入命令、自动刷新

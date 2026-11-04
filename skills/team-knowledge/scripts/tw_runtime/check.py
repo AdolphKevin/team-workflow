@@ -1,8 +1,10 @@
 """Structural checks of `.tw/`. Zero writes, no tests executed, no judgement of business truth."""
 from collections import defaultdict
+from datetime import date
+import json
 import re
 
-from . import KB, Invalid, entries, files, gitutil, globs, project as projects, textmatch
+from . import KB, Invalid, entries, files, frontmatter, gitutil, globs, project as projects, textmatch
 
 KNOWLEDGE = ('rule', 'decision', 'lesson')
 LOCAL_MANAGED = {'tasks', 'batches', 'imports', 'validation-active', 'agents', 'cache', 'repositories.json'}
@@ -56,6 +58,10 @@ def run(project, base=None):
     if gitutil.ignored(root, projects.CONFIG):
         error(KB + '/', '整个目录被忽略规则覆盖，入库知识会丢失；删除根 .gitignore 中的相应条目')
     loaded = project.entries()
+    baselines = [e.verified('self').get('commit') for e in loaded if e.verified('self')]
+    baselines = {value for value in baselines if isinstance(value, str) and entries.HEX40.match(value)}
+    objects = gitutil.read_objects(root, [f'{value}^{{commit}}' for value in sorted(baselines)])
+    known_bases = {value for value in baselines if objects.get(f'{value}^{{commit}}') is not None}
     for name in project.strays:
         error(name, '不是知识条目：知识只放在 overview.md、glossary.md、rules/、decisions/、lessons/')
     shared = project.shared()
@@ -113,10 +119,11 @@ def run(project, base=None):
                 if alias != 'self' and alias not in declared:
                     error(entry.path, f'verified 使用了未声明的仓库：{alias}')
                 elif alias == 'self' and isinstance(info, dict) and isinstance(info.get('commit'), str) and entries.HEX40.match(info['commit']):
-                    if gitutil.run(root, 'cat-file', '-e', f'{info["commit"]}^{{commit}}', check=False).returncode != 0:
+                    if info['commit'] not in known_bases:
                         warn(entry.path, '核实基线提交不在当前历史中（浅克隆或历史被改写），变化情况无法计算')
         if entry.kind == 'lesson' and not entry.values('guards'):
             warn(entry.path, '没有防护引用；用 guards 引用能发现该问题的测试或场景（仓库:文件#名称）；引用只表示可追溯，运行由 CI 证明')
+    verification_warnings(project, loaded, known_bases, warn)
     titles = defaultdict(list)
     for entry in loaded:
         if entry.kind in KNOWLEDGE and entry.title:
@@ -138,6 +145,74 @@ def run(project, base=None):
     if base:
         branch_hints(project, base, loaded, warn)
     return {'ok': not errors, 'entries': len(loaded), 'errors': errors, 'warnings': warnings}
+
+
+def verification_warnings(project, loaded, known_bases, warn):
+    """Compare entry edits and verification values using batched history and blobs."""
+    tracked = [entry for entry in loaded if entry.kind in KNOWLEDGE
+               and entry.verified('self') and isinstance(entry.verified('self').get('commit'), str)
+               and entry.verified('self')['commit'] in known_bases]
+    head = gitutil.head(project.root)
+    if not tracked or not head:
+        return
+    wanted = {entry.path for entry in tracked}
+    latest, current = {}, None
+    history = gitutil.output(project.root, 'log', '--format=%x1e%H%x09%cs%x09%P',
+                             '--name-only', '--diff-merges=first-parent', '--no-renames', '--', *sorted(wanted))
+    for line in history.split('\n'):
+        if line.startswith('\x1e'):
+            commit, day, parents = line[1:].split('\t')
+            current = (commit, day, parents.split()[0] if parents else None)
+        elif line in wanted and line not in latest:
+            latest[line] = current
+    graph = {}
+    for line in gitutil.output(project.root, 'rev-list', '--parents', head, *sorted(known_bases)).splitlines():
+        commit, *parents = line.split()
+        graph[commit] = parents
+    ancestors = {}
+
+    def at_or_before(commit, base):
+        if base not in ancestors:
+            found, pending = set(), [base]
+            while pending:
+                item = pending.pop()
+                if item not in found:
+                    found.add(item)
+                    pending.extend(graph.get(item, ()))
+            ancestors[base] = found
+        return commit in ancestors[base]
+
+    specs = [f'{head}:{entry.path}' for entry in tracked]
+    for entry in tracked:
+        if entry.path in latest:
+            commit, _, parent = latest[entry.path]
+            if parent and not at_or_before(commit, entry.verified('self')['commit']):
+                specs += [f'{commit}:{entry.path}', f'{parent}:{entry.path}']
+    blobs = gitutil.read_objects(project.root, specs)
+
+    def stale(before, after):
+        if before is None or after is None:
+            return False
+        a, body_a, errors_a = frontmatter.parse(before)
+        b, body_b, errors_b = frontmatter.parse(after)
+        verified_a, verified_b = a.pop('verified', None), b.pop('verified', None)
+        return not errors_a and not errors_b and verified_a == verified_b and (a, body_a) != (b, body_b)
+
+    template = json.dumps({'self': {'commit': head, 'date': date.today().isoformat()}}, ensure_ascii=False)
+    for entry in tracked:
+        base = entry.verified('self')['commit']
+        origin = latest.get(entry.path)
+        if origin:
+            commit, day, parent = origin
+            if parent and not at_or_before(commit, base) and stale(blobs.get(f'{parent}:{entry.path}'), blobs.get(f'{commit}:{entry.path}')):
+                warn(entry.path, f'条目在提交 {commit}（{day}）中修改并沿用 verified；原基线 {base}；核对后填写 verified: {template}')
+        try:
+            current_text = project.source.read(entry.path)
+        except (OSError, UnicodeError, Invalid):
+            continue
+        if stale(blobs.get(f'{head}:{entry.path}'), current_text):
+            area = '暂存区' if project.source.cached else '工作区'
+            warn(entry.path, f'{area}有未提交修改并沿用 verified；原基线 {base}；核对后填写 verified: {template}')
 
 
 def scope_target(name):

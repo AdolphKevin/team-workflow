@@ -1,8 +1,8 @@
 ---
 title: "已接入项目由代理按指南迁移，不提供迁移脚本，历史教训按需找回"
 scope: ["self:skills/team-knowledge/references/migration.md", "self:skills/team-knowledge/references/lessons-from-history.md"]
-source: ["self:docs/proposals/2026-10-14-unified-redesign.md"]
-verified: {"self": {"commit": "b0247ca6a68c818c565dbe60fe6c07e18c61ab52", "date": "2026-10-14"}}
+source: ["self:docs/proposals/2026-10-14-unified-redesign.md", "self:docs/proposals/2026-11-04-field-feedback.md"]
+verified: {"self": {"commit": "7cd1894ce0ffdde383d31cc7225a52710f72db8b", "date": "2026-11-04"}}
 status: "accepted"
 tags: ["迁移", "重建", "历史教训"]
 ---
@@ -16,3 +16,9 @@ tags: ["迁移", "重建", "历史教训"]
   重新考虑的条件：需要一次迁移数十个仓库且语义核实可以批量完成
   来源：方案修订记录 v3
   关键词：rebuild、迁移脚本、inventory、重建工具
+
+- brief 读取旧卡标题与路径并列出匹配项
+  放弃原因：用户确认运行时继续只读 .tw/；旧知识作为未核实线索，由代理按任务词与路径直接检索阅读，再按迁移指南整理。
+  重新考虑的条件：出现经用户确认、需要运行时解析旧格式的使用要求
+  来源：实际使用反馈方案第 2.2、6 节（2026-11-04）
+  关键词：旧卡标题、旧知识、brief 读取旧卡、未初始化
