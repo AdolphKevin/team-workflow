@@ -1,3 +1,8 @@
+# 1.2.1（2026-11-09）
+
+- 复盘指南把复盘范围写成 git 区间 `<上次终点>..<本次终点>`，起点本身不在范围内。
+- 写作规范：升级为 rule 时，项目还没有 `rules/` 先建目录；非 Git 项目的 `verified.commit` 写 `null`。
+
 # 1.2.0（2026-11-09）
 
 - 教训闭环（[方案](docs/proposals/2026-11-08-lesson-loop.md)）：rule、lesson 可加 `## 出现记录`，次数取不同日期数；brief 在标题与索引行显示“出现 N 次”，JSON 给出 `occurrences`；check 逐项核对日期与内容，教训满 3 个不同日期时警告升级为 rule；audit 列出反复出现的条目。

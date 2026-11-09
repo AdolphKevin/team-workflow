@@ -1,6 +1,6 @@
 """Project knowledge runtime. Python 3.10+, standard library only."""
 
-VERSION = '1.2.0'
+VERSION = '1.2.1'
 FORMAT = 'channelwill/team-workflow'
 DATA_VERSION = 1
 KB = '.tw'
