@@ -58,6 +58,8 @@ def run(project, base=None):
     if gitutil.ignored(root, projects.CONFIG):
         error(KB + '/', '整个目录被忽略规则覆盖，入库知识会丢失；删除根 .gitignore 中的相应条目')
     loaded = project.entries()
+    head = gitutil.head(root)
+    fill_in = baseline_template(head)
     baselines = [e.verified('self').get('commit') for e in loaded if e.verified('self')]
     baselines = {value for value in baselines if isinstance(value, str) and entries.HEX40.match(value)}
     objects = gitutil.read_objects(root, [f'{value}^{{commit}}' for value in sorted(baselines)])
@@ -121,12 +123,14 @@ def run(project, base=None):
                 elif alias == 'self' and isinstance(info, dict) and isinstance(info.get('commit'), str) and entries.HEX40.match(info['commit']):
                     if info['commit'] not in known_bases:
                         warn(entry.path, '核实基线提交不在当前历史中（浅克隆或历史被改写），变化情况无法计算')
+                elif alias == 'self' and head and isinstance(info, dict) and 'commit' in info and info['commit'] is None:
+                    warn(entry.path, f'仓库已有提交，verified.self.commit 写实际核对时的完整提交；核对后填写 verified: {fill_in}')
         if entry.kind == 'lesson' and not entry.values('guards'):
             warn(entry.path, '没有防护引用；用 guards 引用能发现该问题的测试或场景（仓库:文件#名称）；引用只表示可追溯，运行由 CI 证明')
         dates = entries.occurrence_dates(entry)
         if entry.kind == 'lesson' and len(dates) >= entries.PROMOTE_AT:
             warn(entry.path, f'出现记录有 {len(dates)} 个不同日期（{"、".join(dates)}），按写作规范升级为 rule')
-    verification_warnings(project, loaded, known_bases, warn)
+    verification_warnings(project, loaded, known_bases, head, fill_in, warn)
     titles = defaultdict(list)
     for entry in loaded:
         if entry.kind in KNOWLEDGE and entry.title:
@@ -150,12 +154,16 @@ def run(project, base=None):
     return {'ok': not errors, 'entries': len(loaded), 'errors': errors, 'warnings': warnings}
 
 
-def verification_warnings(project, loaded, known_bases, warn):
+def baseline_template(head):
+    """The verified value to fill in after checking an entry at the current HEAD today."""
+    return json.dumps({'self': {'commit': head, 'date': date.today().isoformat()}}, ensure_ascii=False)
+
+
+def verification_warnings(project, loaded, known_bases, head, template, warn):
     """Compare entry edits and verification values using batched history and blobs."""
     tracked = [entry for entry in loaded if entry.kind in KNOWLEDGE
                and entry.verified('self') and isinstance(entry.verified('self').get('commit'), str)
                and entry.verified('self')['commit'] in known_bases]
-    head = gitutil.head(project.root)
     if not tracked or not head:
         return
     wanted = {entry.path for entry in tracked}
@@ -201,7 +209,6 @@ def verification_warnings(project, loaded, known_bases, warn):
         verified_a, verified_b = a.pop('verified', None), b.pop('verified', None)
         return not errors_a and not errors_b and verified_a == verified_b and (a, body_a) != (b, body_b)
 
-    template = json.dumps({'self': {'commit': head, 'date': date.today().isoformat()}}, ensure_ascii=False)
     for entry in tracked:
         base = entry.verified('self')['commit']
         origin = latest.get(entry.path)

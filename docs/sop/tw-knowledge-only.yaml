@@ -7,7 +7,7 @@
 metadata:
   requirement: "team-workflow 只发行 team-knowledge：知识命令独立可用，团队流程、场景验收与 MATT 副本移除，已有项目可升级"
   batch: "tw-knowledge-only"
-  version: 5
+  version: 6
   owner: "AdolphKevin"
   sources:
     - ref: "docs/proposals/2026-10-22-knowledge-only.md 第 3–6 节"
@@ -24,6 +24,9 @@ metadata:
       confirmed_by: "AdolphKevin"
     - ref: "1.2.0 验收补充观察的三项改进：复盘范围写成 git 区间 <上次终点>..<本次终点>；升级时项目还没有 rules/ 先建目录；写作规范说明非 Git 项目的 verified.commit 写 null"
       version: "用户确认（2026-11-09）"
+      confirmed_by: "AdolphKevin"
+    - ref: "1.2.1 验收观察的三个问题一起处理：条目中的人写成角色与日期，不写个人姓名、账号或邮箱；verified 缺少或多出字段时写明是哪一项；仓库已有提交时 commit 写完整提交，null 只用于仓库还没有提交时（tw 只在 Git 仓库中运行）"
+      version: "用户确认（2026-11-09，“这 3 个问题一起处理了”）"
       confirmed_by: "AdolphKevin"
   tags: ["tw", "知识库", "升级"]
 
@@ -111,7 +114,7 @@ sops:
         verify: cli
         initial_state: ["实现分支指定提交的干净检出"]
         steps: ["python3 scripts/check_release.py", "python3 scripts/package.py --output <仓库外>/tw.zip", "列出 ZIP 内容", "把 ZIP 中的技能安装到临时技能目录，运行 tw version --check-install"]
-        expected: ["前两步退出码 0", "ZIP 的技能目录只有 team-knowledge", "version --check-install 通过，只核对 team-knowledge", "插件元数据、VERSION 与运行时版本一致为 1.2.1"]
+        expected: ["前两步退出码 0", "ZIP 的技能目录只有 team-knowledge", "version --check-install 通过，只核对 team-knowledge", "插件元数据、VERSION 与运行时版本一致为 1.2.2"]
         forbidden_effects: ["ZIP 中出现 team-workflow、playwright-acceptance、matt-*、upstream/"]
         evidence_hints: ["命令输出与 ZIP 清单"]
       - id: SOP-03-N01
@@ -174,8 +177,8 @@ sops:
         verify: agent
         initial_state: ["临时项目，已用候选版 tw init --apply --guidance 写入项目知识指引，.tw 中有一条作用于 src/pay/ 的规则", "新会话只加载上游 mattpocock/skills 与候选版 team-knowledge"]
         steps: ["在新会话中提出一个修改 src/pay/refund.py 的小需求，并说明完成后有一条值得长期记录的结论", "会话结束后查看其工具调用记录与 .tw 改动"]
-        expected: ["会话在改代码前运行了 tw brief，并在回复中引用了该规则", "完成后新增或更新了 .tw 条目并运行了 tw check，结果 0 错误"]
-        forbidden_effects: ["会话运行 tw team 命令或要求安装 team-workflow"]
+        expected: ["会话在改代码前运行了 tw brief，并在回复中引用了该规则", "完成后新增或更新了 .tw 条目并运行了 tw check，结果 0 错误", "新条目中的人写成角色与日期"]
+        forbidden_effects: ["会话运行 tw team 命令或要求安装 team-workflow", "知识中写入个人姓名、账号、邮箱或本机路径"]
         evidence_hints: ["会话记录中的命令", ".tw 改动 diff"]
       - id: SOP-04-N01
         polarity: negative
@@ -432,15 +435,27 @@ sops:
       - id: SOP-10-N02
         polarity: negative
         negative_type: other
-        title: 只有日期或没有基线的条目照常检查
+        title: 只有日期或没有基线的条目照常检查，仓库有提交后提示填写提交
         actor: 项目成员
         priority: P1
         verify: cli
-        initial_state: ["按候选版写作规范写成只有日期的 verified（commit 为 null）的规则、没有 verified 的决策"]
-        steps: ["阅读写作规范中 verified 一行", "修改并提交", "tw check"]
-        expected: ["写作规范写明非 Git 项目的 commit 写 null", "check 没有这条警告，也没有 verified 格式错误"]
+        initial_state: ["还没有任何提交的 Git 仓库，已初始化知识，按候选版写作规范写成只有日期的 verified（commit 为 null）的规则，以及没有 verified 的决策"]
+        steps: ["阅读写作规范中 verified 一行", "tw check", "提交；修改两者正文后再提交", "tw check"]
+        expected: ["写作规范写明仓库还没有提交时 commit 写 null", "第一次 check 0 错误，没有关于 verified 的警告", "第二次 check 没有“修改并沿用 verified”的警告", "第二次 check 对该规则给出仓库已有提交的警告，写明可照填的当前 HEAD 完整提交与今天日期；决策没有警告"]
         forbidden_effects: ["只读命令修改项目知识或本机材料"]
         evidence_hints: ["命令、退出码与完整输出；操作前后文件清单和摘要"]
+      - id: SOP-10-N03
+        polarity: negative
+        negative_type: invalid-input
+        title: verified 缺少或多出字段时写明是哪一项
+        actor: 项目成员
+        priority: P2
+        verify: cli
+        initial_state: ["已有提交的 Git 仓库中三条规则：verified 只有 date、只有 commit、多出一个字段"]
+        steps: ["tw check"]
+        expected: ["check 以非 0 退出，三条规则各报一条错误，分别写明缺少 commit（并说明完整提交与 null 的用法）、缺少 date、多出的字段名"]
+        forbidden_effects: ["只说只能包含 commit 和 date 而不指出是哪一项"]
+        evidence_hints: ["命令、退出码与完整输出"]
 
   - id: SOP-11
     title: 排序打平

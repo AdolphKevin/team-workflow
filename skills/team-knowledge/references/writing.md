@@ -9,7 +9,7 @@
 | `title` | 必填 |
 | `scope` | rule、decision、lesson 必填，如 `["self:internal/orders/**"]`；`*` 不跨目录，`**` 跨目录 |
 | `source` | 必填：Issue、PR、提交链接或 `仓库:原文路径` |
-| `verified` | rule、lesson 必填：`{"self": {"commit": "<实际核对时的完整提交>", "date": "YYYY-MM-DD"}}`；改写条目时核对当前代码，同时更新为当前提交与实际核对日期；非 Git 项目的 commit 写 `null` |
+| `verified` | rule、lesson 必填：`{"self": {"commit": "<实际核对时的完整提交>", "date": "YYYY-MM-DD"}}`；改写条目时核对当前代码，同时更新为当前提交与实际核对日期；仓库还没有提交时 commit 写 `null` |
 | `status` | decision 必填：`accepted` 或 `rejected` |
 | `guards` | rule、lesson 可选：能发现该问题的测试，写成 `仓库:文件#测试名`，如 `self:tests/test_refund.py#test_refund_limit` |
 | `tags`、`symbols`、`related`、`owner` | 可选。`tags` 写任务描述里会出现的业务词，brief 靠它匹配中文 |
@@ -77,6 +77,7 @@ rule、lesson 再次出现时加一节，每次一项，第一项写最初那次
 - “修改了 3 个文件并修复测试。” 任务过程，写进提交说明。
 - “见 service.go:120。” 行号会失效，写符号名。
 - “CodeStable 2.1.0 已升级。” 工具版本，写进提交说明。
+- “由张三转达的口径”：人写成角色与日期，如“财务确认（2026-11-08）”。
 - 照抄标题或结论来填字段、留下 `（待填写）`：`tw check` 会报错。
 
 ## 待核实的结论

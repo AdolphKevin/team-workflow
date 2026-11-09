@@ -1,19 +1,19 @@
 {
   "algorithm": "sha256",
   "files": {
-    "SKILL.md": "b09b9de34ea3b1bfade6bed8299d234a6b0d16eb78bfd7633de75c7a39b2bfb3",
+    "SKILL.md": "bcfc0da316cfd204c3af74b65c3458d0df0d5fa1ff3a2792197b4a8b10ef9ed1",
     "agents/openai.yaml": "d660ec45c2b67e9aeb482b06764b44c03503913ad2756ffbac8b0d68a7992121",
     "references/lessons-from-history.md": "68e753a1b876497499b1406cbde6aa6d1afc5573db821fc03778664d7858d883",
     "references/migration.md": "b4b015fa11621353f464aac02806539dc78ec86dc2417647809b9b778a02d3e5",
-    "references/writing.md": "b312e4128a55c233cb5d894feb01c981567f8d24bc1f97e6a6b971b707f4ffca",
+    "references/writing.md": "90788ddb0d1225bd050186268c8e439904ca1f9399761c566bcb3b9bdc01571d",
     "scripts/tw.py": "4e5aeff6ce3aec67fc8f78c82040b583fa8af732aa6da75e4ef76c869a15e61b",
-    "scripts/tw_runtime/__init__.py": "3b18f9fe93a05980460096b9b0f7c4bfcf32a3ebce31c7d49709e25551494d81",
+    "scripts/tw_runtime/__init__.py": "63475d31a85c21b3213d65c923602118d72baab4cd0f82d0d8c84cf2bedd4fa6",
     "scripts/tw_runtime/audit.py": "a85c2a1cbcfc63c7bb5a5c8142f8d894b51cd0e364098c69724256be2275c057",
     "scripts/tw_runtime/brief.py": "eb730e2778544ac742f511cc5e6297d3dcf1e3c75e12456c6a6ea62309280cfe",
     "scripts/tw_runtime/cache.py": "9039beef54f908fd6cd2a60f070d118b109c19a7b8f4817d25fc817151295f9f",
-    "scripts/tw_runtime/check.py": "505fed2209e036081cb9e7a5071a9885d134e26d30ae0d46724af97456a712d9",
+    "scripts/tw_runtime/check.py": "6100dea789fe231e667af64062c74d6354b0ff155470c84b2d180b2701367586",
     "scripts/tw_runtime/cli.py": "bcf08d16f846bae9ba41b8880094784b7a51c6d96606471cdcf8506fa4a389a9",
-    "scripts/tw_runtime/entries.py": "e30fa478ea2f841bc5b6c6b7813b7716fd0fd7060e2e41250eb4cfea4184ebca",
+    "scripts/tw_runtime/entries.py": "658b8b55b1bc9463475686164df52b401ddd986df76beec4e748e5bbe5d53337",
     "scripts/tw_runtime/files.py": "36dd3b7bf6641617f4d7f60d5f314ef5999c35aec1ba67057e02d476b72096f5",
     "scripts/tw_runtime/frontmatter.py": "5885b6dbf1287f25c599a2c1b450ad1b9c2db904f43a2be012710c3d4ac2e2a2",
     "scripts/tw_runtime/gitutil.py": "7ab7c2d3cfe305dfde31066a307db2f606d5686594b6fe28ec8ff303730e54b2",
@@ -28,5 +28,5 @@
   },
   "schema_version": 1,
   "skill": "team-knowledge",
-  "version": "1.2.1"
+  "version": "1.2.2"
 }

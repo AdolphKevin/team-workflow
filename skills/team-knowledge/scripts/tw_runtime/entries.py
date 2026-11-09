@@ -200,13 +200,19 @@ def verified_problems(value):
         return ['verified 应为 {"仓库": {"commit": 完整提交哈希, "date": "YYYY-MM-DD"}}']
     problems = []
     for repo, item in value.items():
-        if not isinstance(item, dict) or set(item) != {'commit', 'date'}:
-            problems.append(f'verified.{repo} 只能包含 commit 和 date')
+        if not isinstance(item, dict):
+            problems.append(f'verified.{repo} 应为 {{"commit": 完整提交哈希, "date": "YYYY-MM-DD"}}')
             continue
-        commit = item['commit']
-        if commit is not None and not (isinstance(commit, str) and HEX40.match(commit)):
-            problems.append(f'verified.{repo}.commit 应为 40 位提交哈希；非 git 项目写 null')
-        if not valid_date(item['date']):
+        extra = sorted(set(item) - {'commit', 'date'})
+        if extra:
+            problems.append(f'verified.{repo} 只包含 commit 和 date，多出：{"、".join(extra)}')
+        if 'commit' not in item:
+            problems.append(f'verified.{repo} 缺少 commit：写实际核对时的完整提交，仓库还没有提交时写 null')
+        elif item['commit'] is not None and not (isinstance(item['commit'], str) and HEX40.match(item['commit'])):
+            problems.append(f'verified.{repo}.commit 应为 40 位提交哈希，仓库还没有提交时写 null')
+        if 'date' not in item:
+            problems.append(f'verified.{repo} 缺少 date：写实际核对日期 YYYY-MM-DD')
+        elif not valid_date(item['date']):
             problems.append(f'verified.{repo}.date 应为 YYYY-MM-DD')
     return problems
 
