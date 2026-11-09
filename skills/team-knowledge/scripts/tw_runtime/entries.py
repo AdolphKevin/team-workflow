@@ -30,6 +30,10 @@ HEX40 = re.compile(r'^[0-9a-f]{40}$')
 GUARD = re.compile(r'^(?:check:[A-Za-z0-9._-]+|[A-Za-z0-9._-]+:[^#\s][^#]*#\S.*)$')
 PLACEHOLDER = re.compile(r'__[A-Z][A-Z0-9_]*__|[（(]待填写[^）)]*[）)]|待补充|(?<![A-Za-z0-9_])(?:TODO|TBD)(?![A-Za-z0-9_])')
 ABANDONED = '放弃过的做法'
+OCCURRENCES = '出现记录'
+RECURRING = ('rule', 'lesson')
+PROMOTE_AT = 3
+OCCURRENCE = re.compile(r'^(\d{4}-\d{2}-\d{2})(?!\d)(.*)$', re.S)
 WARNINGS = (
     (re.compile(r'本次[^。\n]{0,40}(?:通过|失败)'), '像是一次性的运行结果'),
     (re.compile(r'\d+\s*(?:项|个|条)?\s*(?:测试|用例|tests?)?[^。\n\d]{0,6}(?:全部)?(?:通过|passed|failed)'), '像是测试计数'),
@@ -126,9 +130,9 @@ def sections(body):
     return result
 
 
-def abandoned(body):
-    """Items of the `## 放弃过的做法` section; each item is a top-level `- ` bullet with indented continuation."""
-    text = sections(body).get(ABANDONED)
+def section_items(body, name):
+    """Items of a `## <name>` section; each item is a top-level `- ` bullet with indented continuation."""
+    text = sections(body).get(name)
     if text is None:
         return None
     items, current = [], None
@@ -141,6 +145,42 @@ def abandoned(body):
         elif line.strip():
             current = None
     return ['\n'.join(item) for item in items]
+
+
+def abandoned(body):
+    return section_items(body, ABANDONED)
+
+
+def occurrences(body):
+    """`## 出现记录` items as (date, problem); an item counts when it has a date and no problem. None when absent.
+
+    Each item is `- YYYY-MM-DD：证据与后果`, dated no later than today.
+    """
+    items = section_items(body, OCCURRENCES)
+    if items is None:
+        return None
+    today = date.today().isoformat()
+    parsed = []
+    for item in items:
+        match = OCCURRENCE.match(item)
+        if not match:
+            parsed.append((None, '应以日期 YYYY-MM-DD 开头'))
+        elif not valid_date(match.group(1)):
+            parsed.append((None, f'的日期不合法：{match.group(1)}'))
+        elif match.group(1) > today:
+            parsed.append((None, f'的日期晚于今天：{match.group(1)}'))
+        elif not match.group(2).strip(' \t\n：:，,；;-—'):
+            parsed.append((None, '在日期后写证据与后果'))
+        else:
+            parsed.append((match.group(1), None))
+    return parsed
+
+
+def occurrence_dates(entry):
+    """Distinct dates of a rule's or lesson's counted occurrences, oldest first; one per day."""
+    if entry.kind not in RECURRING:
+        return []
+    return sorted({day for day, problem in occurrences(entry.body) or [] if not problem})
 
 
 def label_value(item, name):
@@ -215,6 +255,8 @@ def validate(entry):
         errors.append(f'正文 {size} 字符，超过上限 {limit}')
     if entry.kind in ('rule', 'decision', 'lesson'):
         errors.extend(abandoned_problems(entry.body))
+    if entry.kind in RECURRING:
+        errors.extend(occurrence_problems(entry.body))
     for pattern, reason in WARNINGS:
         hit = pattern.search(entry.body)
         if hit:
@@ -243,6 +285,15 @@ def abandoned_problems(body):
         return [f'“{ABANDONED}”一节应以 `- ` 列出每项做法']
     return [f'“{ABANDONED}”第 {index} 项缺少{name}'
             for index, item in enumerate(items, 1) for name in ('放弃原因', '来源', '关键词') if not label_value(item, name)]
+
+
+def occurrence_problems(body):
+    parsed = occurrences(body)
+    if parsed is None:
+        return []
+    if not parsed:
+        return [f'“{OCCURRENCES}”一节应以 `- YYYY-MM-DD：证据与后果` 列出每次出现']
+    return [f'“{OCCURRENCES}”第 {index} 项{problem}' for index, (_, problem) in enumerate(parsed, 1) if problem]
 
 
 TERM = re.compile(r'^\*\*(.+?)\*\*\s*[:：]?\s*(.*)$')

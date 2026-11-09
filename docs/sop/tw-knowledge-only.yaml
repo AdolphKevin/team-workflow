@@ -7,7 +7,7 @@
 metadata:
   requirement: "team-workflow 只发行 team-knowledge：知识命令独立可用，团队流程、场景验收与 MATT 副本移除，已有项目可升级"
   batch: "tw-knowledge-only"
-  version: 3
+  version: 4
   owner: "AdolphKevin"
   sources:
     - ref: "docs/proposals/2026-10-22-knowledge-only.md 第 3–6 节"
@@ -18,6 +18,9 @@ metadata:
       confirmed_by: "AdolphKevin"
     - ref: "docs/proposals/2026-11-04-field-feedback.md 第 2、4、6 节"
       version: "用户确认（2026-11-04）"
+      confirmed_by: "AdolphKevin"
+    - ref: "docs/proposals/2026-11-08-lesson-loop.md 第 3、6、7 节"
+      version: "用户确认（2026-11-08）"
       confirmed_by: "AdolphKevin"
   tags: ["tw", "知识库", "升级"]
 
@@ -105,7 +108,7 @@ sops:
         verify: cli
         initial_state: ["实现分支指定提交的干净检出"]
         steps: ["python3 scripts/check_release.py", "python3 scripts/package.py --output <仓库外>/tw.zip", "列出 ZIP 内容", "把 ZIP 中的技能安装到临时技能目录，运行 tw version --check-install"]
-        expected: ["前两步退出码 0", "ZIP 的技能目录只有 team-knowledge", "version --check-install 通过，只核对 team-knowledge", "插件元数据、VERSION 与运行时版本一致为 1.1.0"]
+        expected: ["前两步退出码 0", "ZIP 的技能目录只有 team-knowledge", "version --check-install 通过，只核对 team-knowledge", "插件元数据、VERSION 与运行时版本一致为 1.2.0"]
         forbidden_effects: ["ZIP 中出现 team-workflow、playwright-acceptance、matt-*、upstream/"]
         evidence_hints: ["命令输出与 ZIP 清单"]
       - id: SOP-03-N01
@@ -525,3 +528,106 @@ sops:
         expected: ["tw version、tw brief 正常", "tw version 的 command 复制运行得到相同版本"]
         forbidden_effects: ["只读命令修改项目知识或本机材料"]
         evidence_hints: ["命令、退出码与完整输出；操作前后文件清单和摘要"]
+
+  - id: SOP-15
+    title: 出现记录
+    actor: 项目成员
+    entry: 候选版 tw 命令行
+    scenarios:
+      - id: SOP-15-P01
+        polarity: positive
+        title: 教训的出现次数按不同日期计算并在读取时显示
+        actor: 项目成员
+        priority: P0
+        verify: cli
+        initial_state: ["临时 Git 项目，含 src/pay/refund.py，只安装候选版 team-knowledge", "一条作用范围为 src/pay/** 的教训，verified 为当前 HEAD；正文有“## 出现记录”三项，其中两项日期相同、共两个不同日期，每项日期后写有提交与后果；另有“## 做对的例子”一项", "另一条作用范围为 src/pay/** 的规则没有出现记录"]
+        steps: ["tw check", "tw brief --task 修改退款金额校验 --path src/pay/refund.py", "同一查询加 --index", "同一查询加 --format json", "tw audit 与 tw audit --format json"]
+        expected: ["check 0 错误", "brief 中该教训的标题后写“（出现 2 次）”，正文含做对的例子；规则的标题后没有次数", "--index 输出中该教训一行的选中依据后写“；出现 2 次”", "JSON 中该教训的 occurrences 为两个日期、从早到晚，规则的 occurrences 为空数组", "audit 的“反复出现”一节列出该教训、2 次及两个日期，没有“待升级”标记；JSON 的 recurring 含同样的日期"]
+        forbidden_effects: ["同一天的两项计为 2 次", "只读命令修改项目知识或本机材料"]
+        evidence_hints: ["命令、退出码与完整输出；操作前后文件清单和摘要"]
+      - id: SOP-15-N01
+        polarity: negative
+        negative_type: invalid-input
+        title: 出现记录格式不合规时报错并给出项号
+        actor: 项目成员
+        priority: P1
+        verify: cli
+        initial_state: ["同 SOP-15-P01 的项目", "该教训的出现记录另加四项：日期不存在（如 2026-02-30）、日期晚于今天、只有日期没有内容、开头没有日期；另一条规则的出现记录一节没有任何列表项"]
+        steps: ["tw check", "tw brief --task 修改退款金额校验 --path src/pay/refund.py --format json"]
+        expected: ["check 以非 0 退出，四个问题各报一条错误并写明第几项及原因，空的一节另报一条错误", "brief 与错误项并存时，次数只计合规的项（仍为 2 个日期）"]
+        forbidden_effects: ["不合规的项计入次数", "错误信息只说格式不对而不指出项号"]
+        evidence_hints: ["命令、退出码与完整输出"]
+      - id: SOP-15-P02
+        polarity: positive
+        title: 没有出现记录的项目读取结果与 1.1.0 相同
+        actor: 项目成员
+        priority: P1
+        verify: cli
+        initial_state: ["一个没有任何出现记录的已建立知识的临时项目，含规则、决策与教训", "1.1.0 运行时取自 main 分支 ca9d1f4 或标签 v1.1.0"]
+        steps: ["分别用 1.1.0 与候选版运行同一组 brief 查询：带 --path、带 --index、带 --budget 1500"]
+        expected: ["每组 markdown 输出逐字节相同", "候选版 JSON 中每个条目的 occurrences 为空数组"]
+        forbidden_effects: ["候选版为没有出现记录的条目显示次数"]
+        evidence_hints: ["两组输出与 cmp 结果"]
+
+  - id: SOP-16
+    title: 升级为规则
+    actor: 项目成员
+    entry: 候选版 tw 命令行与写作规范
+    scenarios:
+      - id: SOP-16-P01
+        polarity: positive
+        title: 教训满 3 个不同日期后按写作规范升级为规则
+        actor: 项目成员
+        priority: P0
+        verify: cli
+        initial_state: ["临时 Git 项目，一条教训的出现记录有 3 个不同日期，一条决策的 related 指向该教训，均已提交"]
+        steps: ["tw check", "tw audit", "按候选版写作规范“出现与升级”一节升级：移到 rules/<slug>.md，首段写必须保持的做法，## 依据 浓缩现象与根因，保留出现记录，核对后更新 verified", "改正决策 related 前运行 tw check", "改正 related 后运行 tw check、tw brief、tw audit"]
+        expected: ["第一次 check 对该教训给出警告，列出 3 个日期并写明按写作规范升级为 rule，退出码 0", "audit 的“反复出现”一节标出该教训待升级为 rule", "改正 related 前 check 报告决策的 related 指向不存在的条目", "改正后 check 0 错误、没有升级警告；brief 以规则展示该条目并在标题后写“（出现 3 次）”；audit 列出该规则且没有待升级标记"]
+        forbidden_effects: ["警告阻止 check 以 0 退出", "升级后条目丢失出现记录"]
+        evidence_hints: ["命令、退出码与完整输出；升级前后的文件 diff"]
+      - id: SOP-16-N01
+        polarity: negative
+        negative_type: boundary
+        title: 未满 3 个日期的教训与已是规则的条目不提示升级
+        actor: 项目成员
+        priority: P2
+        verify: cli
+        initial_state: ["一条教训的出现记录有 2 个不同日期，一条规则的出现记录有 4 个不同日期"]
+        steps: ["tw check", "tw audit"]
+        expected: ["check 对两者都没有升级警告", "audit 列出两者及次数，均没有待升级标记"]
+        forbidden_effects: ["规则被提示升级"]
+        evidence_hints: ["命令、退出码与完整输出"]
+
+  - id: SOP-17
+    title: 定期复盘
+    actor: 代理
+    entry: 只装候选版 team-knowledge 的新会话
+    scenarios:
+      - id: SOP-17-P01
+        polarity: positive
+        title: 代理按复盘指南把一周提交中的问题写成知识
+        actor: 代理
+        priority: P0
+        verify: agent
+        initial_state: ["临时 Git 项目，已用候选版 tw init --apply --guidance 建立知识", "最近一周的提交中有：同一 Issue 先后两次修复的返工；一次回滚；一个说明里没有写运行了什么的修复；一个照着已有教训做对的提交", "已有一条教训描述返工的失败机制，出现记录有 2 个更早的不同日期", "新会话只加载候选版 team-knowledge"]
+        steps: ["在新会话中提出“复盘最近一周的提交”", "会话结束后查看其工具调用记录、.tw 改动与给出的 PR 说明"]
+        expected: ["会话按复盘指南确定范围并逐个阅读提交", "为匹配的教训追加出现记录，引用实际提交，满 3 个不同日期后按写作规范升级为 rule", "把做对的提交写进对应条目的做对的例子", "为新的失败机制写出标题是一句要遵守的做法的教训", "tw check 0 错误", "PR 说明写明复盘范围（起止提交）、各发现及证据、新增与升级的条目"]
+        forbidden_effects: ["修改产品代码", "引用不存在的提交", "同一提交在出现记录中计入两次"]
+        evidence_hints: ["独立会话的原始需求、实际命令、文件改动与输出"]
+
+  - id: SOP-18
+    title: 评审时核对规则
+    actor: 代理
+    entry: 只装候选版 team-knowledge 的新会话
+    scenarios:
+      - id: SOP-18-P01
+        polarity: positive
+        title: 代理评审分支时以改动文件读取知识并指出违反的规则
+        actor: 代理
+        priority: P1
+        verify: agent
+        initial_state: ["临时 Git 项目，已用候选版 tw init --apply --guidance 写入指引块，.tw 有一条作用范围为 src/pay/** 的规则", "feature 分支对 src/pay/refund.py 的改动违反该规则", "新会话只加载候选版 team-knowledge"]
+        steps: ["在新会话中提出“评审 feature 分支相对 main 的改动”", "会话结束后查看其工具调用记录与评审意见"]
+        expected: ["会话以改动的文件作 --path 运行 tw brief", "评审意见指出违反的规则及原因"]
+        forbidden_effects: ["修改代码或知识", "评审意见没有提及该规则就给出通过"]
+        evidence_hints: ["独立会话的原始需求、实际命令与评审意见"]

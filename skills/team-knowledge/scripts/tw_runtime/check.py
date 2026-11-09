@@ -123,6 +123,9 @@ def run(project, base=None):
                         warn(entry.path, '核实基线提交不在当前历史中（浅克隆或历史被改写），变化情况无法计算')
         if entry.kind == 'lesson' and not entry.values('guards'):
             warn(entry.path, '没有防护引用；用 guards 引用能发现该问题的测试或场景（仓库:文件#名称）；引用只表示可追溯，运行由 CI 证明')
+        dates = entries.occurrence_dates(entry)
+        if entry.kind == 'lesson' and len(dates) >= entries.PROMOTE_AT:
+            warn(entry.path, f'出现记录有 {len(dates)} 个不同日期（{"、".join(dates)}），按写作规范升级为 rule')
     verification_warnings(project, loaded, known_bases, warn)
     titles = defaultdict(list)
     for entry in loaded:

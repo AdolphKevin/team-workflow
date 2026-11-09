@@ -1,12 +1,12 @@
 ---
-title: "另一个 Claude 配置目录的会话读不到知识技能"
+title: "安装检查同时核对 CLAUDE_CONFIG_DIR 指向的 Claude Code 技能目录"
 scope: ["self:skills/team-knowledge/scripts/tw_runtime/install.py", "self:docs/install.md"]
 source: ["self:skills/team-knowledge/scripts/tw_runtime/install.py", "self:docs/install.md", "用户 2026-10-30 报告：在自定义 CLAUDE_CONFIG_DIR 下运行的 Claude Code 会话，技能列表缺少 team-knowledge，全程未读取项目知识"]
-verified: {"self": {"commit": "26e9922cea1ff0c39cac61ebd4b90ae0c3467f15", "date": "2026-10-30"}}
+verified: {"self": {"commit": "ca9d1f43664dc227f0fea0bf55c9c6ccbbb5e418", "date": "2026-11-08"}}
 tags: ["CLAUDE_CONFIG_DIR", "安装检查", "技能目录", "多账号"]
 guards: ["self:docs/sop/tw-knowledge-only.yaml#SOP-03-P02", "self:docs/sop/tw-knowledge-only.yaml#SOP-03-N02", "self:docs/sop/tw-knowledge-only.yaml#SOP-03-P03"]
 ---
-# 另一个 Claude 配置目录的会话读不到知识技能
+# 安装检查同时核对 CLAUDE_CONFIG_DIR 指向的 Claude Code 技能目录
 
 现象：成员用另一个 `CLAUDE_CONFIG_DIR` 运行 Claude Code（如多个账号各用一个配置目录），会话的技能列表里没有 team-knowledge，整段开发没有执行 `tw brief`；同一台机器上的安装检查仍然通过。
 
