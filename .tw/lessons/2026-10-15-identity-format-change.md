@@ -1,12 +1,12 @@
 ---
-title: "改变仓库身份格式后，已迁移项目的配置失效而检查没有报"
+title: "调整仓库身份格式时，检查要核对已迁移项目的实际检出身份"
 scope: ["self:skills/team-knowledge/scripts/tw_runtime/project.py", "self:skills/team-knowledge/scripts/tw_runtime/check.py", "self:skills/team-knowledge/scripts/tw_runtime/gitutil.py"]
 source: ["self:docs/archive/validation-0.x.md", "self:docs/proposals/2026-10-22-knowledge-only.md"]
-verified: {"self": {"commit": "777be859050a5b2a69f02c87a8975aee38239cbf", "date": "2026-10-22"}}
+verified: {"self": {"commit": "ca9d1f43664dc227f0fea0bf55c9c6ccbbb5e418", "date": "2026-11-08"}}
 guards: ["self:docs/sop/tw-knowledge-only.yaml#SOP-01-P02", "self:docs/sop/tw-knowledge-only.yaml#SOP-02-P01"]
 tags: ["仓库身份", "迁移", "配置", "共享仓"]
 ---
-# 改变仓库身份格式后，已迁移项目的配置失效而检查没有报
+# 调整仓库身份格式时，检查要核对已迁移项目的实际检出身份
 
 现象：旧平台改造把仓库身份从 `所有者/仓库` 改为 `主机/路径`，已迁移项目仍保存旧值，直到解析依赖仓才失败。由历史独立验收发现，详见验证记录归档。
 

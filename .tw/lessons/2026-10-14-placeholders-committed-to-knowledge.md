@@ -1,11 +1,11 @@
 ---
-title: "必填字段过多，占位符和机械填写被提交进知识库"
+title: "知识格式只把读者需要的字段设为必填，占位内容按错误处理"
 scope: ["self:skills/team-knowledge/scripts/tw_runtime/entries.py"]
 source: ["self:docs/proposals/2026-10-14-unified-redesign.md"]
-verified: {"self": {"commit": "7cd1894ce0ffdde383d31cc7225a52710f72db8b", "date": "2026-11-04"}}
+verified: {"self": {"commit": "ca9d1f43664dc227f0fea0bf55c9c6ccbbb5e418", "date": "2026-11-08"}}
 tags: ["占位符", "形式填充", "必填字段"]
 ---
-# 必填字段过多，占位符和机械填写被提交进知识库
+# 知识格式只把读者需要的字段设为必填，占位内容按错误处理
 
 现象：已提交的决策卡里留着模板的替换标记（两个下划线包住 REPLACE）；future_use 的约束直接照抄标题，evidence.result 照抄结论，在 5 个服务仓中全部如此。卡片文件头共 53,263 字符，正文只有 3,221 字符。
 

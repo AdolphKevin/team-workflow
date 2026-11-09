@@ -37,10 +37,20 @@ def run(project, links=False, top=10):
     near_limit = [{'path': e.path, 'chars': len(e.body.strip()), 'limit': entries.LIMITS[e.kind]}
                   for e in loaded if e.kind in entries.LIMITS and len(e.body.strip()) > 0.8 * entries.LIMITS[e.kind]]
     abandoned = sum(len(entries.abandoned(e.body) or []) for e in knowledge)
+    recurring = []
+    for entry in knowledge:
+        dates = entries.occurrence_dates(entry)
+        if len(dates) > 1:
+            recurring.append({'path': entry.path, 'kind': entry.kind, 'dates': dates,
+                              'promote': entry.kind == 'lesson' and len(dates) >= entries.PROMOTE_AT})
+    recurring.sort(key=lambda x: x['path'])
+    recurring.sort(key=lambda x: x['dates'][-1], reverse=True)
+    recurring.sort(key=lambda x: len(x['dates']), reverse=True)
     report = {
         'structure': {'ok': structure['ok'], 'errors': len(structure['errors']), 'warnings': len(structure['warnings'])},
         'counts': dict(sorted(kinds.items())), 'abandoned_approaches': abandoned,
         'rejected_decisions': sum(1 for e in knowledge if e.fields.get('status') == 'rejected'),
+        'recurring': recurring,
         'lessons_without_guards': sorted(e.path for e in knowledge if e.kind == 'lesson' and not e.values('guards')),
         'change_hotspots': hotspots[:top], 'without_baseline': unverified,
         'similar_titles': similar, 'near_size_limit': near_limit,
@@ -112,6 +122,9 @@ def render(report):
              f'结构检查：{"通过" if report["structure"]["ok"] else "有错误"}（错误 {report["structure"]["errors"]}，警告 {report["structure"]["warnings"]}；详情运行 tw check）',
              '条目：' + '，'.join(f'{k} {v}' for k, v in report['counts'].items()) +
              f'；放弃过的做法 {report["abandoned_approaches"]} 项；已拒绝决策 {report["rejected_decisions"]} 条', '']
+    if report['recurring']:
+        lines += ['## 反复出现', *[f'- {x["path"]}：出现 {len(x["dates"])} 次（{"、".join(x["dates"])}）'
+                                   + ('，待升级为 rule' if x['promote'] else '') for x in report['recurring']], '']
     if report['change_hotspots']:
         lines += ['## 核实后相关代码变化最多', *[f'- {x["path"]}：{x["status"]}' for x in report['change_hotspots']], '']
     if report['without_baseline']:

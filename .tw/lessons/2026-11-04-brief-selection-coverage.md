@@ -1,12 +1,12 @@
 ---
-title: "只显示选中条目会掩盖任务路径的知识覆盖缺口"
+title: "brief 逐条写明选中依据，并说明任务路径的直接覆盖情况"
 scope: ["self:skills/team-knowledge/scripts/tw_runtime/brief.py"]
 source: ["self:docs/proposals/2026-11-04-field-feedback.md"]
-verified: {"self": {"commit": "7cd1894ce0ffdde383d31cc7225a52710f72db8b", "date": "2026-11-04"}}
+verified: {"self": {"commit": "ca9d1f43664dc227f0fea0bf55c9c6ccbbb5e418", "date": "2026-11-08"}}
 guards: ["self:docs/sop/tw-knowledge-only.yaml#SOP-08-P01", "self:docs/sop/tw-knowledge-only.yaml#SOP-08-N01", "self:docs/sop/tw-knowledge-only.yaml#SOP-08-N02", "self:docs/sop/tw-knowledge-only.yaml#SOP-08-P02", "self:docs/sop/tw-knowledge-only.yaml#SOP-08-P03"]
 tags: ["brief", "选中依据", "覆盖说明", "路径", "间接命中"]
 ---
-# 只显示选中条目会掩盖任务路径的知识覆盖缺口
+# brief 逐条写明选中依据，并说明任务路径的直接覆盖情况
 
 现象：某多仓项目的一次页面修改在核心服务仓读到三条无关知识：一条只因任务含“验收”而选中，两条由它关联带出；文本没有说明相关程度，指向另一仓库的路径又被拒绝。
 

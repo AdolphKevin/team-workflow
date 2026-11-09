@@ -14,5 +14,6 @@
 
 开工前按 team-knowledge 技能读取 `.tw/` 中与任务相关的现行约束、决策和踩过的坑：
 `tw brief --task "<任务>" --path <相关路径>`。`tw` 是 PATH 上的启动器；找不到 `tw` 时改用 `python3 <team-knowledge 技能目录>/scripts/tw.py`。
+评审改动时以改动的文件作 `--path` 读取，逐条核对其中的规则，评审意见写明不满足哪一条。
 完成后按 team-knowledge 技能的规则更新知识（与代码同一个 PR），并运行 `tw check`。
 <!-- team-workflow:guidance:knowledge end -->

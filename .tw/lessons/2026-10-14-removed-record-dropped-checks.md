@@ -1,12 +1,12 @@
 ---
-title: "删除旧记录时，它承担的核对被一起删掉"
+title: "删除记录、命令或模块前，列出它承担的每项核对并写明去向"
 scope: ["self:skills/team-knowledge/scripts/tw_runtime/check.py", "self:skills/team-knowledge/scripts/tw_runtime/project.py", "self:skills/team-knowledge/scripts/tw_runtime/install.py", "self:scripts/check_release.py"]
 source: ["self:docs/archive/validation-0.x.md", "self:docs/proposals/2026-10-22-knowledge-only.md"]
-verified: {"self": {"commit": "777be859050a5b2a69f02c87a8975aee38239cbf", "date": "2026-10-22"}}
+verified: {"self": {"commit": "ca9d1f43664dc227f0fea0bf55c9c6ccbbb5e418", "date": "2026-11-08"}}
 guards: ["self:docs/sop/tw-knowledge-only.yaml#SOP-01-N01", "self:docs/sop/tw-knowledge-only.yaml#SOP-02-P01", "self:docs/sop/tw-knowledge-only.yaml#SOP-03-P01"]
 tags: ["最终交付", "业务验收", "知识处置", "删除桥接", "删除断言"]
 ---
-# 删除旧记录时，它承担的核对被一起删掉
+# 删除记录、命令或模块前，列出它承担的每项核对并写明去向
 
 现象：旧团队流程删除知识完成记录时，同时丢失了验收记录与实际知识改动的核对，独立评审才发现；对应断言也曾随记录一起删除。历史原文保存在验证记录归档中。
 

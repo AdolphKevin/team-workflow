@@ -1,12 +1,12 @@
 ---
-title: "迁移代理没有数据库环境，核实规则挡掉了大部分行为知识"
+title: "迁移需要数据库核实的知识前，先备好能运行守护测试的环境"
 scope: ["self:skills/team-knowledge/references/migration.md"]
 source: ["self:docs/archive/validation-0.x.md", "self:skills/team-knowledge/references/migration.md"]
-verified: {"self": {"commit": "7cd1894ce0ffdde383d31cc7225a52710f72db8b", "date": "2026-11-04"}}
+verified: {"self": {"commit": "ca9d1f43664dc227f0fea0bf55c9c6ccbbb5e418", "date": "2026-11-08"}}
 tags: ["迁移", "核实", "数据库", "沙箱", "守护测试", "回放"]
 related: ["decisions/2026-10-14-migration-by-agent.md"]
 ---
-# 迁移代理没有数据库环境，核实规则挡掉了大部分行为知识
+# 迁移需要数据库核实的知识前，先备好能运行守护测试的环境
 
 现象：示例服务迁移第一轮只写出 14 个条目，独立回放集事先确定的 30 条知识只覆盖 3 条。缺的多是持久化、并发和授权行为，旧卡里原本都有。
 

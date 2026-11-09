@@ -1,12 +1,12 @@
 ---
-title: "关联边参与排序打平会压低直接相关教训"
+title: "brief 排序打平只比较独立信号数，关联只用于带出条目"
 scope: ["self:skills/team-knowledge/scripts/tw_runtime/brief.py"]
 source: ["self:docs/proposals/2026-11-04-field-feedback.md"]
-verified: {"self": {"commit": "7cd1894ce0ffdde383d31cc7225a52710f72db8b", "date": "2026-11-04"}}
+verified: {"self": {"commit": "ca9d1f43664dc227f0fea0bf55c9c6ccbbb5e418", "date": "2026-11-08"}}
 guards: ["self:docs/sop/tw-knowledge-only.yaml#SOP-11-P01", "self:docs/sop/tw-knowledge-only.yaml#SOP-11-P02"]
 tags: ["brief", "排序", "关联", "打平", "独立信号"]
 ---
-# 关联边参与排序打平会压低直接相关教训
+# brief 排序打平只比较独立信号数，关联只用于带出条目
 
 现象：2026-10-30，某多仓项目的 AI 服务仓回放三条任务查询时，相关教训排在第 28、11、29 位，其中两次未出现在正文或索引中。
 

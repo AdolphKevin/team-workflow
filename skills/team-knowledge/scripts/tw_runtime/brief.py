@@ -290,6 +290,11 @@ def body_for(entry):
     return re.sub(r'^(#{2,5}) ', r'#\1 ', text, flags=re.M)
 
 
+def occurrence_note(entry):
+    dates = entries.occurrence_dates(entry)
+    return f'出现 {len(dates)} 次' if len(dates) > 1 else ''
+
+
 def reason_summary(reasons):
     independent = [reason for reason in reasons if not reason.startswith(('由 ', '与 '))]
     related = [reason for reason in reasons if reason.startswith(('由 ', '与 '))]
@@ -406,7 +411,9 @@ def build(project, task, paths=(), symbols=(), refs=(), tags=(), budget=6000, in
     overflow = index_only
     for pick in picks:
         status = drift(pick, memo, dirty)['text']
-        block = (f'## {pick.entry.title}{"（已拒绝）" if pick.entry.fields.get("status") == "rejected" else ""}\n'
+        note = occurrence_note(pick.entry)
+        block = (f'## {pick.entry.title}{"（已拒绝）" if pick.entry.fields.get("status") == "rejected" else ""}'
+                 f'{f"（{note}）" if note else ""}\n'
                  f'{body_for(pick.entry)}\n'
                  f'选中：{reason_summary(pick.reasons)}\n'
                  f'来源：{source_summary(pick.entry)} · {status}\n→ {pick.entry.label}\n\n')
@@ -428,7 +435,10 @@ def build(project, task, paths=(), symbols=(), refs=(), tags=(), budget=6000, in
     reminder_nav, count = lines_within('曾放弃的方向', reminders, left)
     left -= len(reminder_nav)
     hidden[1] = len(reminders) - count
-    index_lines = [f'- {p.entry.title} → {p.entry.label}（{p.reasons[0]}）\n' for p, _ in indexed]
+    index_lines = []
+    for pick, _ in indexed:
+        note = occurrence_note(pick.entry)
+        index_lines.append(f'- {pick.entry.title} → {pick.entry.label}（{pick.reasons[0]}{f"；{note}" if note else ""}）\n')
     index_nav, count = lines_within('继续阅读', index_lines, left)
     left -= len(index_nav)
     hidden[0] = len(index_lines) - count
@@ -445,7 +455,8 @@ def build(project, task, paths=(), symbols=(), refs=(), tags=(), budget=6000, in
         'task': task.strip(), 'paths': paths, 'chars': len(markdown), 'budget': budget,
         'coverage': coverage, 'outside': outside,
         'entries': [{'label': p.entry.label, 'title': p.entry.title, 'kind': p.entry.kind, 'tier': p.tier,
-                     'reasons': p.reasons, 'rendered': p.entry.label in full, 'listed': p.entry.label in listed, 'status': status}
+                     'reasons': p.reasons, 'rendered': p.entry.label in full, 'listed': p.entry.label in listed, 'status': status,
+                     'occurrences': entries.occurrence_dates(p.entry)}
                     for p, status in selected],
         'terms': [t['term'] for t in terms], 'abandoned': [label for label, _ in abandoned_hits],
         'repositories': {alias: {'status': repo.status, 'description': repo.describe()} for alias, repo in shared.items()},

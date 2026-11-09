@@ -1,12 +1,12 @@
 ---
-title: "目录与文件路径语义不同会导致简报漏读知识"
+title: "路径先规范化，目录与文件按同一套语义匹配知识范围"
 scope: ["self:skills/team-knowledge/scripts/tw_runtime/repo_paths.py", "self:skills/team-knowledge/scripts/tw_runtime/globs.py", "self:skills/team-knowledge/scripts/tw_runtime/brief.py", "self:scripts/replay_brief.py"]
 source: ["self:docs/archive/validation-0.x.md", "self:docs/proposals/2026-10-14-unified-redesign.md"]
-verified: {"self": {"commit": "777be859050a5b2a69f02c87a8975aee38239cbf", "date": "2026-10-22"}}
+verified: {"self": {"commit": "ca9d1f43664dc227f0fea0bf55c9c6ccbbb5e418", "date": "2026-11-08"}}
 guards: ["self:docs/sop/tw-knowledge-only.yaml#SOP-01-P01"]
 tags: ["scope", "路径", "目录", "仓库根", "简报", "漏读"]
 ---
-# 目录与文件路径语义不同会导致简报漏读知识
+# 路径先规范化，目录与文件按同一套语义匹配知识范围
 
 现象：旧任务的范围写 `.` 时开工失败；写目录时命令成功，但简报漏读目录通配符范围下的知识，`./app.py` 与 `app.py` 也曾被误判为不同路径。
 
