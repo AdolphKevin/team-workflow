@@ -20,6 +20,14 @@ def user_mapping_path():
     return Path(os.environ.get('XDG_CONFIG_HOME') or '~/.config').expanduser() / 'tw/repositories.json'
 
 
+def legacy_local(root):
+    """State of the old location `.tw/local`: absent, a link (normally to the local directory), or a directory."""
+    path = Path(root) / KB / 'local'
+    if path.is_symlink():
+        return 'link'
+    return 'directory' if path.is_dir() else 'absent'
+
+
 def checkout_mapping_path(root):
     path = root / MAPPING
     legacy = root / KB / 'local' / 'repositories.json'

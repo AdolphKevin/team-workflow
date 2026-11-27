@@ -36,17 +36,28 @@ def local_reference_problems(text):
 
 
 def local_directory_checks(root, error, warn):
+    legacy = projects.legacy_local(root)
+    if legacy == 'link':
+        # The link keeps old paths usable; searches of .tw/ do not follow it.
+        if not gitutil.ignored(root, LEGACY_LOCAL):
+            error(LEGACY_LOCAL, f'兼容链接没有被 Git 忽略：在 {KB}/.gitignore 加一行 local（带结尾 / 的规则只匹配目录，不匹配链接）')
+        if gitutil.tracked_under(root, LEGACY_LOCAL):
+            error(LEGACY_LOCAL, '兼容链接已被跟踪，用 git rm --cached 移出')
+        if (root / LEGACY_LOCAL).resolve() != (root / LOCAL).resolve():
+            warn(LEGACY_LOCAL, f'兼容链接指向 {(root / LEGACY_LOCAL).resolve()}，本机材料的位置是 {LOCAL}/；'
+                               f'改为 ln -sfn ../{LOCAL} {LEGACY_LOCAL}')
     for name in (LOCAL, LEGACY_LOCAL):
-        if not (root / name).is_dir():
+        if not (root / name).is_dir() or (name == LEGACY_LOCAL and legacy != 'directory'):
             continue
         if name == LEGACY_LOCAL:
             ignore = root / KB / '.gitignore'
             lines = ignore.read_text(encoding='utf-8').splitlines() if ignore.is_file() else []
-            if 'local/' not in [line.strip() for line in lines]:
-                error(f'{KB}/.gitignore', '应包含一行 local/')
-            warn(f'{name}/', f'这是旧位置，本机材料现放在 {LOCAL}/。按安装说明「从 1.2 升级」迁移：'
-                             f'先按 tw audit 的清单删除可重新生成的大文件，再运行 mv {name} {LOCAL}'
-                             f'（{LOCAL}/ 已存在时把各项移入其中），在 {LOCAL}/.gitignore 写入一行 *，删除 {KB}/.gitignore')
+            if not {'local', 'local/'} & {line.strip() for line in lines}:
+                error(f'{KB}/.gitignore', '应包含一行 local')
+            warn(f'{name}/', f'本机材料还在旧位置，在 {KB}/ 中全文搜索会扫过它们。按安装说明「从 1.2 升级」迁移：'
+                             f'先按 tw audit 的清单删除可重新生成的大文件，再运行 mv {name} {LOCAL} && ln -s ../{LOCAL} {name}'
+                             f'（{LOCAL}/ 已存在时先把各项移入其中），在 {LOCAL}/.gitignore 写入一行 *，在 {KB}/.gitignore 加一行 local。'
+                             f'旧路径经链接继续可用，引用它的文档和脚本可以之后再改')
         ignored = gitutil.ignored(root, f'{name}/probe')
         if name == LOCAL:
             visible = gitutil.output(root, 'ls-files', '-z', '--others', '--exclude-standard', '--', name)
@@ -87,6 +98,8 @@ def run(project, base=None):
     objects = gitutil.read_objects(root, [f'{value}^{{commit}}' for value in sorted(baselines)])
     known_bases = {value for value in baselines if objects.get(f'{value}^{{commit}}') is not None}
     for name in project.strays:
+        if name == LEGACY_LOCAL and projects.legacy_local(root) == 'link':
+            continue  # Reported once above as an unignored compatibility link.
         error(name, '不是知识条目：知识只放在 overview.md、glossary.md、rules/、decisions/、lessons/')
     shared = project.shared()
     config = project.config or {}

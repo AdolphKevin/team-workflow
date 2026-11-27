@@ -57,19 +57,22 @@ tw check
 
 ## 从 1.2 升级
 
-1.3.0 起 `.tw/` 只放受版本管理的知识，本机材料在并列的 `.tw-local/`（[方案](proposals/2026-11-27-knowledge-root-and-index-first.md)）。升级技能后，每个检出目录迁移一次；迁移前旧位置的路径映射照常读取，`tw check` 给出警告。
+1.3.0 起 `.tw/` 只放受版本管理的知识，本机材料在并列的 `.tw-local/`（[方案](proposals/2026-11-27-knowledge-root-and-index-first.md)）。材料留在 `.tw/local/` 时，在 `.tw/` 中全文搜索会扫过它们：一个项目的本机材料有 6.6 GiB、4.6 万个文件时，`grep -r` 搜一次 `.tw` 用时约 54 秒，只搜知识目录不到 1 秒。迁移前旧位置的路径映射照常读取，`tw check` 给出警告。
 
-1. 运行 `tw audit`，删除清单中可重新生成的大文件：编译产物、构建缓存、过期日志、浏览器数据；正被进程使用的保留。
-2. 移动目录，同一文件系统内移动不复制数据：
+先把技能升级到 1.3.1 或更新的版本，再迁移：1.3.0 及更早版本遇到迁移后的链接时 `tw check` 会失败。每个检出目录迁移一次。迁移后原位置留一个指向 `.tw-local/` 的链接，旧路径照常可用：引用它的验证手册、检查脚本、看板配置和正在运行的进程不受影响，`grep -r`、`rg` 默认不跟进链接，搜索只扫知识。
+
+1. 运行 `tw audit`，删除清单中可重新生成的大文件：编译产物、构建缓存、过期日志、浏览器数据；正被进程使用的保留。这一步可以跳过，与迁移无关。
+2. 移动目录并留下链接，同一文件系统内移动不复制数据：
 
    ```bash
-   mv .tw/local .tw-local && printf '*\n' > .tw-local/.gitignore
-   git rm -q .tw/.gitignore
+   mv .tw/local .tw-local && ln -s ../.tw-local .tw/local
+   printf '*\n' > .tw-local/.gitignore
+   printf 'local\n' >> .tw/.gitignore
    ```
 
-   `.tw-local/` 已存在时，把 `.tw/local/` 中的各项移入其中。
-3. 把验证手册、检查脚本和指引中写到 `.tw/local/` 的路径改为 `.tw-local/`，与上一步放在同一次改动；代理记忆中的旧路径同样更新。
-4. 运行 `tw check`，旧位置的警告消失。
+   `.tw/.gitignore` 加的一行 `local` 不带结尾的 `/`：带 `/` 的规则只匹配目录，不匹配链接。原有的 `local/` 保留，还在用 1.3.0 及更早版本的成员拉取这项改动后，`tw check` 照常通过。`.tw-local/` 已存在时，先把 `.tw/local/` 中的各项移入其中，删除空目录后再建链接。
+3. 运行 `tw check`，旧位置的警告消失；提交 `.tw/.gitignore` 的改动。
+4. 文档和脚本中写到 `.tw/local/` 的路径可以之后再改为 `.tw-local/`。
 
 `tw brief` 的输出先列“相关条目”索引，再给直接命中条目的全文；解析文本输出的脚本按新的章节顺序调整，JSON 的 `rendered`、`listed` 含义与 1.2 相同。
 

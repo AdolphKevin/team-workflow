@@ -38,9 +38,10 @@
 
 ## 本机材料的位置
 
-`.tw/` 只放受版本管理的知识，本机材料在并列的 `.tw-local/`。检出目录里还有 `.tw/local/` 时：
+`.tw/` 只放受版本管理的知识，本机材料在并列的 `.tw-local/`。材料留在 `.tw/local/` 时，在 `.tw/` 中全文搜索会扫过它们，材料多时一次搜索要几十秒。检出目录里还有 `.tw/local/` 目录时：
 
-1. 运行 `tw audit`，删除清单中可重新生成的大文件：编译产物、构建缓存、过期日志、浏览器数据；正被进程使用的保留。
-2. 移动并让新目录忽略自身：`mv .tw/local .tw-local && printf '*\n' > .tw-local/.gitignore`，再 `git rm .tw/.gitignore`。`.tw-local/` 已存在时，把 `.tw/local/` 中的各项移入其中。
-3. 把验证手册、检查脚本和指引中写到 `.tw/local/` 的路径改为新位置，与上一步放在同一次改动。
-4. 运行 `tw check`，旧位置的警告消失。
+1. 移动并在原位置留下链接：`mv .tw/local .tw-local && ln -s ../.tw-local .tw/local`；`.tw-local/` 已存在时先把各项移入其中，删除空目录后再建链接。
+2. `.tw-local/.gitignore` 写一行 `*`；`.tw/.gitignore` 加一行 `local`，不带结尾的 `/`，带 `/` 的规则只匹配目录，不匹配链接；原有的 `local/` 保留给旧版本的 check。
+3. 运行 `tw check`，旧位置的警告消失；提交 `.tw/.gitignore` 的改动。
+
+旧路径经链接照常可用，引用它的文档、脚本和正在运行的进程不受影响，可以之后再改；`grep -r`、`rg` 默认不跟进链接。可重新生成的大文件按 `tw audit` 的清单另行清理。

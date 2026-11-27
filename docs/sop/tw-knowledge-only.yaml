@@ -7,7 +7,7 @@
 metadata:
   requirement: "team-workflow 只发行 team-knowledge：知识命令独立可用，团队流程、场景验收与 MATT 副本移除，已有项目可升级"
   batch: "tw-knowledge-only"
-  version: 8
+  version: 9
   owner: "AdolphKevin"
   sources:
     - ref: "docs/proposals/2026-10-22-knowledge-only.md 第 3–6 节"
@@ -33,6 +33,9 @@ metadata:
       confirmed_by: "AdolphKevin"
     - ref: "SOP-20-P06 删除预期第 1 项“会话先运行不带 --path 的 tw brief”：它规定的是过程，技能允许第一次读取就带路径；保留读到相关规则、修复符合规则与材料位置三项，用新会话重跑后判定"
       version: "用户确认（2026-11-27，“那按你的建议做”）"
+      confirmed_by: "AdolphKevin"
+    - ref: "1.3.1：迁移本机材料时在原位置留下指向 .tw-local/ 的链接，旧路径照常可用，引用它的文档与脚本可以之后再改；.tw/.gitignore 追加一行 local 并保留原有的 local/，还在用旧版本的成员拉取后 check 照常通过；check 把该链接视为已迁移，audit 不重复统计；旧位置仍是目录时警告写明搜索会扫过材料与迁移命令"
+      version: "用户确认（2026-11-27，“嗯，做 1.3.1”）"
       confirmed_by: "AdolphKevin"
   tags: ["tw", "知识库", "升级"]
 
@@ -120,7 +123,7 @@ sops:
         verify: cli
         initial_state: ["实现分支指定提交的干净检出"]
         steps: ["python3 scripts/check_release.py", "python3 scripts/package.py --output <仓库外>/tw.zip", "列出 ZIP 内容", "把 ZIP 中的技能安装到临时技能目录，运行 tw version --check-install"]
-        expected: ["前两步退出码 0", "ZIP 的技能目录只有 team-knowledge", "version --check-install 通过，只核对 team-knowledge", "插件元数据、VERSION 与运行时版本一致为 1.3.0"]
+        expected: ["前两步退出码 0", "ZIP 的技能目录只有 team-knowledge", "version --check-install 通过，只核对 team-knowledge", "插件元数据、VERSION 与运行时版本一致为 1.3.1"]
         forbidden_effects: ["ZIP 中出现 team-workflow、playwright-acceptance、matt-*、upstream/"]
         evidence_hints: ["命令输出与 ZIP 清单"]
       - id: SOP-03-N01
@@ -674,14 +677,14 @@ sops:
         evidence_hints: ["逐条命令、退出码与完整输出"]
       - id: SOP-19-P02
         polarity: positive
-        title: 旧位置的映射照常读取并给迁移警告，按安装说明迁移后警告消失
+        title: 旧位置的映射照常读取并给迁移警告，按安装说明迁移后旧路径照常可用、警告消失
         actor: 项目成员
         priority: P0
         verify: cli
-        initial_state: ["用 1.2.2 的 tw init --apply 建立的临时项目 a：.tw/.gitignore 含 local/，.tw/local/repositories.json 把共享仓 b 映射到本机目录，.tw/local/ 下的任务目录中有一份任务材料 notes.md", "b 有一条规则", "记录 .tw/local/ 的文件清单与摘要"]
-        steps: ["候选版 tw brief --task <b 的规则标签中的词语>", "tw check", "按安装说明“从 1.2 升级”迁移并提交", "tw check", "同一条 tw brief"]
-        expected: ["迁移前 brief 列出 b 的规则", "迁移前 check 以 0 退出，给出一条警告，写明 .tw/local/ 是旧位置和迁移做法", "迁移后 check 没有该警告", "迁移后 brief 仍列出 b 的规则", "notes.md 位于 .tw-local/ 下的同名任务目录，摘要与迁移前相同"]
-        forbidden_effects: ["工具自行移动或删除本机材料", "迁移后 .tw/ 下还有未受版本管理的文件"]
+        initial_state: ["用 1.2.2 的 tw init --apply 建立的临时项目 a：.tw/.gitignore 含 local/，.tw/local/repositories.json 把共享仓 b 映射到本机目录，.tw/local/ 下的任务目录中有一份任务材料 notes.md，内容含一个独特的词", "b 有一条规则", "记录 .tw/local/ 的文件清单与摘要"]
+        steps: ["候选版 tw brief --task <b 的规则标签中的词语>", "tw check", "按安装说明“从 1.2 升级”迁移并提交", "tw check", "同一条 tw brief", "经旧路径 .tw/local/<任务目录>/ 读取 notes.md 并写入一个新文件", "/usr/bin/grep -r <notes.md 中的独特词> .tw", "tw audit --format json", "git status --porcelain"]
+        expected: ["迁移前 brief 列出 b 的规则", "迁移前 check 以 0 退出，给出一条警告，写明在 .tw/ 中搜索会扫过本机材料，并给出迁移命令", "迁移后 check 没有关于本机目录的警告或错误", "迁移后 brief 仍列出 b 的规则", "notes.md 位于 .tw-local/ 下的同名任务目录，摘要与迁移前相同；经旧路径能读到它，经旧路径写入的文件出现在 .tw-local/ 中", "grep 的结果不含本机材料", "audit 的本机材料只统计 .tw-local/，文件数等于 .tw-local/ 中的实际文件数", "git status 只有 .tw/.gitignore 的改动（提交前）或为空（提交后），没有未跟踪的链接"]
+        forbidden_effects: ["工具自行移动或删除本机材料", "迁移后 .tw/ 下还有未被忽略的未跟踪文件"]
         evidence_hints: ["迁移前后的命令、退出码、完整输出与文件摘要"]
       - id: SOP-19-P03
         polarity: positive
@@ -706,6 +709,29 @@ sops:
         expected: ["check 以非 0 退出，第一条规则报错并写明该行引用了仅在本机的材料", "第二条规则没有这项错误"]
         forbidden_effects: ["本机材料的引用通过检查"]
         evidence_hints: ["命令、退出码与完整输出"]
+      - id: SOP-19-N03
+        polarity: negative
+        negative_type: invalid-input
+        title: 兼容链接没有被忽略或指向别处时写明做法
+        actor: 项目成员
+        priority: P1
+        verify: cli
+        initial_state: ["按安装说明迁移后的临时项目，但 .tw/.gitignore 仍为 local/"]
+        steps: ["tw check", "在 .tw/.gitignore 加一行 local 后 tw check", "把 .tw/local 改为指向仓库外另一个目录的链接后 tw check"]
+        expected: ["第一次 check 以非 0 退出，写明兼容链接没有被 Git 忽略，以及在 .tw/.gitignore 加一行 local、不带结尾 / 的做法；关于该链接只报这一条错误", "第二次 check 没有关于本机目录的错误或警告", "第三次 check 不崩溃，给出一条警告，写明链接当前指向的位置与改为指向 .tw-local/ 的命令"]
+        forbidden_effects: ["check 因链接报出 git 内部错误后退出", "工具自行修改 .gitignore 或链接"]
+        evidence_hints: ["命令、退出码与完整输出"]
+      - id: SOP-19-P04
+        polarity: positive
+        title: 迁移提交后，还在用旧版本的成员检出照常通过
+        actor: 项目成员
+        priority: P1
+        verify: cli
+        initial_state: ["SOP-19-P02 中按安装说明迁移并提交后的项目 a", "a 的另一个检出（克隆或 worktree）仍是旧布局：.tw/local/ 是目录"]
+        steps: ["在旧布局检出中拉取迁移提交", "分别用 1.2.2、1.3.0 与候选版运行 tw check"]
+        expected: [".tw/.gitignore 同时含 local/ 与 local", "1.2.2 与 1.3.0 的 check 都没有关于 .tw/.gitignore 或本机目录的错误", "候选版的 check 以 0 退出，只给出旧位置的迁移警告"]
+        forbidden_effects: ["迁移提交让还在用旧版本的成员 check 失败"]
+        evidence_hints: ["两个检出的 .tw/.gitignore 内容，三个版本的命令、退出码与完整输出"]
       - id: SOP-19-N02
         polarity: negative
         negative_type: other

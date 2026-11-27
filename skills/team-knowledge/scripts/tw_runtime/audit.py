@@ -7,6 +7,7 @@ import urllib.error
 import urllib.request
 
 from . import KB, LOCAL, brief, cache, check, entries, gitutil, textmatch
+from .project import legacy_local
 
 BIG_FILE = 20 * 1024 * 1024
 LOCAL_MANAGED = {Path(cache.DIRECTORY).name, 'repositories.json'}
@@ -65,7 +66,8 @@ def run(project, links=False, top=10):
 
 def local_usage(root):
     root = Path(root)
-    directories = [name for name in (LOCAL, f'{KB}/local') if (root / name).is_dir()]
+    directories = [name for name in (LOCAL, f'{KB}/local') if (root / name).is_dir()
+                   and (name == LOCAL or legacy_local(root) == 'directory')]
     items, big = [], []
     for name in directories:
         base = root / name

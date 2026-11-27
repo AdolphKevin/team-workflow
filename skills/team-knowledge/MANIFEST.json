@@ -4,14 +4,14 @@
     "SKILL.md": "87f7ff3548f16dc12051530bb356dabd1ca172ff5509c9b3f2bf0bf02a733447",
     "agents/openai.yaml": "d660ec45c2b67e9aeb482b06764b44c03503913ad2756ffbac8b0d68a7992121",
     "references/lessons-from-history.md": "68e753a1b876497499b1406cbde6aa6d1afc5573db821fc03778664d7858d883",
-    "references/migration.md": "c4afb0595cd038dacdfcabac41b50267eca89a4a66812f795e48868e30ff5c8b",
+    "references/migration.md": "45b13d0f5ae4e2cf93e5190a4a9966d404c16eb812195a664b1351484fd8bdb0",
     "references/writing.md": "b30ca1782487b0bfa81c0483419018714b956f3a687b0262df2288aa3dd247e8",
     "scripts/tw.py": "4e5aeff6ce3aec67fc8f78c82040b583fa8af732aa6da75e4ef76c869a15e61b",
-    "scripts/tw_runtime/__init__.py": "8c1559b1250a90efd0160d81031818a48523c03c2f40d0e69561504ddd7111af",
-    "scripts/tw_runtime/audit.py": "488559cda61980e637cc086f86aa5a7625ebdda7d52ea658d1d2a8e5d2577fb6",
+    "scripts/tw_runtime/__init__.py": "d7320339b1b21a9229868c0761dbe41ffd1a0ce500cb661a200027ff1469b31e",
+    "scripts/tw_runtime/audit.py": "64e4d84a956610fafdfe26dfb73bf4d4c749d9e02f2f6fdc3b54bc7affa54d97",
     "scripts/tw_runtime/brief.py": "ce6f29f49a0a1269d98166b7d983992242a5d5d6d64c71b42b7a439884fac82c",
     "scripts/tw_runtime/cache.py": "1a6898771f131ee023d1ed8770bb3504751e9071fea277f102df71c1fcf04615",
-    "scripts/tw_runtime/check.py": "a355c12841ccbcf71b3c875e2eba984c0e35e88dbf4625696f4af9b812941e91",
+    "scripts/tw_runtime/check.py": "240129d81bc445c78040307fa523c40521363dd344547714bfa86d404dee4045",
     "scripts/tw_runtime/cli.py": "4c873c21114b6d88c2b5537bcc711a142bcffb759ec9b9eb2a69bf2159e732d6",
     "scripts/tw_runtime/entries.py": "658b8b55b1bc9463475686164df52b401ddd986df76beec4e748e5bbe5d53337",
     "scripts/tw_runtime/files.py": "36dd3b7bf6641617f4d7f60d5f314ef5999c35aec1ba67057e02d476b72096f5",
@@ -21,12 +21,12 @@
     "scripts/tw_runtime/init.py": "d1d7ecbc35202787d467caa84c5d3a6fd33c86e50e86989ba7cd538c09ae0949",
     "scripts/tw_runtime/install.py": "b581e7c1a4ebeaf2556b88eaed13ea5995cbfebab38379f1806f3ab60d304755",
     "scripts/tw_runtime/new.py": "764e1761bd7492a1f8bbfcafc91a3fec14766de7e31398001241f856fad8820b",
-    "scripts/tw_runtime/project.py": "a51461269da1f433767dc343e65bf13b2384c05ddb1fb6b50d3e12b4bfcd31aa",
+    "scripts/tw_runtime/project.py": "e8ef1186dd7b6831bd6cd23d0c67a3afb93cf8af402462d4e22756c563c98e63",
     "scripts/tw_runtime/read.py": "85660c29d3a71e1ebca3666c4c55fdbab234513d73e6548a3858b394449e1e6a",
     "scripts/tw_runtime/repo_paths.py": "78c5ae4c5d148b0166f4a1909a2161f9a32d106686fc6895d6226cc0e0575058",
     "scripts/tw_runtime/textmatch.py": "21db3ab65ac98525717c53cbb6e4cb9ba335f642921f491adeaf7e521cbc59f6"
   },
   "schema_version": 1,
   "skill": "team-knowledge",
-  "version": "1.3.0"
+  "version": "1.3.1"
 }
