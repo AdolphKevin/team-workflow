@@ -12,7 +12,7 @@
 | `verified` | rule、lesson 必填：`{"self": {"commit": "<实际核对时的完整提交>", "date": "YYYY-MM-DD"}}`；改写条目时核对当前代码，同时更新为当前提交与实际核对日期；仓库还没有提交时 commit 写 `null` |
 | `status` | decision 必填：`accepted` 或 `rejected` |
 | `guards` | rule、lesson 可选：能发现该问题的测试，写成 `仓库:文件#测试名`，如 `self:tests/test_refund.py#test_refund_limit` |
-| `tags`、`symbols`、`related`、`owner` | 可选。`tags` 写任务描述里会出现的业务词，brief 靠它匹配中文 |
+| `tags`、`symbols`、`related`、`owner` | 可选。`tags` 写任务描述里会出现的业务词，brief 匹配时权重更高 |
 
 文件名：`rules/<slug>.md`，`decisions/` 和 `lessons/` 用 `YYYY-MM-DD-<slug>.md`，slug 只用小写字母、数字和连字符。
 
@@ -62,7 +62,7 @@ rule、lesson 再次出现时加一节，每次一项，第一项写最初那次
 ```
 
 - `documents` 是数组，`source` 写 `self:路径`（可用 glob）、`别名:路径` 或 http(s) 链接。
-- `shared` 只写远端身份。用户级 `${XDG_CONFIG_HOME:-~/.config}/tw/repositories.json` 按 `project.id` 提供默认路径：`{"projects": {"github.com/acme/core": {"repositories": {"common": "~/src/common"}}}}`；检出目录 `.tw/local/repositories.json` 的格式为 `{"repositories": {"common": "../common"}}`。命令行 > 检出目录 > 用户级，按键覆盖；两个文件由成员或代理编辑，工具只读。
+- `shared` 只写远端身份。用户级 `${XDG_CONFIG_HOME:-~/.config}/tw/repositories.json` 按 `project.id` 提供默认路径：`{"projects": {"github.com/acme/core": {"repositories": {"common": "~/src/common"}}}}`；检出目录 `.tw-local/repositories.json` 的格式为 `{"repositories": {"common": "../common"}}`。命令行 > 检出目录 > 用户级，按键覆盖；两个文件由成员或代理编辑，工具只读。
 - 知识与原文写结论和关键数据，引用入库的文件；本机材料的原件留在执行者本机，试点和手工输出放在仓库外。目录布局可以说明。
 
 ## 正例

@@ -38,7 +38,7 @@ def parser():
     p.add_argument('--format', choices=('markdown', 'json'), default='markdown')
 
     p = sub.add_parser('read', parents=[shared, knowledge_options], help='读取条目、已登记原文或仓库文件的全文')
-    p.add_argument('target', nargs='?')
+    p.add_argument('targets', nargs='*', metavar='target')
     p.add_argument('--section', help='只读取这一节')
     p.add_argument('--online', action='store_true', help='允许读取外部链接')
     p.add_argument('--list', action='store_true', help='列出已登记的原文')
@@ -59,6 +59,7 @@ def parser():
     group = p.add_mutually_exclusive_group()
     group.add_argument('--cached', action='store_true', help='检查暂存区中的版本')
     group.add_argument('--base', help='与该提交比较，提示本分支改动了哪些知识的 scope')
+    p.add_argument('--all', action='store_true', help='展开全部警告')
     p.add_argument('--format', choices=('text', 'json'), default='text')
 
     p = sub.add_parser('audit', parents=[shared, knowledge_options], help='知识库健康报告（只读）')
@@ -129,7 +130,7 @@ def main(argv=None):
             emit(result, result['markdown'], 'json' if args.format == 'json' else 'text')
             return 0
         if args.command == 'read':
-            result = read.run(project, args.target, args.section, args.online, args.list)
+            result = read.run(project, args.targets, args.section, args.online, args.list)
             text = result.get('text') or ''.join(f'- {d["id"]}：{d["title"]}（{d["source"]}）\n' for d in result.get('documents', []))
             emit(result, text or '（没有已登记的原文）\n', args.format)
             return 0
@@ -140,7 +141,8 @@ def main(argv=None):
             return 0
         if args.command == 'check':
             result = check.run(project, base=args.base)
-            emit(result, check.render(result), args.format)
+            rendered = None if args.format == 'json' else check.render(project, result, base=args.base, all_warnings=args.all)
+            emit(result, rendered, args.format)
             return 0 if result['ok'] else 1
         if args.command == 'audit':
             result = audit.run(project, links=args.links, top=args.top)

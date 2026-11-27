@@ -1,7 +1,7 @@
 ---
 title: "Team Workflow 项目总览"
 source: ["self:README.md", "self:docs/design.md", "self:docs/proposals/2026-10-22-knowledge-only.md"]
-verified: {"self": {"commit": "777be859050a5b2a69f02c87a8975aee38239cbf", "date": "2026-10-22"}}
+verified: {"self": {"commit": "b9ad58184ab11dc29de1f1e01d3cf54c18171770", "date": "2026-11-27"}}
 ---
 # Team Workflow 项目总览
 
@@ -11,4 +11,4 @@ verified: {"self": {"commit": "777be859050a5b2a69f02c87a8975aee38239cbf", "date"
 
 发行检查与打包在 `scripts/`，当前验收场景在 `docs/sop/tw-knowledge-only.yaml`。独立代理经临时项目的真实命令入口验收，结果写入 `docs/validation.md`；历史场景与记录分别在 `docs/sop/archive/`、`docs/archive/`。
 
-项目知识、共享原文与本机材料分开保存。引用只表示可追溯，测试运行由产品仓库 CI 证明。SOP 验收与回归沉淀由 sop-board 发行。两位真实成员各自一周试点须单独记录。
+项目知识、共享原文与本机材料分开保存：`.tw/` 只放受版本管理的知识，本机材料在并列的 `.tw-local/`。引用只表示可追溯，测试运行由产品仓库 CI 证明。SOP 验收与回归沉淀由 sop-board 发行。两位真实成员各自一周试点须单独记录。

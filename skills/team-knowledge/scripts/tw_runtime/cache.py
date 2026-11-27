@@ -6,9 +6,9 @@ import json
 from pathlib import Path
 import shutil
 
-from . import KB, gitutil
+from . import LOCAL, gitutil
 
-DIRECTORY = f'{KB}/local/cache'
+DIRECTORY = f'{LOCAL}/cache'
 CHANGES = f'{DIRECTORY}/changes.json'
 _loaded = {}
 

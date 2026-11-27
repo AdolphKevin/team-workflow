@@ -1,14 +1,15 @@
-"""Phrase matching without character bigrams.
+"""BM25 ranking with ASCII words and adjacent Han characters.
 
-Vocabulary comes from glossary terms and their aliases, tags, symbols, title phrases split on
-punctuation and whitespace, and the words of an entry's file name. Task text is scanned for the
-longest phrases first; each phrase counts once and a matched span cannot be reused by a shorter one.
+Glossary terms and abandoned approaches retain longest-first, non-overlapping phrase matching.
 """
+from collections import Counter
+import math
 import re
 import unicodedata
 
 SPLIT = re.compile(r'[\s,，。.;；:：、/|（）()\[\]【】「」“”"\'!?！？·<>《》]+')
 WORD = re.compile(r'[a-z0-9_]')
+RUN = re.compile(r'[a-z0-9_]+|[〇々㐀-䶿一-鿿豈-﫿\U00020000-\U000323AF]+')
 STOP = frozenset({'and', 'for', 'the', 'with', 'from', 'into', 'not', 'are'})
 
 
@@ -32,10 +33,55 @@ def title_phrases(text):
     return out
 
 
-def slug_words(ref):
-    stem = ref.rsplit('/', 1)[-1].removesuffix('.md')
-    stem = re.sub(r'^\d{4}-\d{2}-\d{2}-', '', stem)
-    return {w for w in stem.split('-') if len(w) >= 3 and w not in STOP and re.search('[a-z]', w)}
+def token_runs(text):
+    for run in RUN.findall(normalize(text)):
+        if not run.isascii():
+            yield [run[i:i + 2] for i in range(len(run) - 1)]
+        elif len(run) >= 2 and run not in STOP and (not run.isdigit() or len(run) >= 3):
+            yield [run]
+
+
+def tokens(text):
+    return (token for run in token_runs(text) for token in run)
+
+
+def matched_words(runs, shared, idf):
+    words = {}
+    for run in runs:
+        start = 0
+        while start < len(run):
+            if run[start] not in shared:
+                start += 1
+                continue
+            end = start + 1
+            while end < len(run) and run[end] in shared:
+                end += 1
+            phrase = run[start] + ''.join(token[-1] for token in run[start + 1:end])
+            words[phrase] = sum(idf[token] for token in run[start:end])
+            start = end
+    return sorted(words, key=lambda word: -words[word])[:3]
+
+
+def rank(task, frequencies):
+    """Return scores and evidence by document label, using the entire corpus for statistics."""
+    runs = list(token_runs(task))
+    query = sorted({token for run in runs for token in run})
+    if not query or not frequencies:
+        return {}
+    lengths = {label: sum(counts.values()) for label, counts in frequencies.items()}
+    size = len(frequencies)
+    average = sum(lengths.values()) / size
+    df = Counter(token for counts in frequencies.values() for token in query if token in counts)
+    idf = {token: math.log(1 + (size - count + 0.5) / (count + 0.5)) for token, count in df.items()}
+    k1, b = 1.2, 0.75
+    scores = {}
+    for label, counts in frequencies.items():
+        shared = {token: counts[token] for token in query if token in counts}
+        if shared:
+            norm = k1 * (1 - b + b * lengths[label] / average)
+            score = sum(idf[token] * count * (k1 + 1) / (count + norm) for token, count in shared.items())
+            scores[label] = score, matched_words(runs, shared, idf)
+    return scores
 
 
 def term(phrase):

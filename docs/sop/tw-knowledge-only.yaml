@@ -7,7 +7,7 @@
 metadata:
   requirement: "team-workflow 只发行 team-knowledge：知识命令独立可用，团队流程、场景验收与 MATT 副本移除，已有项目可升级"
   batch: "tw-knowledge-only"
-  version: 6
+  version: 7
   owner: "AdolphKevin"
   sources:
     - ref: "docs/proposals/2026-10-22-knowledge-only.md 第 3–6 节"
@@ -28,6 +28,9 @@ metadata:
     - ref: "1.2.1 验收观察的三个问题一起处理：条目中的人写成角色与日期，不写个人姓名、账号或邮箱；verified 缺少或多出字段时写明是哪一项；仓库已有提交时 commit 写完整提交，null 只用于仓库还没有提交时（tw 只在 Git 仓库中运行）"
       version: "用户确认（2026-11-09，“这 3 个问题一起处理了”）"
       confirmed_by: "AdolphKevin"
+    - ref: "docs/proposals/2026-11-27-knowledge-root-and-index-first.md 第 2、5、7 节：.tw/ 只放受版本管理的文件，本机材料移到 .tw-local/；brief 先列索引，词语得分并检索正文；tw read 读多个条目；tw check 默认展开本次改动条目的警告。已验收的 brief 输出随之改变"
+      version: "用户确认（2026-11-27，“按你的建议做”）"
+      confirmed_by: "AdolphKevin"
   tags: ["tw", "知识库", "升级"]
 
 sops:
@@ -44,8 +47,8 @@ sops:
         priority: P0
         verify: cli
         initial_state: ["临时 Git 项目，含 src/pay/refund.py 与 src/user/profile.py，只安装候选版 team-knowledge"]
-        steps: ["tw init --apply", "tw new 建一条作用范围为 src/pay/ 的规则和一条作用范围为 src/user/ 的教训，教训不含退款相关词", "tw brief --task 修改退款金额校验 --path src/pay/refund.py", "tw read 读取被选中的规则", "tw check", "tw audit", "tw cache 构建缓存后再运行一次 brief"]
-        expected: ["每条命令退出码 0", "brief 选中 src/pay/ 的规则并给出选择原因", "与路径、任务词组、显式引用和关联都不匹配的 src/user/ 教训未被选中", "read 输出规则原文", "check 报告 0 错误", "两次 brief 选中的条目相同"]
+        steps: ["tw init --apply", "tw new 建一条作用范围为 src/pay/ 的规则和一条作用范围为 src/user/ 的教训，教训的标题、标签与正文同任务没有共同的词语（含相邻二字）", "tw brief --task 修改退款金额校验 --path src/pay/refund.py", "tw read 读取被选中的规则", "tw check", "tw audit", "tw cache 构建缓存后再运行一次 brief"]
+        expected: ["每条命令退出码 0", "brief 选中 src/pay/ 的规则并给出选择原因", "与路径、词语、显式引用和关联都不匹配的 src/user/ 教训未被选中", "read 输出规则原文", "check 报告 0 错误", "两次 brief 选中的条目相同"]
         forbidden_effects: ["任何命令提示需要安装 team-workflow 或运行 tw team"]
         evidence_hints: ["逐条命令与完整输出"]
       - id: SOP-01-P02
@@ -84,7 +87,7 @@ sops:
         priority: P0
         verify: cli
         initial_state: ["旧版项目", "记录 .tw/local/ 下文件清单与摘要"]
-        steps: ["改用候选版 tw，运行 brief、read、check、audit"]
+        steps: ["改用候选版 tw，运行 brief、read、check --all、audit"]
         expected: ["brief、read、audit 正常输出", "check 以 0 退出，对每个旧团队字段逐项给出方案第 5 节所列去向", "对 check:名称 的 guards 给出改写为 仓库:文件#测试名 的提示", "self:文件#测试名 的 guards 照常校验通过", ".tw/config.json 与 .tw/local/ 的文件清单和摘要与升级前相同"]
         forbidden_effects: ["工具修改或删除 .tw/config.json 字段或 .tw/local/ 材料"]
         evidence_hints: ["升级前后文件摘要对比", "check 完整输出"]
@@ -114,7 +117,7 @@ sops:
         verify: cli
         initial_state: ["实现分支指定提交的干净检出"]
         steps: ["python3 scripts/check_release.py", "python3 scripts/package.py --output <仓库外>/tw.zip", "列出 ZIP 内容", "把 ZIP 中的技能安装到临时技能目录，运行 tw version --check-install"]
-        expected: ["前两步退出码 0", "ZIP 的技能目录只有 team-knowledge", "version --check-install 通过，只核对 team-knowledge", "插件元数据、VERSION 与运行时版本一致为 1.2.2"]
+        expected: ["前两步退出码 0", "ZIP 的技能目录只有 team-knowledge", "version --check-install 通过，只核对 team-knowledge", "插件元数据、VERSION 与运行时版本一致为 1.3.0"]
         forbidden_effects: ["ZIP 中出现 team-workflow、playwright-acceptance、matt-*、upstream/"]
         evidence_hints: ["命令输出与 ZIP 清单"]
       - id: SOP-03-N01
@@ -287,13 +290,13 @@ sops:
     scenarios:
       - id: SOP-08-P01
         polarity: positive
-        title: 直接命中与任务词组选中分别说明
+        title: 直接命中与词语选中分别说明
         actor: 项目成员
         priority: P1
         verify: cli
         initial_state: ["临时项目有 src/pay/ 规则（标签“退款”）和 src/user/ 教训（标签“验收”）"]
         steps: ["tw brief --task \"修改退款金额校验并更新验收\" --path src/pay/refund.py"]
-        expected: ["规则正文写明“选中：路径…”", "教训标明只按词组“验收”选中", "第一行写直接命中 1 条、另有 1 条按词组或关联选出"]
+        expected: ["规则有全文，全文写明“选中：路径…”", "教训只出现在“相关条目”索引中，依据为词语“验收”", "任务标题下写直接命中 1 条、另有 1 条按词语或关联选出"]
         forbidden_effects: ["只读命令修改项目知识或本机材料"]
         evidence_hints: ["命令、退出码与完整输出；操作前后文件清单和摘要"]
       - id: SOP-08-N01
@@ -305,7 +308,7 @@ sops:
         verify: cli
         initial_state: ["同一项目，没有条目覆盖 web/"]
         steps: ["tw brief --task \"调整页面布局并更新验收脚本\" --path web/layout.tsx"]
-        expected: ["第一行写明本仓知识没有条目覆盖所给路径，列出的条目只按词组或关联选出", "退出码 0"]
+        expected: ["任务标题下写明本仓知识没有条目覆盖所给路径，列出的条目只按词语或关联选出", "退出码 0"]
         forbidden_effects: ["只读命令修改项目知识或本机材料"]
         evidence_hints: ["命令、退出码与完整输出；操作前后文件清单和摘要"]
       - id: SOP-08-N02
@@ -339,7 +342,7 @@ sops:
         verify: cli
         initial_state: ["本机真实输入，只运行只读命令，前后核对 git status 不变"]
         steps: ["在 TW-1 的核心服务仓重跑原查询，并加上指向前端仓的路径"]
-        expected: ["第一行写明只按词组或关联选出", "前端仓报告为尚未建立 .tw/、有旧知识目录，并给出命令"]
+        expected: ["任务标题下写明只按词语或关联选出", "前端仓报告为尚未建立 .tw/、有旧知识目录，并给出命令"]
         forbidden_effects: ["只读命令修改项目知识或本机材料"]
         evidence_hints: ["命令、退出码与完整输出；操作前后文件清单和摘要"]
 
@@ -394,8 +397,8 @@ sops:
         priority: P1
         verify: cli
         initial_state: ["规则的 verified 为提交 X；之后一个提交只改正文"]
-        steps: ["tw check"]
-        expected: ["对该条目给出警告，写明修改提交、原基线、当前 HEAD 完整提交与今天日期的填写方式", "无其他错误时退出码 0"]
+        steps: ["tw check", "tw check --all", "tw check --base <提交 X>"]
+        expected: ["默认输出的首行警告数计入这条警告，汇总行写明用 tw check --all 查看", "--all 与 --base 都对该条目给出警告，写明修改提交、原基线、当前 HEAD 完整提交与今天日期的填写方式", "无其他错误时退出码 0"]
         forbidden_effects: ["只读命令修改项目知识或本机材料"]
         evidence_hints: ["命令、退出码与完整输出；操作前后文件清单和摘要"]
       - id: SOP-10-P02
@@ -405,7 +408,7 @@ sops:
         priority: P1
         verify: cli
         initial_state: ["SOP-10-P01 的项目"]
-        steps: ["按警告把 verified 改为当前 HEAD 与今天，与另一处正文修改一起提交", "tw check"]
+        steps: ["按警告把 verified 改为当前 HEAD 与今天，与另一处正文修改一起提交", "tw check --all"]
         expected: ["警告消失"]
         forbidden_effects: ["只读命令修改项目知识或本机材料"]
         evidence_hints: ["命令、退出码与完整输出；操作前后文件清单和摘要"]
@@ -428,7 +431,7 @@ sops:
         priority: P1
         verify: cli
         initial_state: ["临时 Git 项目"]
-        steps: ["tw new rule --verified-at-head 新建条目并提交", "之后一个提交只改 scope 内代码", "tw check"]
+        steps: ["tw new rule --verified-at-head 新建条目并提交", "之后一个提交只改 scope 内代码", "tw check --all"]
         expected: ["没有这条警告"]
         forbidden_effects: ["只读命令修改项目知识或本机材料"]
         evidence_hints: ["命令、退出码与完整输出；操作前后文件清单和摘要"]
@@ -440,7 +443,7 @@ sops:
         priority: P1
         verify: cli
         initial_state: ["还没有任何提交的 Git 仓库，已初始化知识，按候选版写作规范写成只有日期的 verified（commit 为 null）的规则，以及没有 verified 的决策"]
-        steps: ["阅读写作规范中 verified 一行", "tw check", "提交；修改两者正文后再提交", "tw check"]
+        steps: ["阅读写作规范中 verified 一行", "tw check", "提交；修改两者正文后再提交", "tw check --all"]
         expected: ["写作规范写明仓库还没有提交时 commit 写 null", "第一次 check 0 错误，没有关于 verified 的警告", "第二次 check 没有“修改并沿用 verified”的警告", "第二次 check 对该规则给出仓库已有提交的警告，写明可照填的当前 HEAD 完整提交与今天日期；决策没有警告"]
         forbidden_effects: ["只读命令修改项目知识或本机材料"]
         evidence_hints: ["命令、退出码与完整输出；操作前后文件清单和摘要"]
@@ -464,13 +467,13 @@ sops:
     scenarios:
       - id: SOP-11-P01
         polarity: positive
-        title: 独立信号数优先于关联边数量
+        title: 词语得分优先于关联边数量
         actor: 项目成员
         priority: P1
         verify: cli
-        initial_state: ["临时项目有决策 D 与 8 条规则，作用范围都是 pkg/，每条规则关联 D 和另一条规则；教训 L 作用范围 pkg/、标签与任务词组相同、没有关联；标题足够长，使 --budget 1000 只能列出部分条目"]
-        steps: ["tw brief --task \"<该词组>\" --path pkg --format json", "--budget 取只能列出部分条目的值时再次运行"]
-        expected: ["L 排在 D 与 8 条规则之前", "L 出现在正文或索引中"]
+        initial_state: ["临时项目有决策 D 与 8 条规则，作用范围都是 pkg/，每条规则关联 D 和另一条规则；教训 L 作用范围 pkg/、标签与任务词语相同、没有关联，D 与 8 条规则不含该词语；标题足够长，使 --budget 1000 只能列出部分条目"]
+        steps: ["tw brief --task \"<该词语>\" --path pkg --format json", "--budget 取只能列出部分条目的值时再次运行"]
+        expected: ["L 排在 D 与 8 条规则之前", "两次运行 L 都出现在“相关条目”索引中"]
         forbidden_effects: ["只读命令修改项目知识或本机材料"]
         evidence_hints: ["命令、退出码与完整输出；操作前后文件清单和摘要"]
       - id: SOP-11-P02
@@ -481,7 +484,7 @@ sops:
         verify: cli
         initial_state: ["本机真实输入，在失败当时的项目快照上回放；真实仓库只运行只读命令，前后核对 git status 不变"]
         steps: ["在临时快照上回放三条记录的查询"]
-        expected: ["该教训三次都出现在正文或索引中"]
+        expected: ["该教训三次都出现在“相关条目”索引中"]
         forbidden_effects: ["只读命令修改项目知识或本机材料"]
         evidence_hints: ["命令、退出码与完整输出；操作前后文件清单和摘要"]
 
@@ -496,7 +499,7 @@ sops:
         actor: 项目成员
         priority: P1
         verify: cli
-        initial_state: [".tw/local/ 下有查询缓存、repositories.json、含 2 个超过 20 MiB 文件的 material-a/、最后修改设为 60 天前的 material-b/、另外 12 个小目录"]
+        initial_state: [".tw-local/ 下有查询缓存、repositories.json、含 2 个超过 20 MiB 文件的 material-a/、最后修改设为 60 天前的 material-b/、另外 12 个小目录"]
         steps: ["tw audit --top 5", "tw audit --top 5 --format json", "核对所有本机材料"]
         expected: ["按大小降序列出 5 个顶层项，各带大小、文件数、最后修改日期", "写明其余项数与总大小", "material-b/ 标出 30 天以上未修改", "缓存与映射标为工具管理", "大文件每行一个", "JSON 含全部顶层项", "所有本机材料保持原样"]
         forbidden_effects: ["只读命令修改项目知识或本机材料"]
@@ -513,9 +516,9 @@ sops:
         actor: 项目成员
         priority: P1
         verify: agent
-        initial_state: ["独立会话在只装候选版 team-knowledge 的临时项目中完成一个任务", "项目已建立 .tw/，documents 登记了验证手册，.tw/local/<任务>/decisions.md 有一条用户已确认的产品决定草稿", "任务说明中给出一条验证环境操作事实，任务过程产生调试日志"]
+        initial_state: ["独立会话在只装候选版 team-knowledge 的临时项目中完成一个任务", "项目已建立 .tw/，documents 登记了验证手册，.tw-local/<任务>/decisions.md 有一条用户已确认的产品决定草稿", "任务说明中给出一条验证环境操作事实，任务过程产生调试日志"]
         steps: ["在独立会话中完成任务并收尾"]
-        expected: ["产品决定写为 .tw/ 中的 decision", "操作事实写入验证手册", "日志留在 .tw/local/", "tw check 0 错误"]
+        expected: ["产品决定写为 .tw/ 中的 decision", "操作事实写入验证手册", "调试日志放在系统临时目录或验证手册指定的位置，.tw/ 下只有受版本管理的文件", "收尾后 .tw-local/<任务>/ 中已移入仓库的草稿被删除", "tw check 0 错误"]
         forbidden_effects: ["项目结论只留在本机材料或个人记忆中"]
         evidence_hints: ["独立会话的原始需求、实际命令、文件改动与输出"]
       - id: SOP-13-P02
@@ -577,15 +580,15 @@ sops:
         evidence_hints: ["命令、退出码与完整输出"]
       - id: SOP-15-P02
         polarity: positive
-        title: 没有出现记录的项目读取结果与 1.1.0 相同
+        title: 没有出现记录的项目读取时没有次数
         actor: 项目成员
         priority: P1
         verify: cli
-        initial_state: ["一个没有任何出现记录的已建立知识的临时项目，含规则、决策与教训", "1.1.0 运行时取自 main 分支 ca9d1f4 或标签 v1.1.0"]
-        steps: ["分别用 1.1.0 与候选版运行同一组 brief 查询：带 --path、带 --index、带 --budget 1500"]
-        expected: ["每组 markdown 输出逐字节相同", "候选版 JSON 中每个条目的 occurrences 为空数组"]
+        initial_state: ["一个没有任何出现记录的已建立知识的临时项目，含规则、决策与教训"]
+        steps: ["用候选版运行一组 brief 查询：带 --path、带 --index、带 --budget 1500，各取 markdown 与 JSON"]
+        expected: ["每组 markdown 输出的标题与索引行都没有“出现 N 次”", "JSON 中每个条目的 occurrences 为空数组"]
         forbidden_effects: ["候选版为没有出现记录的条目显示次数"]
-        evidence_hints: ["两组输出与 cmp 结果"]
+        evidence_hints: ["命令、退出码与完整输出"]
 
   - id: SOP-16
     title: 升级为规则
@@ -599,7 +602,7 @@ sops:
         priority: P0
         verify: cli
         initial_state: ["临时 Git 项目，一条教训的出现记录有 3 个不同日期，一条决策的 related 指向该教训，均已提交；项目还没有 rules/ 目录"]
-        steps: ["tw check", "tw audit", "按候选版写作规范“出现与升级”一节升级：先建 rules/ 目录，移到 rules/<slug>.md，首段写必须保持的做法，## 依据 浓缩现象与根因，保留出现记录，核对后更新 verified", "改正决策 related 前运行 tw check", "改正 related 后运行 tw check、tw brief、tw audit"]
+        steps: ["tw check --all", "tw audit", "按候选版写作规范“出现与升级”一节升级：先建 rules/ 目录，移到 rules/<slug>.md，首段写必须保持的做法，## 依据 浓缩现象与根因，保留出现记录，核对后更新 verified", "改正决策 related 前运行 tw check", "改正 related 后运行 tw check --all、tw brief、tw audit"]
         expected: ["第一次 check 对该教训给出警告，列出 3 个日期并写明按写作规范升级为 rule，退出码 0", "audit 的“反复出现”一节标出该教训待升级为 rule", "改正 related 前 check 报告决策的 related 指向不存在的条目", "改正后 check 0 错误、没有升级警告；brief 以规则展示该条目并在标题后写“（出现 3 次）”；audit 列出该规则且没有待升级标记"]
         forbidden_effects: ["警告阻止 check 以 0 退出", "升级后条目丢失出现记录"]
         evidence_hints: ["命令、退出码与完整输出；升级前后的文件 diff"]
@@ -611,7 +614,7 @@ sops:
         priority: P2
         verify: cli
         initial_state: ["一条教训的出现记录有 2 个不同日期，一条规则的出现记录有 4 个不同日期"]
-        steps: ["tw check", "tw audit"]
+        steps: ["tw check --all", "tw audit"]
         expected: ["check 对两者都没有升级警告", "audit 列出两者及次数，均没有待升级标记"]
         forbidden_effects: ["规则被提示升级"]
         evidence_hints: ["命令、退出码与完整输出"]
@@ -649,3 +652,207 @@ sops:
         expected: ["会话以改动的文件作 --path 运行 tw brief", "评审意见指出违反的规则及原因"]
         forbidden_effects: ["修改代码或知识", "评审意见没有提及该规则就给出通过"]
         evidence_hints: ["独立会话的原始需求、实际命令与评审意见"]
+
+  - id: SOP-19
+    title: 知识目录与本机材料
+    actor: 项目成员
+    entry: 候选版 tw 命令行
+    scenarios:
+      - id: SOP-19-P01
+        polarity: positive
+        title: 初始化后 .tw/ 下的文件都受版本管理，本机材料在被忽略的 .tw-local/
+        actor: 项目成员
+        priority: P0
+        verify: cli
+        initial_state: ["已有一次提交的临时 Git 项目，含 README.md，只安装候选版 team-knowledge"]
+        steps: ["tw init --apply", "填写 overview.md 后 git add -A 并提交", "在 .tw-local/ 下新建一个任务目录并放入一个文件", "git status --porcelain 与 git ls-files .tw", "tw check"]
+        expected: [".tw-local/.gitignore 存在，内容为一行 *", ".tw/ 下的每个文件都在 git ls-files 的结果中，其中没有 .gitignore 与 local/", "git status 没有列出 .tw-local/ 下的文件", "check 报告 0 错误"]
+        forbidden_effects: ["本机材料出现在待提交或未跟踪列表中"]
+        evidence_hints: ["逐条命令、退出码与完整输出"]
+      - id: SOP-19-P02
+        polarity: positive
+        title: 旧位置的映射照常读取并给迁移警告，按安装说明迁移后警告消失
+        actor: 项目成员
+        priority: P0
+        verify: cli
+        initial_state: ["用 1.2.2 的 tw init --apply 建立的临时项目 a：.tw/.gitignore 含 local/，.tw/local/repositories.json 把共享仓 b 映射到本机目录，.tw/local/ 下的任务目录中有一份任务材料 notes.md", "b 有一条规则", "记录 .tw/local/ 的文件清单与摘要"]
+        steps: ["候选版 tw brief --task <b 的规则标签中的词语>", "tw check", "按安装说明“从 1.2 升级”迁移并提交", "tw check", "同一条 tw brief"]
+        expected: ["迁移前 brief 列出 b 的规则", "迁移前 check 以 0 退出，给出一条警告，写明 .tw/local/ 是旧位置和迁移做法", "迁移后 check 没有该警告", "迁移后 brief 仍列出 b 的规则", "notes.md 位于 .tw-local/ 下的同名任务目录，摘要与迁移前相同"]
+        forbidden_effects: ["工具自行移动或删除本机材料", "迁移后 .tw/ 下还有未受版本管理的文件"]
+        evidence_hints: ["迁移前后的命令、退出码、完整输出与文件摘要"]
+      - id: SOP-19-P03
+        polarity: positive
+        title: 本机材料很大时在 .tw/ 内搜索仍然很快，结果只有知识
+        actor: 项目成员
+        priority: P0
+        verify: cli
+        initial_state: ["已按新布局建立的临时项目，.tw/ 有 3 条条目，其中一条正文含“退款上限”", ".tw-local/ 下的一个材料目录有 2 万个文件、合计不少于 1 GiB，其中一些文件也含“退款上限”"]
+        steps: ["计时运行 grep -r 退款上限 .tw", "tw audit"]
+        expected: ["grep 在 2 秒内返回", "结果只有 .tw/ 下受版本管理的知识文件", "audit 的本机材料一节给出 .tw-local/ 的文件数与大小"]
+        forbidden_effects: ["搜索结果包含本机材料", "只读命令修改项目知识或本机材料"]
+        evidence_hints: ["命令、耗时、退出码与完整输出"]
+      - id: SOP-19-N01
+        polarity: negative
+        negative_type: invalid-input
+        title: 入库条目引用本机材料时报告
+        actor: 项目成员
+        priority: P1
+        verify: cli
+        initial_state: ["一条规则的正文引用 .tw-local/ 下某个任务目录中的 notes.md（写出具体路径），另一条规则的正文说明映射写在 .tw-local/repositories.json"]
+        steps: ["tw check"]
+        expected: ["check 以非 0 退出，第一条规则报错并写明该行引用了仅在本机的材料", "第二条规则没有这项错误"]
+        forbidden_effects: ["本机材料的引用通过检查"]
+        evidence_hints: ["命令、退出码与完整输出"]
+      - id: SOP-19-N02
+        polarity: negative
+        negative_type: other
+        title: .tw-local/ 没有被忽略时报错并写明做法
+        actor: 项目成员
+        priority: P1
+        verify: cli
+        initial_state: ["已建立知识的临时项目，手工在 .tw-local/ 下建立任务目录与 notes.md，.tw-local/ 内没有 .gitignore"]
+        steps: ["tw check", "按报错写明的做法处理后再运行 tw check"]
+        expected: ["第一次 check 以非 0 退出，写明 .tw-local/ 没有被 Git 忽略及处理做法", "处理后 check 报告 0 错误"]
+        forbidden_effects: ["工具自行写入 .gitignore"]
+        evidence_hints: ["命令、退出码与完整输出"]
+
+  - id: SOP-20
+    title: brief 先列索引
+    actor: 项目成员
+    entry: 候选版 tw 命令行
+    scenarios:
+      - id: SOP-20-P01
+        polarity: positive
+        title: 本机真实输入回放中目标条目都在索引内
+        actor: 项目成员
+        priority: P0
+        verify: cli
+        initial_state: ["本机真实输入：两个仓库在 2026-11-26 会话当时的知识快照（临时克隆后检出记录的提交），6 条查询与 8 个目标条目在回放前已经记录；真实仓库只运行只读命令，前后核对 git status 不变"]
+        steps: ["在快照上回放 6 条查询，不带 --path，各取 markdown 与 --format json"]
+        expected: ["8 个目标条目的 listed 都为真", "它们都出现在“相关条目”一节"]
+        forbidden_effects: ["只读命令修改项目知识或本机材料", "按候选版的输出改写目标条目"]
+        evidence_hints: ["命令、退出码与完整输出；目标条目的排名与可见标记"]
+      - id: SOP-20-P02
+        polarity: positive
+        title: 截取输出前 60 行时目标条目仍在其中
+        actor: 项目成员
+        priority: P0
+        verify: cli
+        initial_state: ["同 SOP-20-P01"]
+        steps: ["对 6 条查询的 markdown 输出各取前 60 行"]
+        expected: ["每条查询的前 60 行包含其目标条目的索引行"]
+        forbidden_effects: ["只读命令修改项目知识或本机材料"]
+        evidence_hints: ["截取后的输出"]
+      - id: SOP-20-P03
+        polarity: positive
+        title: 直接命中的条目附全文，词语选出的条目只进索引
+        actor: 项目成员
+        priority: P0
+        verify: cli
+        initial_state: ["临时项目有规则 R1（作用范围 src/pay/**）、教训 L1（作用范围 src/user/**，正文含“验收脚本”）、决策 D1（作用范围 docs/**，标题、标签与正文同任务没有共同的词语）"]
+        steps: ["tw brief --task \"修改退款金额校验并更新验收脚本\" --path src/pay/refund.py", "同一查询加 --format json", "同一查询加 --index"]
+        expected: ["“相关条目”一节位于全文之前，列出 R1 与 L1，各带选中依据", "R1 的索引行标注全文见下，后面有 R1 的完整正文、选中依据、来源与核实状态", "L1 只有索引行，依据为词语且含“验收”", "索引后有一行提示用 tw read 读取未附全文的条目", "D1 未被选中", "JSON 中 R1 的 rendered 为真，L1 的 rendered 为假、listed 为真，条目带 score", "--index 输出只有索引"]
+        forbidden_effects: ["只按词语选出的条目输出全文", "只读命令修改项目知识或本机材料"]
+        evidence_hints: ["命令、退出码与完整输出"]
+      - id: SOP-20-P04
+        polarity: positive
+        title: 2026-10-30 失败快照回放中教训在索引内
+        actor: 项目成员
+        priority: P1
+        verify: cli
+        initial_state: ["本机真实输入，在失败当时的项目快照（完整检出）上回放；真实仓库只运行只读命令，前后核对 git status 不变"]
+        steps: ["带记录的 --path 回放三条查询"]
+        expected: ["该教训三次的 listed 都为真，并出现在“相关条目”一节"]
+        forbidden_effects: ["只读命令修改项目知识或本机材料"]
+        evidence_hints: ["命令、退出码与完整输出；教训的排名与可见标记"]
+      - id: SOP-20-P05
+        polarity: positive
+        title: 少见的词语排在常见词语之前，同分时本仓先于共享仓
+        actor: 项目成员
+        priority: P0
+        verify: cli
+        initial_state: ["项目 a 声明共享仓 b 并映射到本机目录", "a 有 10 条规则，正文都含“会话”；另有规则 R1，正文含“额度用完”，全文没有“会话”", "a 的规则 R2 与 b 的规则 R3 的标题、标签与正文逐字相同，都含“对账口径”"]
+        steps: ["tw brief --task \"额度用完后的会话处理\" --format json", "tw brief --task \"对账口径\" --format json"]
+        expected: ["第一条查询中 R1 排在 10 条只含“会话”的规则之前，R1 的依据含词语“额度用完”", "第二条查询中 R2 与 R3 的 score 相同，R2 排在 R3 之前"]
+        forbidden_effects: ["只读命令修改项目知识或本机材料"]
+        evidence_hints: ["命令、退出码与完整输出"]
+      - id: SOP-20-P06
+        polarity: positive
+        title: 代理从缺陷描述开始时按索引选读相关条目
+        actor: 代理
+        priority: P1
+        verify: agent
+        initial_state: ["临时 Git 项目，已用候选版建立知识：20 条以上条目，其中一条规则约束待修复的行为，其标题与缺陷描述用词不同、正文含缺陷涉及的术语", "缺陷描述只说现象，没有给出文件路径", "新会话只加载候选版 team-knowledge"]
+        steps: ["在新会话中提出修复该缺陷", "会话结束后查看其工具调用记录、改动与任务材料的位置"]
+        expected: ["会话先运行不带 --path 的 tw brief", "会话用 tw read 读取了该规则，或在查明文件后带 --path 读到它的全文", "修复符合该规则", "任务材料位于 .tw-local/ 或系统临时目录，.tw/ 下只有受版本管理的文件"]
+        forbidden_effects: ["会话没有读到该规则就完成修复"]
+        evidence_hints: ["独立会话的原始需求、实际命令、文件改动与输出"]
+      - id: SOP-20-P07
+        polarity: positive
+        title: 候选很多时直接命中的条目仍有全文
+        actor: 项目成员
+        priority: P0
+        verify: cli
+        initial_state: ["临时项目有 3 条作用范围覆盖 src/pay/refund.py 的规则，正文各约 1500 字符", "另有 45 条作用范围在别处的条目，标题或正文都含任务中的词语"]
+        steps: ["以含这些词语的任务运行 tw brief --path src/pay/refund.py", "同一查询加 --format json"]
+        expected: ["3 条规则排在“相关条目”索引的最前面", "排序第一的规则有全文，其索引行标注全文见下", "索引中还列出若干只按词语选出的条目，其余在末尾按类别计入未列出", "输出字符数不超过 6000"]
+        forbidden_effects: ["直接命中的条目都没有全文", "只读命令修改项目知识或本机材料"]
+        evidence_hints: ["命令、退出码、完整输出与字符数"]
+      - id: SOP-20-N01
+        polarity: negative
+        negative_type: boundary
+        title: 输出不超过预算且可重复
+        actor: 项目成员
+        priority: P1
+        verify: cli
+        initial_state: ["有 60 条以上条目的临时项目，任务词语在多数条目中出现"]
+        steps: ["同一查询以默认预算运行两次", "同一查询以 --budget 1500 运行两次"]
+        expected: ["同一预算下两次 markdown 输出逐字节相同", "输出字符数分别不超过 6000 与 1500", "放不下的条目在末尾按类别计数，并提示用 --index 查看"]
+        forbidden_effects: ["输出超出 --budget", "只读命令修改项目知识或本机材料"]
+        evidence_hints: ["命令、退出码、输出与字符数"]
+
+  - id: SOP-21
+    title: 一次读取多个条目
+    actor: 项目成员
+    entry: 候选版 tw 命令行
+    scenarios:
+      - id: SOP-21-P01
+        polarity: positive
+        title: tw read 依次输出多个条目的全文
+        actor: 项目成员
+        priority: P1
+        verify: cli
+        initial_state: ["临时项目有规则 rules/a.md、教训 lessons/b.md，共享仓 b 有规则 rules/c.md 并已映射", "1.2.2 运行时取自标签 v1.2.2"]
+        steps: ["tw read rules/a.md lessons/b.md b:rules/c.md", "分别用 1.2.2 与候选版运行 tw read rules/a.md", "tw read rules/a.md rules/missing.md", "tw read rules/a.md lessons/b.md --section 依据"]
+        expected: ["第一条命令依次输出三个条目的全文，每个条目前有一行写明是哪个条目", "单个目标时两个版本的输出逐字节相同", "含不存在的目标时以非 0 退出并写明是哪一个", "--section 与多个目标同用时以非 0 退出，说明它只在读取一个目标时使用"]
+        forbidden_effects: ["只读命令修改项目知识或本机材料"]
+        evidence_hints: ["命令、退出码与完整输出；cmp 结果"]
+
+  - id: SOP-22
+    title: check 展开本次改动条目的警告
+    actor: 项目成员
+    entry: 候选版 tw 命令行
+    scenarios:
+      - id: SOP-22-P01
+        polarity: positive
+        title: 默认展开改动条目的警告并汇总其余
+        actor: 项目成员
+        priority: P1
+        verify: cli
+        initial_state: ["临时项目有 5 条没有 guards 的教训（各有 1 个警告），全部已提交", "修改其中 1 条教训的正文，未提交"]
+        steps: ["tw check", "tw check --all", "tw check --format json"]
+        expected: ["默认输出首行的错误数与警告数同 --all 的首行相同", "默认输出只展开被修改的那条教训的警告", "默认输出最后一行写明其余警告的条数、所属条目数与 tw check --all", "--all 列出全部警告", "JSON 含全部警告", "三条命令退出码都是 0"]
+        forbidden_effects: ["默认输出隐藏任何错误", "只读命令修改项目知识或本机材料"]
+        evidence_hints: ["命令、退出码与完整输出"]
+      - id: SOP-22-N01
+        polarity: negative
+        negative_type: other
+        title: 工作区干净时只汇总条目警告，错误与目录警告照常列出
+        actor: 项目成员
+        priority: P1
+        verify: cli
+        initial_state: ["同 SOP-22-P01 的项目，全部改动已提交，工作区干净", "项目仍在使用旧位置 .tw/local/"]
+        steps: ["tw check", "提交一条 related 指向不存在条目的规则后再运行 tw check"]
+        expected: ["第一次输出有首行计数、旧位置的迁移警告和一行其余警告的汇总，退出码 0", "第二次输出列出该错误，退出码非 0"]
+        forbidden_effects: ["不属于条目的警告被汇总行隐藏"]
+        evidence_hints: ["命令、退出码与完整输出"]

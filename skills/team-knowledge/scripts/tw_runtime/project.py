@@ -5,10 +5,10 @@ import os
 from pathlib import Path
 import re
 
-from . import DATA_VERSION, FORMAT, KB, Invalid, entries, gitutil, globs
+from . import DATA_VERSION, FORMAT, KB, LOCAL, Invalid, entries, gitutil, globs
 
 CONFIG = f'{KB}/config.json'
-MAPPING = f'{KB}/local/repositories.json'
+MAPPING = f'{LOCAL}/repositories.json'
 LEGACY_KEYS = ('checks', 'required_checks', 'risk_checks', 'platform', 'inputs', 'external_inputs',
                'environment_versions', 'acceptance_entries', 'accounts')
 KEYS = ('format', 'data_version', 'project', 'context', 'shared', 'documents')
@@ -18,6 +18,12 @@ LEGACY = ('.codestable', '.team-workflow.json', '.team-workflow')
 
 def user_mapping_path():
     return Path(os.environ.get('XDG_CONFIG_HOME') or '~/.config').expanduser() / 'tw/repositories.json'
+
+
+def checkout_mapping_path(root):
+    path = root / MAPPING
+    legacy = root / KB / 'local' / 'repositories.json'
+    return legacy if not path.exists() and legacy.exists() else path
 
 
 def location_settings(root, project_id=None, overrides=None):
@@ -59,7 +65,7 @@ def location_settings(root, project_id=None, overrides=None):
             merge(defaults, settings, user_path)
             if name == project_id:
                 result = defaults
-    path = root / MAPPING
+    path = checkout_mapping_path(root)
     if path.exists():
         merge(result, read_json(path), path)
     if overrides:

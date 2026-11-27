@@ -2,6 +2,7 @@
 """Offline release checks for the standalone project knowledge skill."""
 import importlib.util
 import json
+import os
 from pathlib import Path
 import re
 import subprocess
@@ -31,9 +32,9 @@ def check(root=ROOT):
     manifest = json.loads((root / 'plugin.json').read_text())
     version = (root / 'VERSION').read_text().strip()
     assert manifest['name'] == 'team-workflow' and manifest['version'] == version
-    assert version == '1.2.2'
+    assert version == '1.3.0'
     sys.path.insert(0, str(root / 'skills/team-knowledge/scripts'))
-    from tw_runtime import VERSION, install
+    from tw_runtime import KB, LOCAL, VERSION
     assert VERSION == version
     from tw_runtime.check import local_reference_problems
     assert {p.name for p in (root / 'skills').iterdir()} == {'team-knowledge'}, 'Only team-knowledge may be shipped'
@@ -55,9 +56,14 @@ def check(root=ROOT):
     assert claude_catalog['plugins'][0]['source'] == './'
     for required in ('LICENSE', 'README.md', 'CHANGELOG.md'):
         assert (root / required).is_file(), required
-    files = [p for p in root.rglob('*') if p.is_file() and not any(
-        name in p.relative_to(root).parts for name in ('.git', '.claude', '.codestable', '.team-workflow', '__pycache__', 'dist'))
-        and not p.relative_to(root).as_posix().startswith('.tw/local/')]
+    excluded = {'.git', '.claude', '.codestable', '.team-workflow', '__pycache__', 'dist'}
+    files = []
+    for directory, folders, names in os.walk(root):
+        directory = Path(directory)
+        folders[:] = sorted(name for name in folders if name not in excluded
+                            and (directory / name).relative_to(root).as_posix() not in (LOCAL, f'{KB}/local'))
+        files.extend(directory / name for name in sorted(names)
+                     if name not in excluded and (directory / name).is_file())
     for path in files:
         assert not path.is_symlink(), f'symlink in release source: {path.name}'
         if path.suffix == '.py':

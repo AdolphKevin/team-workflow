@@ -7,13 +7,13 @@ description: 项目知识入口。开始需求、修复、重构或评审前，�
 
 项目知识的读写与使用的开发流程无关。
 
-知识放在仓库的 `.tw/`：`overview.md`、`glossary.md`、`rules/`、`decisions/`、`lessons/`，与代码一起评审；`.tw/local/` 是被 Git 忽略的本机目录。命令写作 `tw <命令>`：PATH 上有 `tw` 启动器时直接运行，否则为 `python3 <本技能目录>/scripts/tw.py <命令>`。交给子代理时，把 `tw version` 输出的 `command` 写进交接。
+知识放在仓库的 `.tw/`：`overview.md`、`glossary.md`、`rules/`、`decisions/`、`lessons/`，全部受版本管理，与代码一起评审；本机材料放在被 Git 忽略的 `.tw-local/`。命令写作 `tw <命令>`：PATH 上有 `tw` 启动器时直接运行，否则为 `python3 <本技能目录>/scripts/tw.py <命令>`。交给子代理时，把 `tw version` 输出的 `command` 写进交接。
 
 ## 开工前
 
 1. 用用户的原始要求读取：`tw brief --task "<要求>" [--path <文件或目录>] [--symbol <符号>]`。查明真实入口后，带上 `--path` 再读一次。
-2. 按读到的约束实施。要重新采用“放弃过的做法”或已拒绝的决策时，先写出新理由并告知用户。
-3. 需要全文时用 `tw read <条目或文档编号>`；`tw read --list` 列出已登记的原文。
+2. 输出先列“相关条目”索引，路径等直接命中的条目附全文。逐行看索引，把与任务相关的条目用 `tw read <条目> [<条目>…]` 读全文；`tw read --list` 列出已登记的原文。查某个词、编号或符号在知识中的原文，在 `.tw/` 内用 `rg` 或 `grep -r`。
+3. 按读到的约束实施。要重新采用“放弃过的做法”或已拒绝的决策时，先写出新理由并告知用户。
 
 ## 评审时
 
@@ -32,11 +32,12 @@ description: 项目知识入口。开始需求、修复、重构或评审前，�
 | 验证环境的操作事实：入口、账号类别、验证码与密钥的取得位置 | 产品仓库的真实验证手册 |
 | 个人偏好与协作习惯 | 代理或个人记忆 |
 | 一次性结果、测试计数、工具版本、行号、任务过程 | PR 或提交说明 |
-| 草稿、日志、截图、原始输出 | `.tw/local/<任务>/` |
+| 任务材料：方案草稿、分析、裁定原话、交接说明 | `.tw-local/<任务>/` |
+| 可重新生成的运行产物：编译产物、构建缓存、服务日志、浏览器数据 | 系统临时目录，或验证手册指定的位置 |
 
 结论写在它所约束的代码所在的仓库；项目已登记原文（`config.json` 的 `documents`）时直接改原文，条目引用它。该仓库还没有 `.tw/` 时，先写进 PR 说明，并向用户提出初始化或迁移。条目中的人写成角色与日期，如“用户确认（2026-11-08）”“财务确认”。
 
-收尾时通读 `.tw/local/<任务>/` 和本次写入记忆的内容，其中的项目结论按上表移入仓库。没有可复用结论时说明理由即可。新条目可用 `tw new rule|decision|lesson --slug --title --scope --source` 生成骨架，核对过当前代码后加 `--verified-at-head`；改写已有条目时，核对后把 `verified` 更新为当前提交与日期。最后运行 `tw check` 并修复全部错误，知识与代码放在同一个 PR。
+收尾时通读 `.tw-local/<任务>/` 和本次写入记忆的内容，其中的项目结论按上表移入仓库，然后删除该目录中已经用完的材料。没有可复用结论时说明理由即可。新条目可用 `tw new rule|decision|lesson --slug --title --scope --source` 生成骨架，核对过当前代码后加 `--verified-at-head`；改写已有条目时，核对后把 `verified` 更新为当前提交与日期。最后运行 `tw check` 并修复全部错误，知识与代码放在同一个 PR。
 
 写法与正反例见[写作规范](references/writing.md)。
 
@@ -45,4 +46,5 @@ description: 项目知识入口。开始需求、修复、重构或评审前，�
 - 首次使用：`tw init` 预览，`tw init --apply --guidance` 写入，再填写 `overview.md`。概览来源取可重复的 `--source`，其次取 `README.md`；预览列出所需来源，补齐后写入。
 - 项目里还有 `.codestable/` 或 `.team-workflow*`：由你按[迁移指南](references/migration.md)逐条整理。
 - 定期复盘提交，或用户要求找回历史教训：按[复盘与找回教训](references/lessons-from-history.md)。
-- 查看知识健康或清理本机材料：`tw audit` 列出反复出现的条目，并按目录列出 `.tw/local/` 的大小与最后修改时间。brief、read、check、audit 只读。
+- `tw check` 提示 `.tw/local/` 是旧位置：按[迁移指南](references/migration.md#本机材料的位置)移动。
+- 查看知识健康或清理本机材料：`tw audit` 列出反复出现的条目，并按目录列出 `.tw-local/` 的大小与最后修改时间。brief、read、check、audit 只读。

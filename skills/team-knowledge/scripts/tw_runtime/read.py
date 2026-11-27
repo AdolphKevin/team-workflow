@@ -48,9 +48,25 @@ def repo_root(project, alias):
     return repo.root, repo.names
 
 
-def run(project, target=None, section=None, online=False, list_documents=False):
+def run(project, targets=(), section=None, online=False, list_documents=False):
+    require(len(targets) <= 1 or section is None, '--section 只在读取一个目标时使用')
     if list_documents:
         return {'documents': [{'id': d.get('id'), 'title': d.get('title'), 'source': d.get('source')} for d in documents(project)]}
+    require(targets, '需要指定条目、文档编号或文件路径；用 --list 列出已登记的原文')
+    if len(targets) == 1:
+        return read_target(project, targets[0], section, online)
+    items = []
+    for target in targets:
+        try:
+            items.append(read_target(project, target, None, online))
+        except (Invalid, OSError, UnicodeError) as exc:
+            raise Invalid(f'读取 {target} 失败：{exc}') from exc
+    blocks = [f'→ {item["target"]}\n' + item['text'].rstrip('\n') for item in items]
+    text = '\n\n'.join(blocks) + '\n'
+    return {'targets': targets, 'items': items, 'text': text}
+
+
+def read_target(project, target, section, online):
     require(target, '需要指定条目、文档编号或文件路径；用 --list 列出已登记的原文')
     docs = {d.get('id'): d for d in documents(project)}
     if target in docs:

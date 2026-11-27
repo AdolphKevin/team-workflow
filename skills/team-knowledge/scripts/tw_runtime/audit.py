@@ -6,7 +6,7 @@ from pathlib import Path
 import urllib.error
 import urllib.request
 
-from . import KB, brief, cache, check, entries, gitutil, textmatch
+from . import KB, LOCAL, brief, cache, check, entries, gitutil, textmatch
 
 BIG_FILE = 20 * 1024 * 1024
 LOCAL_MANAGED = {Path(cache.DIRECTORY).name, 'repositories.json'}
@@ -64,9 +64,11 @@ def run(project, links=False, top=10):
 
 
 def local_usage(root):
-    base = Path(root) / KB / 'local'
+    root = Path(root)
+    directories = [name for name in (LOCAL, f'{KB}/local') if (root / name).is_dir()]
     items, big = [], []
-    if base.is_dir():
+    for name in directories:
+        base = root / name
         for path in base.iterdir():
             size, count, modified = 0, 0, path.lstat().st_mtime
             material = [path]
@@ -90,10 +92,10 @@ def local_usage(root):
             age = (date.today() - last).days
             items.append({'path': path.relative_to(root).as_posix(), 'bytes': size, 'files': count,
                           'modified': last.isoformat(), 'age_days': age, 'stale': age > 30,
-                          'managed': path.name in LOCAL_MANAGED})
+                          'managed': path.name in LOCAL_MANAGED or (name == LOCAL and path.name == '.gitignore')})
     items.sort(key=lambda x: (-x['bytes'], x['path']))
     big.sort(key=lambda x: (-x['bytes'], x['path']))
-    return {'files': sum(x['files'] for x in items), 'bytes': sum(x['bytes'] for x in items),
+    return {'directories': directories, 'files': sum(x['files'] for x in items), 'bytes': sum(x['bytes'] for x in items),
             'items': items, 'large_files': big}
 
 
@@ -139,7 +141,10 @@ def render(report):
         lines += ['## 共享仓', *[f'- {k}：{v}' for k, v in report['shared'].items()], '']
     local = report['local']
     top = report['top']
-    lines += ['## 本机材料', f'本地目录 {KB}/local：{local["files"]} 个文件，{local["bytes"] / 1048576:.1f} MiB', '']
+    locations = '、'.join(local['directories'])
+    summary = (f'本地目录 {locations}：{local["files"]} 个文件，{local["bytes"] / 1048576:.1f} MiB'
+               if locations else '本地目录尚未建立')
+    lines += ['## 本机材料', summary, '']
     for item in local['items'][:top]:
         flags = ('；工具管理' if item['managed'] else '') + ('；30 天以上未修改' if item['stale'] else '')
         lines.append(f'- {item["path"]}：{item["bytes"] / 1048576:.1f} MiB，{item["files"]} 个文件，'

@@ -4,11 +4,16 @@ from datetime import date
 import json
 import re
 
-from . import KB, Invalid, entries, files, frontmatter, gitutil, globs, project as projects, textmatch
+from . import KB, LOCAL, Invalid, entries, files, frontmatter, gitutil, globs, project as projects, textmatch
 
 KNOWLEDGE = ('rule', 'decision', 'lesson')
-LOCAL_MANAGED = {'tasks', 'batches', 'imports', 'validation-active', 'agents', 'cache', 'repositories.json'}
-LOCAL_REFERENCE = re.compile(r'''\.tw/local/([^\s/`<>"'\[\](){}*?，。；：、]+)''')
+LEGACY_LOCAL = f'{KB}/local'
+LOCAL_MANAGED = {
+    LEGACY_LOCAL: {'tasks', 'batches', 'imports', 'validation-active', 'agents', 'cache', 'repositories.json'},
+    LOCAL: {'cache', 'repositories.json', '.gitignore'},
+}
+LOCAL_REFERENCE = re.compile(
+    rf'({re.escape(LOCAL)}|{re.escape(LEGACY_LOCAL)})/' r'''([^\s/`<>"'\[\](){}*?，。；：、]+)''')
 CHECKS_DESTINATION = ('旧团队字段：运行命令与必跑用例移入产品仓库脚本与 CI；'
                       'CI 需发现用例被跳过、数量为零或声明的必跑用例未执行；'
                       '覆盖说明留在对应规则或验证手册，之后删除此字段')
@@ -27,7 +32,32 @@ def local_reference_problems(text):
     """Report concrete unmanaged names; a bare root, glob or placeholder names no material."""
     return [f'第 {number} 行引用了仅在本机的材料：{match.group(0)}；请写明结论和关键数据，原件留在执行者本机'
             for number, line in enumerate(text.splitlines(), 1)
-            for match in LOCAL_REFERENCE.finditer(line) if match.group(1) not in LOCAL_MANAGED]
+            for match in LOCAL_REFERENCE.finditer(line) if match.group(2) not in LOCAL_MANAGED[match.group(1)]]
+
+
+def local_directory_checks(root, error, warn):
+    for name in (LOCAL, LEGACY_LOCAL):
+        if not (root / name).is_dir():
+            continue
+        if name == LEGACY_LOCAL:
+            ignore = root / KB / '.gitignore'
+            lines = ignore.read_text(encoding='utf-8').splitlines() if ignore.is_file() else []
+            if 'local/' not in [line.strip() for line in lines]:
+                error(f'{KB}/.gitignore', '应包含一行 local/')
+            warn(f'{name}/', f'这是旧位置，本机材料现放在 {LOCAL}/。按安装说明「从 1.2 升级」迁移：'
+                             f'先按 tw audit 的清单删除可重新生成的大文件，再运行 mv {name} {LOCAL}'
+                             f'（{LOCAL}/ 已存在时把各项移入其中），在 {LOCAL}/.gitignore 写入一行 *，删除 {KB}/.gitignore')
+        ignored = gitutil.ignored(root, f'{name}/probe')
+        if name == LOCAL:
+            visible = gitutil.output(root, 'ls-files', '-z', '--others', '--exclude-standard', '--', name)
+            ignored = ignored and not visible
+        if not ignored:
+            message = (f'Git 尚未忽略所有本机材料，请在 {LOCAL}/.gitignore 写入一行 *'
+                       if name == LOCAL else '没有被 git 忽略')
+            error(f'{name}/', message)
+        tracked = gitutil.tracked_under(root, name)
+        if tracked:
+            error(f'{name}/', f'有已跟踪的文件（{", ".join(tracked[:3])}{"…" if len(tracked) > 3 else ""}），用 git rm --cached 移出')
 
 
 def run(project, base=None):
@@ -46,15 +76,7 @@ def run(project, base=None):
         error(projects.CONFIG, message)
     for name in projects.legacy_paths(root):
         error(name, '旧系统目录仍存在：按 team-knowledge 的迁移指南整理后删除，并卸载旧技能')
-    ignore_file = root / KB / '.gitignore'
-    lines = [x.strip() for x in ignore_file.read_text(encoding='utf-8').splitlines()] if ignore_file.is_file() else []
-    if 'local/' not in lines:
-        error(f'{KB}/.gitignore', '应包含一行 local/')
-    if not gitutil.ignored(root, f'{KB}/local/probe'):
-        error(f'{KB}/local/', '没有被 git 忽略')
-    tracked = gitutil.tracked_under(root, f'{KB}/local')
-    if tracked:
-        error(f'{KB}/local/', f'有已跟踪的文件（{", ".join(tracked[:3])}{"…" if len(tracked) > 3 else ""}），用 git rm --cached 移出')
+    local_directory_checks(root, error, warn)
     if gitutil.ignored(root, projects.CONFIG):
         error(KB + '/', '整个目录被忽略规则覆盖，入库知识会丢失；删除根 .gitignore 中的相应条目')
     loaded = project.entries()
@@ -145,7 +167,7 @@ def run(project, base=None):
             error(projects.CONFIG, f'context 中的路径不存在：{value}')
     for alias, repo in sorted(shared.items()):
         if repo.status == 'mismatch':
-            error(projects.MAPPING, f'{alias}：{repo.describe()}')
+            error(projects.checkout_mapping_path(root).relative_to(root).as_posix(), f'{alias}：{repo.describe()}')
         elif repo.status != 'ok':
             warn(projects.CONFIG, f'共享仓 {alias}：{repo.describe()}')
     legacy_guidance(root, warn)
@@ -226,10 +248,12 @@ def verification_warnings(project, loaded, known_bases, head, template, warn):
 
 
 def scope_target(name):
-    """Scopes name code and project files; knowledge entries and local state under .tw/ are not targets."""
+    """Scopes name code and project files, outside knowledge entries and local state."""
+    if name.startswith((LOCAL + '/', LEGACY_LOCAL + '/')):
+        return False
     if not name.startswith(KB + '/'):
         return True
-    return not name.endswith('.md') and not name.startswith(KB + '/local/')
+    return not name.endswith('.md')
 
 
 def scope_files(alias, code, declared, shared):
@@ -331,8 +355,25 @@ def branch_hints(project, base, loaded, warn):
             warn(entry.path, f'本分支改动了它的 scope 内代码（{"、".join(hits[:3])}{"…" if len(hits) > 3 else ""}），请确认这条知识是否仍成立')
 
 
-def render(result):
+def render(project, result, base=None, all_warnings=False):
     lines = [f'检查 {result["entries"]} 个条目：{len(result["errors"])} 个错误，{len(result["warnings"])} 个警告']
     lines += [f'错误 {x["path"]}：{x["message"]}' for x in result['errors']]
-    lines += [f'警告 {x["path"]}：{x["message"]}' for x in result['warnings']]
+    warnings = result['warnings']
+    hidden = []
+    entry_paths = {entry.path for entry in project.entries()}
+    if not all_warnings and any(warning['path'] in entry_paths for warning in warnings):
+        root = project.root
+        if project.source.cached:
+            changed = set(gitutil.output(root, 'diff', '--cached', '--no-renames', '--name-only', '-z', '--', KB).split('\0'))
+        else:
+            changed = gitutil.dirty_paths(root)
+        if base:
+            changed.update(gitutil.output(root, 'log', '--format=', '--name-only', '-z', '--no-renames',
+                                          '--diff-merges=first-parent', f'{base}..HEAD', '--', KB).split('\0'))
+        unchanged = entry_paths - changed
+        hidden = [warning for warning in warnings if warning['path'] in unchanged]
+        warnings = [warning for warning in warnings if warning['path'] not in unchanged]
+    lines += [f'警告 {x["path"]}：{x["message"]}' for x in warnings]
+    if hidden:
+        lines.append(f'另有 {len(hidden)} 个警告属于本次未改动的 {len({x["path"] for x in hidden})} 个条目：tw check --all 查看')
     return '\n'.join(lines) + '\n'

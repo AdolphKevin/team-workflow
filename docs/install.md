@@ -55,6 +55,24 @@ tw check
 
 初始化仅维护知识布局、AGENTS.md 的项目知识块与 CLAUDE.md 的引入块，保留成员自写内容。已有旧知识目录的项目按[迁移指南](../skills/team-knowledge/references/migration.md)逐条核实。
 
+## 从 1.2 升级
+
+1.3.0 起 `.tw/` 只放受版本管理的知识，本机材料在并列的 `.tw-local/`（[方案](proposals/2026-11-27-knowledge-root-and-index-first.md)）。升级技能后，每个检出目录迁移一次；迁移前旧位置的路径映射照常读取，`tw check` 给出警告。
+
+1. 运行 `tw audit`，删除清单中可重新生成的大文件：编译产物、构建缓存、过期日志、浏览器数据；正被进程使用的保留。
+2. 移动目录，同一文件系统内移动不复制数据：
+
+   ```bash
+   mv .tw/local .tw-local && printf '*\n' > .tw-local/.gitignore
+   git rm -q .tw/.gitignore
+   ```
+
+   `.tw-local/` 已存在时，把 `.tw/local/` 中的各项移入其中。
+3. 把验证手册、检查脚本和指引中写到 `.tw/local/` 的路径改为 `.tw-local/`，与上一步放在同一次改动；代理记忆中的旧路径同样更新。
+4. 运行 `tw check`，旧位置的警告消失。
+
+`tw brief` 的输出先列“相关条目”索引，再给直接命中条目的全文；解析文本输出的脚本按新的章节顺序调整，JSON 的 `rendered`、`listed` 含义与 1.2 相同。
+
 ## 从 0.x 升级
 
 升级依据为[已批准方案第 5 节](proposals/2026-10-22-knowledge-only.md#5-已采用-tw-的项目如何升级)。先保留旧版安装和项目材料，以便完成在途任务或回退。下列涉及成员文件的动作由使用者按实际来源与范围执行；新版知识命令不会代替使用者清理。

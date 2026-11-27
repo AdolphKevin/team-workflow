@@ -1,5 +1,5 @@
 """Read-only knowledge brief for one task, within a character budget."""
-from collections import defaultdict
+from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 import json
 from pathlib import Path
@@ -11,7 +11,7 @@ from .project import knowledge_state
 
 KNOWLEDGE = ('rule', 'decision', 'lesson')
 EXPLICIT, SCOPE, TEXT, RELATED = range(4)
-OVERVIEW_LIMIT, GLOSSARY_LIMIT, NAV_LIMIT = 1200, 400, 600
+OVERVIEW_LIMIT, GLOSSARY_LIMIT, NAV_LIMIT = 600, 400, 600
 
 
 @dataclass
@@ -21,10 +21,10 @@ class Pick:
     tier: int
     specificity: float = 0
     reasons: list = field(default_factory=list)
+    score: float = 0
 
     def key(self):
-        signals = sum(not reason.startswith(('由 ', '与 ')) for reason in self.reasons)
-        return (self.tier, -self.specificity, -signals, self.entry.label)
+        return (self.tier, -self.specificity, -round(self.score, 6), self.entry.repo != 'self', self.entry.label)
 
 
 def relative_paths(root, paths):
@@ -69,12 +69,12 @@ def coverage_text(coverage):
     if direct:
         if not indirect:
             return f'直接命中 {direct} 条。\n\n'
-        return f'直接命中 {direct} 条；另有 {indirect} 条按任务词组或关联选出。\n\n'
+        return f'直接命中 {direct} 条；另有 {indirect} 条按词语或关联选出。\n\n'
     if not indirect:
         return '本仓知识中没有与任务相关的条目。\n\n'
     if coverage['has_paths']:
-        return f'本仓知识没有条目覆盖所给路径；以下 {indirect} 条只按任务词组或关联选出，先核对是否与任务相关。\n\n'
-    return f'未提供 --path，以下 {indirect} 条只按任务词组或关联选出；查明要改的文件后带 --path 再读。\n\n'
+        return f'本仓知识没有条目覆盖所给路径；以下 {indirect} 条只按词语或关联选出，先核对是否与任务相关。\n\n'
+    return f'未提供 --path，以下 {indirect} 条只按词语或关联选出；查明要改的文件后带 --path 再读。\n\n'
 
 
 def validate_request(task, budget):
@@ -152,11 +152,10 @@ def select(project, task, paths, symbols, refs, tags):
 
     wanted = {explicit_label(r) for r in refs or ()}
     wanted_tags = {textmatch.normalize(t) for t in tags or ()}
-    vocabulary = defaultdict(set)
     for entry, root, repo in candidates:
         if entry.label in wanted:
             add(entry, root, EXPLICIT, '指定条目')
-        for symbol in set(symbols or ()) & set(entry.values('symbols')):
+        for symbol in sorted(set(symbols or ()) & set(entry.values('symbols'))):
             add(entry, root, EXPLICIT, f'符号 {symbol}')
         for alias, pattern in entry.scopes():
             if applies_here(project, repo, alias):
@@ -176,12 +175,6 @@ def select(project, task, paths, symbols, refs, tags):
         for tag in entry.values('tags'):
             if textmatch.normalize(tag) in wanted_tags:
                 add(entry, root, SCOPE, f'标签 {tag}')
-        for phrase in textmatch.title_phrases(entry.title) | textmatch.slug_words(entry.ref):
-            vocabulary[phrase].add(entry.label)
-        for value in entry.values('tags') + entry.values('symbols'):
-            phrase = textmatch.term(value)
-            if phrase:
-                vocabulary[phrase].add(entry.label)
     terms = glossary_terms(project, shared)
     term_vocabulary = defaultdict(set)
     for index, term in enumerate(terms):
@@ -190,26 +183,39 @@ def select(project, task, paths, symbols, refs, tags):
             if phrase:
                 term_vocabulary[phrase].add(index)
     abandoned_vocabulary = defaultdict(set)
-    for entry, root, repo in candidates:
-        if entry.kind in KNOWLEDGE:
-            for index, item in enumerate(entries.abandoned(entry.body) or []):
-                head = item.split('\n', 1)[0]
-                keywords = entries.label_value(item, '关键词')
-                # Short fragments of a listed head ("盘点、暂存、恢复") match too much; short terms go in 关键词.
-                heads = {phrase for phrase in textmatch.title_phrases(head) if len(phrase) >= 4}
-                for phrase in heads | {textmatch.term(k) for k in keywords.replace('，', '、').replace(',', '、').split('、') if textmatch.term(k)}:
-                    abandoned_vocabulary[phrase].add((entry.label, index))
-    hits = textmatch.find(task, set(vocabulary) | set(term_vocabulary) | set(abandoned_vocabulary))
+    frequencies = {}
+    for entry, _, _ in candidates:
+        weighted = [entry.title, *entry.values('tags'), *entry.values('symbols')]
+        for index, item in enumerate(entries.abandoned(entry.body) or []):
+            head = item.split('\n', 1)[0]
+            keywords = entries.label_value(item, '关键词')
+            weighted.append(keywords)
+            # Short fragments of a listed head ("盘点、暂存、恢复") match too much; short terms go in 关键词.
+            heads = {phrase for phrase in textmatch.title_phrases(head) if len(phrase) >= 4}
+            terms_in_item = {textmatch.term(k) for k in keywords.replace('，', '、').replace(',', '、').split('、')}
+            for phrase in heads | (terms_in_item - {''}):
+                abandoned_vocabulary[phrase].add((entry.label, index))
+        counts = Counter(textmatch.tokens(entry.body))
+        counts.update({token: 3 * count for token, count in
+                       Counter(token for value in weighted for token in textmatch.tokens(value)).items()})
+        frequencies[entry.label] = counts
+    hits = textmatch.find(task, set(term_vocabulary) | set(abandoned_vocabulary))
     by_label = {entry.label: (entry, root) for entry, root, _ in candidates}
-    for phrase in sorted(hits):
-        for label in sorted(vocabulary.get(phrase, ())):
-            add(*by_label[label], TEXT, f'词组“{phrase}”')
+    scores = textmatch.rank(task, frequencies)
+    ranked = sorted(scores, key=lambda label: (-scores[label][0], by_label[label][0].repo != 'self', label))
+    for label in dict.fromkeys([*picks, *ranked[:40]]):
+        if label in scores:
+            score, words = scores[label]
+            add(*by_label[label], TEXT, '词语' + ''.join(f'“{word}”' for word in words))
+            picks[label].score = score
     matched_terms = sorted({i for phrase in hits for i in term_vocabulary.get(phrase, ())})
     abandoned_hits = sorted({x for phrase in hits for x in abandoned_vocabulary.get(phrase, ())})
     for label, index in abandoned_hits:
         entry, root = by_label[label]
         if label not in picks:
             add(entry, root, TEXT, '命中放弃过的做法')
+            if label in scores:
+                picks[label].score = scores[label][0]
     outgoing, incoming = defaultdict(list), defaultdict(list)
     for entry, root, repo in candidates:
         for value in entry.values('related'):
@@ -218,11 +224,21 @@ def select(project, task, paths, symbols, refs, tags):
                 outgoing[entry.label].append(label)
                 incoming[label].append(entry.label)
     # Freeze the seeds: RELATED additions never trigger another hop.
-    for pick in sorted(picks.values(), key=Pick.key):
+    ordered = sorted(picks.values(), key=Pick.key)
+    text_seeds = sorted((p for p in ordered if p.tier == TEXT),
+                        key=lambda p: (-p.score, p.entry.repo != 'self', p.entry.label))[:5]
+    seeds = [p for p in ordered if p.tier <= SCOPE] + text_seeds
+    known = set(picks)
+    for pick in seeds:
         for label in outgoing[pick.entry.label]:
-            add(*by_label[label], RELATED, f'由 {pick.entry.label} 关联')
+            if label not in known:
+                add(*by_label[label], RELATED, f'由 {pick.entry.label} 关联')
         for label in incoming[pick.entry.label]:
-            add(*by_label[label], RELATED, f'与 {pick.entry.label} 关联')
+            if label not in known:
+                add(*by_label[label], RELATED, f'与 {pick.entry.label} 关联')
+    for label, pick in picks.items():
+        if label in scores:
+            pick.score = scores[label][0]
     missing = sorted(wanted - set(by_label))
     return sorted(picks.values(), key=Pick.key), [terms[i] for i in matched_terms], abandoned_hits, missing
 
@@ -336,17 +352,22 @@ def lines_within(title, lines, limit):
 
 
 def overview_within(overview, limit):
+    limit = min(OVERVIEW_LIMIT, limit)
     if not overview:
         text = '（项目尚无 overview.md）\n\n'
         return text if len(text) <= limit else ''
-    text, cut = paragraphs_within(overview.text(), min(OVERVIEW_LIMIT, limit - 2))
+    text, cut = paragraphs_within(overview.text(), limit)
     if not cut:
         return text + '\n\n'
     notice = '（总览较长，完整内容：tw read overview.md）\n\n'
     if len(notice) > limit:
         return ''
-    text, _ = paragraphs_within(overview.text(), min(OVERVIEW_LIMIT, limit - len(notice) - 2))
+    text, _ = paragraphs_within(overview.text(), limit - len(notice))
     return (text + '\n\n' if text else '') + notice
+
+
+def display_title(entry):
+    return entry.title + ('（已拒绝）' if entry.fields.get('status') == 'rejected' else '')
 
 
 def build(project, task, paths=(), symbols=(), refs=(), tags=(), budget=6000, index_only=False):
@@ -405,59 +426,86 @@ def build(project, task, paths=(), symbols=(), refs=(), tags=(), budget=6000, in
             used += len(line)
         glossary, _ = lines_within('术语', lines, max(0, left - NAV_LIMIT))
         left -= len(glossary)
-    memo, dirty = {}, {}
-    rendered, indexed = [], []
-    content_left = left - NAV_LIMIT
-    overflow = index_only
+    read_hint = '未附全文的条目用 `tw read <条目> [<条目>…]` 读取。\n\n'
+    index_lines = []
     for pick in picks:
-        status = drift(pick, memo, dirty)['text']
         note = occurrence_note(pick.entry)
-        block = (f'## {pick.entry.title}{"（已拒绝）" if pick.entry.fields.get("status") == "rejected" else ""}'
-                 f'{f"（{note}）" if note else ""}\n'
-                 f'{body_for(pick.entry)}\n'
-                 f'选中：{reason_summary(pick.reasons)}\n'
-                 f'来源：{source_summary(pick.entry)} · {status}\n→ {pick.entry.label}\n\n')
-        if not overflow and len(block) <= content_left:
-            left -= len(block)
-            content_left -= len(block)
-            rendered.append((pick, status, block))
-        else:
-            overflow = True
-            indexed.append((pick, status))
-    full = {p.entry.label for p, _, _ in rendered}
+        row = (f'- {display_title(pick.entry)} → {pick.entry.label}'
+               f'（{reason_summary(pick.reasons)}{f"；{note}" if note else ""}）')
+        index_lines.append(' '.join(row.splitlines()) + '\n')
+    index_limit = max(NAV_LIMIT, budget * 3 // 5)
+    # Direct hits are always indexed first; when there are any, other candidates stop at half
+    # of the index allowance so that the direct hits keep room for their full text.
+    hard = min(index_limit, left - len(read_hint))
+    soft = min(hard, max(NAV_LIMIT, budget * 3 // 10)) if direct else hard
+    index_nav, count = '## 相关条目\n', 0
+    for pick, line in zip(picks, index_lines):
+        if len(index_nav) + len(line) + 1 > (hard if pick.tier <= SCOPE else soft):
+            break
+        index_nav += line
+        count += 1
+    index_nav = index_nav + '\n' if count else ''
+    hidden[0] = len(picks) - count
+    listed = {p.entry.label for p in picks[:count]}
+    left -= len(index_nav)
+    if count:
+        left -= len(read_hint)
+
+    memo, dirty = {}, {}
+    statuses = {p.entry.label: drift(p, memo, dirty)['text'] for p in picks}
+    by_label = {p.entry.label: p.entry for p in picks}
     reminders = []
     for label, index in abandoned_hits:
-        if label in full:
-            continue
-        pick = next(p for p in picks if p.entry.label == label)
-        item = entries.abandoned(pick.entry.body)[index]
-        reminders.append(f'- {item.split(chr(10), 1)[0]} — 放弃原因：{entries.label_value(item, "放弃原因")} → {label}\n')
-    reminder_nav, count = lines_within('曾放弃的方向', reminders, left)
+        item = entries.abandoned(by_label[label].body)[index]
+        reminders.append((label, f'- {item.split(chr(10), 1)[0]} — 放弃原因：{entries.label_value(item, "放弃原因")} → {label}\n'))
+
+    def reminder_section(full, room):
+        lines = [line for label, line in reminders if label not in full]
+        section, shown = lines_within('曾放弃的方向', lines, min(room, NAV_LIMIT))
+        return section, len(lines) - shown
+
+    full, blocks = set(), []
+    marker = '；全文见下'
+    index_room = index_limit - len(index_nav)
+    if not index_only:
+        for i, pick in enumerate(picks[:count]):
+            if pick.tier > SCOPE or index_room < len(marker):
+                break
+            label = pick.entry.label
+            note = occurrence_note(pick.entry)
+            block = (f'## {display_title(pick.entry)}{f"（{note}）" if note else ""}\n'
+                     f'{body_for(pick.entry)}\n'
+                     f'选中：{reason_summary(pick.reasons)}\n'
+                     f'来源：{source_summary(pick.entry)} · {statuses[label]}\n→ {label}\n\n')
+            room = left - len(marker) + (len(read_hint) if i + 1 == count else 0)
+            reserved_reminders, _ = reminder_section(full | {label}, room)
+            if len(block) + len(reserved_reminders) > room:
+                break
+            full.add(label)
+            blocks.append(block)
+            left = room - len(block)
+            index_room -= len(marker)
+            index_lines[i] = index_lines[i].removesuffix('\n') + marker + '\n'
+    if count:
+        index_nav = '## 相关条目\n' + ''.join(index_lines[:count]) + '\n'
+    reminder_nav, hidden[1] = reminder_section(full, left)
     left -= len(reminder_nav)
-    hidden[1] = len(reminders) - count
-    index_lines = []
-    for pick, _ in indexed:
-        note = occurrence_note(pick.entry)
-        index_lines.append(f'- {pick.entry.title} → {pick.entry.label}（{pick.reasons[0]}{f"；{note}" if note else ""}）\n')
-    index_nav, count = lines_within('继续阅读', index_lines, left)
-    left -= len(index_nav)
-    hidden[0] = len(index_lines) - count
-    listed = full | {p.entry.label for p, _ in indexed[:count]}
     commit_nav = '## 相关提交\n' + ''.join(f'- {h} {s}\n' for h, s in commits) + '\n' if commits else ''
     if len(commit_nav) > left:
         hidden[2] = len(commits)
         commit_nav = ''
-    markdown = (heading + coverage_notice + path_notice + intro + glossary + ''.join(block for _, _, block in rendered) + reminder_nav + index_nav
+    markdown = (heading + coverage_notice + path_notice + intro + glossary + index_nav
+                + (read_hint if listed - full else '') + ''.join(blocks) + reminder_nav
                 + reserved['共享仓'] + reserved['其他仓库'] + commit_nav + reserved['未找到的条目']
                 + footer(hidden)).rstrip('\n') + '\n'
-    selected = [(p, status) for p, status, _ in rendered] + indexed
     return {
         'task': task.strip(), 'paths': paths, 'chars': len(markdown), 'budget': budget,
         'coverage': coverage, 'outside': outside,
         'entries': [{'label': p.entry.label, 'title': p.entry.title, 'kind': p.entry.kind, 'tier': p.tier,
-                     'reasons': p.reasons, 'rendered': p.entry.label in full, 'listed': p.entry.label in listed, 'status': status,
+                     'score': round(p.score, 6), 'reasons': p.reasons, 'rendered': p.entry.label in full,
+                     'listed': p.entry.label in listed, 'status': statuses[p.entry.label],
                      'occurrences': entries.occurrence_dates(p.entry)}
-                    for p, status in selected],
+                    for p in picks],
         'terms': [t['term'] for t in terms], 'abandoned': [label for label, _ in abandoned_hits],
         'repositories': {alias: {'status': repo.status, 'description': repo.describe()} for alias, repo in shared.items()},
         'missing': missing, 'omitted_lines': sum(hidden), 'markdown': markdown,

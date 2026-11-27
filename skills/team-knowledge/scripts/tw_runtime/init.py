@@ -1,10 +1,10 @@
 """Create the minimal `.tw/` layout and the knowledge pointer in AGENTS.md. Preview unless --apply."""
 import json
 
-from . import DATA_VERSION, FORMAT, KB, Invalid, files, frontmatter, gitutil, require
+from . import DATA_VERSION, FORMAT, KB, LOCAL, Invalid, files, frontmatter, gitutil, require
 from .new import SOURCE_REQUIRED
 
-IGNORE = 'local/\n'
+IGNORE = '*\n'
 POINTER = """## 项目知识
 
 开工前按 team-knowledge 技能读取 `.tw/` 中与任务相关的现行约束、决策和踩过的坑：
@@ -35,16 +35,11 @@ def plan(root, guidance=False, sources=()):
                   'project': {'id': gitutil.remote_identity(root) or f'local:{root.name}', 'name': root.name}}
         actions.append({'path': f'{KB}/config.json', 'action': 'create',
                         'text': json.dumps(config, ensure_ascii=False, indent=2) + '\n'})
-    ignore = root / KB / '.gitignore'
+    ignore = root / LOCAL / '.gitignore'
     if not ignore.exists():
-        actions.append({'path': f'{KB}/.gitignore', 'action': 'create', 'text': IGNORE})
+        actions.append({'path': f'{LOCAL}/.gitignore', 'action': 'create', 'text': IGNORE})
     else:
-        text = files.read_text(ignore)
-        if 'local/' in [line.strip() for line in text.splitlines()]:
-            actions.append({'path': f'{KB}/.gitignore', 'action': 'unchanged'})
-        else:
-            actions.append({'path': f'{KB}/.gitignore', 'action': 'append',
-                            'text': text + ('' if not text or text.endswith('\n') else '\n') + IGNORE})
+        actions.append({'path': f'{LOCAL}/.gitignore', 'action': 'unchanged'})
     overview = root / KB / 'overview.md'
     if overview.exists():
         actions.append({'path': f'{KB}/overview.md', 'action': 'unchanged'})
