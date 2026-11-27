@@ -7,7 +7,7 @@
 metadata:
   requirement: "team-workflow 只发行 team-knowledge：知识命令独立可用，团队流程、场景验收与 MATT 副本移除，已有项目可升级"
   batch: "tw-knowledge-only"
-  version: 7
+  version: 8
   owner: "AdolphKevin"
   sources:
     - ref: "docs/proposals/2026-10-22-knowledge-only.md 第 3–6 节"
@@ -30,6 +30,9 @@ metadata:
       confirmed_by: "AdolphKevin"
     - ref: "docs/proposals/2026-11-27-knowledge-root-and-index-first.md 第 2、5、7 节：.tw/ 只放受版本管理的文件，本机材料移到 .tw-local/；brief 先列索引，词语得分并检索正文；tw read 读多个条目；tw check 默认展开本次改动条目的警告。已验收的 brief 输出随之改变"
       version: "用户确认（2026-11-27，“按你的建议做”）"
+      confirmed_by: "AdolphKevin"
+    - ref: "SOP-20-P06 删除预期第 1 项“会话先运行不带 --path 的 tw brief”：它规定的是过程，技能允许第一次读取就带路径；保留读到相关规则、修复符合规则与材料位置三项，用新会话重跑后判定"
+      version: "用户确认（2026-11-27，“那按你的建议做”）"
       confirmed_by: "AdolphKevin"
   tags: ["tw", "知识库", "升级"]
 
@@ -778,13 +781,13 @@ sops:
         evidence_hints: ["命令、退出码与完整输出"]
       - id: SOP-20-P06
         polarity: positive
-        title: 代理从缺陷描述开始时按索引选读相关条目
+        title: 代理从缺陷描述开始时读到相关规则并照做
         actor: 代理
         priority: P1
         verify: agent
         initial_state: ["临时 Git 项目，已用候选版建立知识：20 条以上条目，其中一条规则约束待修复的行为，其标题与缺陷描述用词不同、正文含缺陷涉及的术语", "缺陷描述只说现象，没有给出文件路径", "新会话只加载候选版 team-knowledge"]
         steps: ["在新会话中提出修复该缺陷", "会话结束后查看其工具调用记录、改动与任务材料的位置"]
-        expected: ["会话先运行不带 --path 的 tw brief", "会话用 tw read 读取了该规则，或在查明文件后带 --path 读到它的全文", "修复符合该规则", "任务材料位于 .tw-local/ 或系统临时目录，.tw/ 下只有受版本管理的文件"]
+        expected: ["会话用 tw read 读取了该规则，或在查明文件后带 --path 读到它的全文", "修复符合该规则", "任务材料位于 .tw-local/ 或系统临时目录，.tw/ 下只有受版本管理的文件"]
         forbidden_effects: ["会话没有读到该规则就完成修复"]
         evidence_hints: ["独立会话的原始需求、实际命令、文件改动与输出"]
       - id: SOP-20-P07
